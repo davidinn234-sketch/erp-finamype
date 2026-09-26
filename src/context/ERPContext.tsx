@@ -282,7 +282,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.companies && parsed.companies.length > 0) return parsed.companies;
+        if (parsed.companies && Array.isArray(parsed.companies)) return parsed.companies;
       } catch (e) {
         console.error('Error restoring companies from storage:', e);
       }
@@ -297,7 +297,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.branches && parsed.branches.length > 0) return parsed.branches;
+        if (parsed.branches && Array.isArray(parsed.branches)) return parsed.branches;
       } catch (e) {}
     }
     return SAMPLE_BRANCHES;
@@ -310,16 +310,18 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.users && Array.isArray(parsed.users) && parsed.users.length > 0) {
+        if (parsed.users && Array.isArray(parsed.users)) {
+          // Only guarantee the master admin account exists (safety net so the
+          // owner is never locked out). Other demo/sample users are NOT
+          // force-reinjected once the real user has removed them.
           const merged: UserProfile[] = [...parsed.users];
-          SAMPLE_USERS.forEach((su) => {
-            const idx = merged.findIndex((u) => u.id === su.id || u.email.toLowerCase() === su.email.toLowerCase());
-            if (idx === -1) {
-              merged.push(su);
-            } else if (su.id === 'user_david') {
-              merged[idx] = { ...merged[idx], ...su };
-            }
-          });
+          const masterAdmin = SAMPLE_USERS.find((su) => su.id === 'user_david');
+          if (masterAdmin) {
+            const idx = merged.findIndex(
+              (u) => u.id === masterAdmin.id || u.email.toLowerCase() === masterAdmin.email.toLowerCase()
+            );
+            if (idx === -1) merged.push(masterAdmin);
+          }
           return merged;
         }
       } catch (e) {}
@@ -419,7 +421,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.products && parsed.products.length > 0) return parsed.products;
+        if (parsed.products && Array.isArray(parsed.products)) return parsed.products;
       } catch (e) {}
     }
     return SAMPLE_PRODUCTS;
@@ -430,7 +432,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.customers && parsed.customers.length > 0) return parsed.customers;
+        if (parsed.customers && Array.isArray(parsed.customers)) return parsed.customers;
       } catch (e) {}
     }
     return SAMPLE_CUSTOMERS;
@@ -441,7 +443,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.invoices && Array.isArray(parsed.invoices) && parsed.invoices.length > 0) {
+        if (parsed.invoices && Array.isArray(parsed.invoices)) {
           return parsed.invoices.map((inv: any) => ({
             ...inv,
             saldoPendiente:
@@ -473,7 +475,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.suppliers && parsed.suppliers.length > 0) return parsed.suppliers;
+        if (parsed.suppliers && Array.isArray(parsed.suppliers)) return parsed.suppliers;
       } catch (e) {}
     }
     return SAMPLE_SUPPLIERS;
@@ -484,7 +486,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.purchases && Array.isArray(parsed.purchases) && parsed.purchases.length > 0) {
+        if (parsed.purchases && Array.isArray(parsed.purchases)) {
           return parsed.purchases.map((pur: any) => ({
             ...pur,
             saldoPendiente:
@@ -515,7 +517,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.kardexMovements && parsed.kardexMovements.length > 0) return parsed.kardexMovements;
+        if (parsed.kardexMovements && Array.isArray(parsed.kardexMovements)) return parsed.kardexMovements;
       } catch (e) {}
     }
     return SAMPLE_KARDEX_MOVEMENTS;
@@ -527,7 +529,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.employees && parsed.employees.length > 0) return parsed.employees;
+        if (parsed.employees && Array.isArray(parsed.employees)) return parsed.employees;
       } catch (e) {}
     }
     return SAMPLE_EMPLOYEES;
@@ -538,7 +540,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.payrolls && parsed.payrolls.length > 0) return parsed.payrolls;
+        if (parsed.payrolls && Array.isArray(parsed.payrolls)) return parsed.payrolls;
       } catch (e) {}
     }
     return SAMPLE_PAYROLLS;
@@ -585,7 +587,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.bankAccounts && parsed.bankAccounts.length > 0) return parsed.bankAccounts;
+        if (parsed.bankAccounts && Array.isArray(parsed.bankAccounts)) return parsed.bankAccounts;
       } catch (e) {}
     }
     return SAMPLE_BANK_ACCOUNTS;
@@ -598,7 +600,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.otherIncomes && Array.isArray(parsed.otherIncomes) && parsed.otherIncomes.length > 0) {
+        if (parsed.otherIncomes && Array.isArray(parsed.otherIncomes)) {
           return parsed.otherIncomes;
         }
       } catch (e) {}
@@ -612,7 +614,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.chartOfAccounts && parsed.chartOfAccounts.length > 0) return parsed.chartOfAccounts;
+        if (parsed.chartOfAccounts && Array.isArray(parsed.chartOfAccounts)) return parsed.chartOfAccounts;
       } catch (e) {}
     }
     return DEFAULT_CHART_OF_ACCOUNTS;
@@ -623,7 +625,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.journalEntries && Array.isArray(parsed.journalEntries) && parsed.journalEntries.length > 0) {
+        if (parsed.journalEntries && Array.isArray(parsed.journalEntries)) {
           return parsed.journalEntries;
         }
       } catch (e) {}
@@ -637,7 +639,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.dynamicWidgets && parsed.dynamicWidgets.length > 0) return parsed.dynamicWidgets;
+        if (parsed.dynamicWidgets && Array.isArray(parsed.dynamicWidgets)) return parsed.dynamicWidgets;
       } catch (e) {}
     }
     return INITIAL_DYNAMIC_WIDGETS;

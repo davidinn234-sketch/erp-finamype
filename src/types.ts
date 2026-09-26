@@ -146,6 +146,7 @@ export interface Company {
   dtePointOfSaleCode?: string;
   economicActivityCode?: string; // Código CIIU (ej: 47110)
   hasEmployees?: boolean;
+  inventoryMethod?: 'costo_promedio' | 'peps';
   taxesConfig?: {
     declaIva: boolean; // Declara IVA 13% mensual (F-07)
     declaPagoCuenta: boolean; // Declara Pago a Cuenta 1.75%

@@ -1,12 +1,12 @@
 {
   "projectId": "mi-erp-nube",
-  "appId": "1:96182387469:web:e57132b342aeb9a9cf6644",
+  "appId": "1:96182387469:web:938520455ea1f073cf6644",
   "apiKey": "AIzaSyDZkCTczhrvxTzxGSTsPtENKWztKUdpe_M",
   "authDomain": "mi-erp-nube.firebaseapp.com",
-  "firestoreDatabaseId": "(default)",
+  "firestoreDatabaseId": "ai-studio-nexuserpsalvador-619c5a84-1f5d-4833-aee7-65b2a99f4a3b",
   "storageBucket": "mi-erp-nube.firebasestorage.app",
   "messagingSenderId": "96182387469",
-  "measurementId": "G-JMC7ZD3T8E",
-  "oAuthClientId": "",
+  "measurementId": "",
+  "oAuthClientId": "96182387469-arsb0q5htmotmtdercehhgif9jkn9lh1.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }

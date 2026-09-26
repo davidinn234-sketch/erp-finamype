@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
-import { SystemArchetype } from '../../types';
+import { SystemArchetype, Branch } from '../../types';
 import {
   Settings,
   Building2,
@@ -18,6 +18,10 @@ import {
   X,
   HelpCircle,
   AlertTriangle,
+  Plus,
+  Trash2,
+  MapPin,
+  Phone,
 } from 'lucide-react';
 
 interface Props {
@@ -34,11 +38,12 @@ export const ExhaustiveCustomizationModal: React.FC<Props> = ({
   const {
     currentUser,
     currentCompany,
+    branches,
     saveExhaustiveCustomization,
   } = useERP();
 
   // Active section tab
-  const [activeTab, setActiveTab] = useState<'archetype' | 'personal' | 'business' | 'tax' | 'dte' | 'operations'>('archetype');
+  const [activeTab, setActiveTab] = useState<'archetype' | 'personal' | 'business' | 'branches' | 'operations' | 'tax' | 'dte'>('archetype');
 
   // Section 1: System Archetype
   const [chosenArchetype, setChosenArchetype] = useState<SystemArchetype>(
@@ -69,7 +74,17 @@ export const ExhaustiveCustomizationModal: React.FC<Props> = ({
   const [companyFiscalYear, setCompanyFiscalYear] = useState<number>(currentCompany.fiscalYear || 2026);
   const [isGranContribuyente, setIsGranContribuyente] = useState<boolean>(currentCompany.isGranContribuyente || false);
 
-  // Section 4: Tax Configuration
+  // Section 4: Sucursales (Puntos de Venta)
+  const [userBranches, setUserBranches] = useState<Array<{
+    id: string;
+    code: string;
+    name: string;
+    address: string;
+    phone: string;
+    isMain: boolean;
+  }>>([]);
+
+  // Section 5: Tax Configuration
   const [declaIva, setDeclaIva] = useState(currentCompany.taxesConfig?.declaIva ?? true);
   const [declaPagoCuenta, setDeclaPagoCuenta] = useState(currentCompany.taxesConfig?.declaPagoCuenta ?? true);
   const [declaImpuestosMunicipales, setDeclaImpuestosMunicipales] = useState(currentCompany.taxesConfig?.declaImpuestosMunicipales ?? true);
@@ -78,16 +93,18 @@ export const ExhaustiveCustomizationModal: React.FC<Props> = ({
   const [isRetencionAgent, setIsRetencionAgent] = useState(currentCompany.taxesConfig?.isRetencionAgent ?? false);
   const [retainsIncomeTax10, setRetainsIncomeTax10] = useState(currentCompany.taxesConfig?.retainsIncomeTax10 ?? true);
 
-  // Section 5: Electronic Billing DTE MH Parameters
+  // Section 6: Electronic Billing DTE MH Parameters
   const [dteEnvironment, setDteEnvironment] = useState<'pruebas' | 'produccion'>(currentCompany.dteEnvironment || 'pruebas');
   const [dtePrivateKey, setDtePrivateKey] = useState(currentCompany.dtePrivateKey || 'MH-RSA-KEY-2026-X992-SECURE');
   const [dteApiPassword, setDteApiPassword] = useState(currentCompany.dteApiPassword || '••••••••••••');
   const [dteEstablishmentCode, setDteEstablishmentCode] = useState(currentCompany.dteEstablishmentCode || '0001');
   const [dtePointOfSaleCode, setDtePointOfSaleCode] = useState(currentCompany.dtePointOfSaleCode || 'P01');
 
-  // Section 6: Operations
+  // Section 7: Operations & Inventory
   const [hasEmployees, setHasEmployees] = useState(currentCompany.hasEmployees ?? true);
-  const [inventoryValuation, setInventoryValuation] = useState<'promedio_ponderado' | 'peps'>('promedio_ponderado');
+  const [inventoryValuation, setInventoryValuation] = useState<'promedio_ponderado' | 'peps'>(
+    currentCompany.inventoryMethod === 'peps' ? 'peps' : 'promedio_ponderado'
+  );
 
   useEffect(() => {
     if (isOpen) {
@@ -111,8 +128,32 @@ export const ExhaustiveCustomizationModal: React.FC<Props> = ({
       setCompanyAddress(currentCompany.address || '');
       setCompanyPhone(currentCompany.phone || '');
       setCompanyEmail(currentCompany.email || '');
+      setInventoryValuation(currentCompany.inventoryMethod === 'peps' ? 'peps' : 'promedio_ponderado');
+
+      const existingBranches = branches.filter((b) => b.companyId === currentCompany.id);
+      if (existingBranches.length > 0) {
+        setUserBranches(existingBranches.map((b) => ({
+          id: b.id,
+          code: b.code || 'SUC-01',
+          name: b.name,
+          address: b.address || '',
+          phone: b.phone || '',
+          isMain: b.isMain,
+        })));
+      } else {
+        setUserBranches([
+          {
+            id: `branch_${Date.now()}`,
+            code: 'SUC-01',
+            name: 'Casa Matriz',
+            address: currentCompany.address || 'San Salvador, El Salvador',
+            phone: currentCompany.phone || '+503 7000-0000',
+            isMain: true,
+          }
+        ]);
+      }
     }
-  }, [isOpen, currentUser, currentCompany]);
+  }, [isOpen, currentUser, currentCompany, branches]);
 
   // Adjust default presets when changing archetype
   const handleArchetypeChange = (arch: SystemArchetype) => {
@@ -135,7 +176,58 @@ export const ExhaustiveCustomizationModal: React.FC<Props> = ({
     }
   };
 
+  const handleAddBranch = () => {
+    const nextNum = userBranches.length + 1;
+    setUserBranches((prev) => [
+      ...prev,
+      {
+        id: `branch_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        code: `SUC-0${nextNum}`,
+        name: `Sucursal ${nextNum}`,
+        address: companyAddress || 'San Salvador, El Salvador',
+        phone: companyPhone || '+503 7000-0000',
+        isMain: prev.length === 0,
+      }
+    ]);
+  };
+
+  const handleRemoveBranch = (id: string) => {
+    if (userBranches.length <= 1) return;
+    setUserBranches((prev) => {
+      const remaining = prev.filter((b) => b.id !== id);
+      if (remaining.length > 0 && !remaining.some((b) => b.isMain)) {
+        remaining[0].isMain = true;
+      }
+      return remaining;
+    });
+  };
+
+  const handleSetMainBranch = (id: string) => {
+    setUserBranches((prev) =>
+      prev.map((b) => ({ ...b, isMain: b.id === id }))
+    );
+  };
+
+  const handleUpdateBranch = (id: string, field: 'name' | 'address' | 'phone' | 'code', val: string) => {
+    setUserBranches((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, [field]: val } : b))
+    );
+  };
+
   const handleSave = () => {
+    const mappedBranches: Branch[] = userBranches.map((b) => ({
+      id: b.id,
+      companyId: currentCompany.id,
+      code: b.code || 'SUC-01',
+      name: b.name.trim() || 'Sucursal',
+      address: b.address.trim() || companyAddress || 'San Salvador',
+      department: userDepartment || 'San Salvador',
+      municipality: userMunicipality || 'San Salvador Centro',
+      phone: b.phone.trim() || companyPhone || '+503 7000-0000',
+      isMain: b.isMain,
+      isActive: true,
+    }));
+
     saveExhaustiveCustomization({
       chosenArchetype,
       userUpdates: {
@@ -161,6 +253,7 @@ export const ExhaustiveCustomizationModal: React.FC<Props> = ({
         email: companyEmail,
         fiscalYear: companyFiscalYear,
         isGranContribuyente,
+        inventoryMethod: inventoryValuation === 'peps' ? 'peps' : 'costo_promedio',
         dteEnvironment,
         dtePrivateKey,
         dteApiPassword,
@@ -177,6 +270,7 @@ export const ExhaustiveCustomizationModal: React.FC<Props> = ({
           retainsIncomeTax10,
         },
       },
+      branchesUpdates: mappedBranches,
     });
     onClose();
   };

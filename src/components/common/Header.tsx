@@ -61,38 +61,64 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md px-4 lg:px-6 py-3 transition-colors">
       {/* Left side: Company Selector & Quick Search */}
       <div className="flex items-center gap-3">
-        {/* Company Dropdown Switcher */}
+        {/* Company Dropdown Switcher - Restricted: only Admin Maestro can switch companies */}
         <div className="relative">
-          <button
-            id="company-selector-btn"
-            onClick={() => {
-              setShowCompanyMenu(!showCompanyMenu);
-              setShowUserMenu(false);
-            }}
-            className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 transition text-left cursor-pointer"
-          >
-            <div className="w-8 h-8 rounded-md bg-indigo-600 dark:bg-indigo-500 text-white flex items-center justify-center font-bold text-sm shadow-sm">
-              {currentCompany.name.substring(0, 2).toUpperCase()}
-            </div>
-            <div className="hidden sm:block">
-              <div className="flex items-center gap-1.5">
-                <span className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate max-w-[180px]">
-                  {currentCompany.tradeName || currentCompany.name}
-                </span>
-                {currentCompany.isGranContribuyente && (
-                  <span className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 rounded border border-amber-300 dark:border-amber-700">
-                    Gran Contribuyente
-                  </span>
-                )}
+          {currentUser.role === 'admin_maestro' ? (
+            <button
+              id="company-selector-btn"
+              onClick={() => {
+                setShowCompanyMenu(!showCompanyMenu);
+                setShowUserMenu(false);
+              }}
+              className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 transition text-left cursor-pointer"
+            >
+              <div className="w-8 h-8 rounded-md bg-indigo-600 dark:bg-indigo-500 text-white flex items-center justify-center font-bold text-sm shadow-sm">
+                {(currentCompany.tradeName || currentCompany.name || 'EM').substring(0, 2).toUpperCase()}
               </div>
-              <span className="text-xs text-slate-500 dark:text-slate-400">
-                NRC: {currentCompany.nrc} | NIT: {currentCompany.nit}
-              </span>
+              <div className="hidden sm:block">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate max-w-[180px]">
+                    {currentCompany.tradeName || currentCompany.name}
+                  </span>
+                  {currentCompany.isGranContribuyente && (
+                    <span className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 rounded border border-amber-300 dark:border-amber-700">
+                      Gran Contribuyente
+                    </span>
+                  )}
+                </div>
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  {currentCompany.nrc ? `NRC: ${currentCompany.nrc}` : 'NRC: -'} | {currentCompany.nit ? `NIT: ${currentCompany.nit}` : 'NIT: -'}
+                </span>
+              </div>
+              <ChevronDown className="w-4 h-4 text-slate-400 ml-1" />
+            </button>
+          ) : (
+            <div
+              id="company-badge-fixed"
+              className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-left"
+            >
+              <div className="w-8 h-8 rounded-md bg-indigo-600 dark:bg-indigo-500 text-white flex items-center justify-center font-bold text-sm shadow-sm">
+                {(currentCompany.tradeName || currentCompany.name || 'EM').substring(0, 2).toUpperCase()}
+              </div>
+              <div className="hidden sm:block">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate max-w-[180px]">
+                    {currentCompany.tradeName || currentCompany.name}
+                  </span>
+                  {currentCompany.isGranContribuyente && (
+                    <span className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 rounded border border-amber-300 dark:border-amber-700">
+                      Gran Contribuyente
+                    </span>
+                  )}
+                </div>
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  {currentCompany.nrc ? `NRC: ${currentCompany.nrc}` : 'Empresa Privada'}
+                </span>
+              </div>
             </div>
-            <ChevronDown className="w-4 h-4 text-slate-400 ml-1" />
-          </button>
+          )}
 
-          {showCompanyMenu && (
+          {showCompanyMenu && currentUser.role === 'admin_maestro' && (
             <div className="absolute left-0 mt-2 w-72 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
               <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                 Empresas & Despachos (Multi-Tenant)
@@ -249,38 +275,34 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           {showUserMenu && (
-            <div className="absolute right-0 mt-2 w-64 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl py-2 z-50">
-              <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                Simulador de Roles (Permisos)
+            <div className="absolute right-0 mt-2 w-72 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl py-2 z-50">
+              <div className="px-4 py-2.5 border-b border-slate-100 dark:border-slate-800">
+                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{currentUser.name}</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{currentUser.email}</p>
+                <div className="flex items-center gap-1.5 mt-1.5">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 capitalize border border-indigo-200 dark:border-indigo-800/40">
+                    {currentUser.role.replace('_', ' ')}
+                  </span>
+                  <span className="text-[10px] text-slate-400 truncate">
+                    {currentCompany.tradeName || currentCompany.name}
+                  </span>
+                </div>
               </div>
-              {users.map((u) => (
-                <button
-                  key={u.id}
-                  id={`select-user-${u.id}`}
-                  onClick={() => {
-                    setCurrentUserId(u.id);
-                    setShowUserMenu(false);
-                    if (u.role === 'cajero') {
-                      setActiveModule('pos_terminal');
-                    } else if (u.systemArchetype === 'finanzas_personales') {
-                      setActiveModule('personal_finances');
-                    }
-                  }}
-                  className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-slate-100 dark:hover:bg-slate-800 transition ${
-                    u.id === currentUser.id ? 'bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-medium' : 'text-slate-700 dark:text-slate-300'
-                  }`}
-                >
-                  <div>
-                    <p className="text-xs font-semibold">{u.name}</p>
-                    <p className="text-[11px] text-slate-500 capitalize">{u.role.replace('_', ' ')}</p>
-                  </div>
-                  {u.id === currentUser.id && (
-                    <span className="w-2 h-2 rounded-full bg-indigo-600 dark:bg-indigo-400"></span>
-                  )}
-                </button>
-              ))}
 
-              <div className="my-1.5 border-t border-slate-100 dark:border-slate-800" />
+              {currentUser.role === 'admin_maestro' && (
+                <button
+                  type="button"
+                  id="header-admin-portal-link"
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    setActiveModule('admin_profiles');
+                  }}
+                  className="w-full text-left px-4 py-2.5 text-xs text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 flex items-center gap-2 cursor-pointer font-semibold"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Panel Maestro Admin (Cuentas)</span>
+                </button>
+              )}
 
               <button
                 type="button"
@@ -289,11 +311,13 @@ export const Header: React.FC<HeaderProps> = ({
                   setShowUserMenu(false);
                   setIsExhaustiveCustomizationOpen(true);
                 }}
-                className="w-full text-left px-3 py-2 text-xs text-blue-600 dark:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer font-medium"
+                className="w-full text-left px-4 py-2.5 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer font-medium"
               >
-                <Sliders className="w-3.5 h-3.5" />
+                <Sliders className="w-4 h-4 text-blue-500" />
                 <span>Personalizar Sistema (Gran Formulario)</span>
               </button>
+
+              <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
 
               <button
                 type="button"
@@ -302,9 +326,9 @@ export const Header: React.FC<HeaderProps> = ({
                   setShowUserMenu(false);
                   logout();
                 }}
-                className="w-full text-left px-3 py-2 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2 cursor-pointer font-medium"
+                className="w-full text-left px-4 py-2.5 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2 cursor-pointer font-medium"
               >
-                <LogOut className="w-3.5 h-3.5" />
+                <LogOut className="w-4 h-4" />
                 <span>Cerrar Sesión</span>
               </button>
             </div>
