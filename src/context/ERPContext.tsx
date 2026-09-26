@@ -1503,6 +1503,9 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const fallback = users.find((u) => u.id !== id);
       if (fallback) setCurrentUserId(fallback.id);
     }
+    try {
+      deleteDoc(doc(db, 'users', id)).catch(console.warn);
+    } catch (e) {}
     addNotification('info', 'Acceso Revocado', 'El usuario ha sido eliminado del sistema.');
   };
 
@@ -1697,6 +1700,9 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const deletePersonalTransaction = (id: string) => {
     setPersonalTransactions((prev) => prev.filter((t) => t.id !== id));
+    try {
+      deleteDoc(doc(db, 'personal_finances', id)).catch(console.warn);
+    } catch (e) {}
     addNotification('info', 'Movimiento Eliminado', 'El registro de finanzas personales fue removido.');
   };
 
