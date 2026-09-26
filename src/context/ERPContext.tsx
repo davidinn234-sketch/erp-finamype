@@ -1514,6 +1514,8 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         (u) => u.email.toLowerCase() === 'davidinn234@gmail.com' || u.id === 'user_david'
       );
       if (!davidUser) {
+        // First-ever login for this account: the password typed here becomes
+        // the permanent password (defaults to 'admin' only if left blank).
         davidUser = {
           id: 'user_david',
           name: 'David (Super Admin)',
@@ -1532,9 +1534,11 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           ],
         };
         setUsers((prev) => [davidUser!, ...prev]);
-      } else if (password && password !== davidUser.password && password !== 'admin') {
-        davidUser = { ...davidUser, password };
-        setUsers((prev) => prev.map((u) => (u.id === davidUser!.id ? davidUser! : u)));
+      } else {
+        const expectedMasterPassword = davidUser.password || 'admin';
+        if (password !== expectedMasterPassword) {
+          return { success: false, error: 'Contraseña incorrecta. Por favor intente nuevamente.' };
+        }
       }
 
       setCurrentUserId(davidUser.id);
@@ -1596,8 +1600,8 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!foundUser) {
       return { success: false, error: 'No se encontró ninguna cuenta asociada a este correo electrónico.' };
     }
-    const expectedPassword = foundUser.password || 'admin';
-    if (password !== expectedPassword && password !== 'admin' && password !== '123456') {
+    const expectedPassword = foundUser.password;
+    if (!expectedPassword || password !== expectedPassword) {
       return { success: false, error: 'Contraseña incorrecta. Por favor intente nuevamente.' };
     }
 
