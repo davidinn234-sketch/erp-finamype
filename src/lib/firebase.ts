@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAnalytics, isSupported } from "firebase/analytics";
-import { getFirestore, doc, setDoc, getDocFromServer } from "firebase/firestore";
+import { initializeFirestore, doc, setDoc, getDocFromServer } from "firebase/firestore";
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
@@ -33,7 +33,11 @@ if (typeof window !== "undefined") {
 }
 
 // Initialize Cloud Firestore database
-export const db = getFirestore(app);
+// ignoreUndefinedProperties: true prevents writes from silently throwing
+// (and being swallowed by .catch()) whenever an optional field is empty
+// and ends up as `undefined` (e.g. phone, notes, etc.). Without this,
+// Firestore rejects the entire document write.
+export const db = initializeFirestore(app, { ignoreUndefinedProperties: true });
 
 // Connection test helper mandated by Firebase skill
 export async function testFirebaseConnection(): Promise<boolean> {
