@@ -1,0 +1,6 @@
+{
+  "name": "FinaPyme ERP - Sistema Financiero y Operativo para MYPES en El Salvador",
+  "description": "Plataforma integral sencilla e intuitiva para emprendedores y MYPES en El Salvador: Control de ventas, inventario con código de barras y cámara, cuentas por pagar/cobrar, planilla legal salvadoreña, dashboard de liquidez y rentabilidad sin ser contador, y copiloto con Inteligencia Artificial.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

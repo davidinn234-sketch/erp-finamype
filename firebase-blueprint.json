@@ -1,0 +1,93 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with authentication and system archetype",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin_maestro", "gerente", "contador", "cajero", "usuario_personal"] },
+        "systemArchetype": { "type": "string", "enum": ["finanzas_personales", "emprendedor", "consolidada"] },
+        "companyId": { "type": "string" },
+        "phone": { "type": "string" },
+        "dui": { "type": "string" },
+        "passwordHash": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "email", "name", "role", "systemArchetype"]
+    },
+    "PersonalRecord": {
+      "title": "PersonalRecord",
+      "description": "Personal income, expense, budget or goal isolated from corporate ERP",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["income", "expense", "budget", "goal"] },
+        "title": { "type": "string" },
+        "amount": { "type": "number" },
+        "category": { "type": "string" },
+        "date": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "type", "title", "amount"]
+    },
+    "Company": {
+      "title": "Company",
+      "description": "Business profile with tax, DTE and corporate archetype configuration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "tradeName": { "type": "string" },
+        "nit": { "type": "string" },
+        "nrc": { "type": "string" },
+        "giro": { "type": "string" },
+        "systemArchetype": { "type": "string", "enum": ["emprendedor", "consolidada"] },
+        "dteActive": { "type": "boolean" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" }
+      },
+      "required": ["id", "name", "nit", "systemArchetype"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Sales invoice or DTE tax document",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyId": { "type": "string" },
+        "correlativeNumber": { "type": "string" },
+        "type": { "type": "string" },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "totalPagar": { "type": "number" },
+        "date": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "correlativeNumber", "totalPagar", "date"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile with role and isolated system archetype"
+    },
+    "/users/{userId}/personalRecords/{recordId}": {
+      "schema": "PersonalRecord",
+      "description": "Isolated personal finance records for a specific user"
+    },
+    "/companies/{companyId}": {
+      "schema": "Company",
+      "description": "Company corporate data"
+    },
+    "/companies/{companyId}/invoices/{invoiceId}": {
+      "schema": "Invoice",
+      "description": "Company sales and DTE invoices"
+    }
+  }
+}

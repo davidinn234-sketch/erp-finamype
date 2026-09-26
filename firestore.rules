@@ -1,0 +1,115 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Connection test document
+    match /test/{docId} {
+      allow read, write: if true;
+    }
+
+    // Global ERP cloud snapshot
+    match /system_state/{docId} {
+      allow read, write: if true;
+    }
+
+    // Users and logins collection
+    match /users/{userId} {
+      allow read, write: if true;
+
+      match /personalRecords/{recordId} {
+        allow read, write: if true;
+      }
+    }
+
+    match /logins/{loginId} {
+      allow read, write: if true;
+    }
+
+    // Companies and branches
+    match /companies/{companyId} {
+      allow read, write: if true;
+
+      match /{allSubcollections=**} {
+        allow read, write: if true;
+      }
+    }
+
+    match /branches/{branchId} {
+      allow read, write: if true;
+    }
+
+    // CRM, Ventas & Inventario
+    match /products/{productId} {
+      allow read, write: if true;
+    }
+
+    match /customers/{customerId} {
+      allow read, write: if true;
+    }
+
+    match /invoices/{invoiceId} {
+      allow read, write: if true;
+    }
+
+    match /customer_payments/{paymentId} {
+      allow read, write: if true;
+    }
+
+    // Proveedores & Compras
+    match /suppliers/{supplierId} {
+      allow read, write: if true;
+    }
+
+    match /purchases/{purchaseId} {
+      allow read, write: if true;
+    }
+
+    match /supplier_payments/{paymentId} {
+      allow read, write: if true;
+    }
+
+    // Tesorería & Bancos
+    match /bank_accounts/{accountId} {
+      allow read, write: if true;
+    }
+
+    match /treasury_movements/{movementId} {
+      allow read, write: if true;
+    }
+
+    // RRHH & Planilla Legal SV
+    match /employees/{employeeId} {
+      allow read, write: if true;
+    }
+
+    match /payrolls/{payrollId} {
+      allow read, write: if true;
+    }
+
+    match /candidates/{candidateId} {
+      allow read, write: if true;
+    }
+
+    match /candidate_folders/{folderId} {
+      allow read, write: if true;
+    }
+
+    match /professional_services/{serviceId} {
+      allow read, write: if true;
+    }
+
+    // Finanzas Personales
+    match /personal_finances/{docId} {
+      allow read, write: if true;
+    }
+  }
+}

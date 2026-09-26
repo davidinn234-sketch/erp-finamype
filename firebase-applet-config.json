@@ -1,0 +1,12 @@
+{
+  "projectId": "mi-erp-nube",
+  "appId": "1:96182387469:web:e57132b342aeb9a9cf6644",
+  "apiKey": "AIzaSyDZkCTczhrvxTzxGSTsPtENKWztKUdpe_M",
+  "authDomain": "mi-erp-nube.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "mi-erp-nube.firebasestorage.app",
+  "messagingSenderId": "96182387469",
+  "measurementId": "G-JMC7ZD3T8E",
+  "oAuthClientId": "",
+  "recaptchaSiteKey": ""
+}
