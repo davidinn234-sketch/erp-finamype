@@ -545,12 +545,14 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
     { key: '12', short: 'Dic', name: 'Diciembre' },
   ];
 
-  // Base profiles para años históricos cerrados con libros contables finalizados
+  // Perfil realista de una MYPE salvadoreña (tienda): ~$5,000 de ventas y ~$2,000 de
+  // flujo neto al mes. Solo aplica a la empresa de ejemplo (comp_1); cualquier otra
+  // empresa siempre parte en $0.00 en años sin transacciones reales.
   const OP_ANNUAL_PROFILES: Record<number, { sales: number; purchases: number; payroll: number; taxes: number; opEx: number }> = {
-    2022: { sales: 86100, purchases: 40800, payroll: 16500, taxes: 6700, opEx: 10800 },
-    2023: { sales: 105400, purchases: 49200, payroll: 19800, taxes: 8100, opEx: 12600 },
-    2024: { sales: 128200, purchases: 59100, payroll: 23000, taxes: 9900, opEx: 14400 },
-    2025: { sales: 148500, purchases: 68400, payroll: 26100, taxes: 11500, opEx: 16200 },
+    2022: { sales: 54000, purchases: 19500, payroll: 7200, taxes: 3100, opEx: 3200 },
+    2023: { sales: 57600, purchases: 20600, payroll: 7600, taxes: 3300, opEx: 3300 },
+    2024: { sales: 60000, purchases: 21400, payroll: 7900, taxes: 3450, opEx: 3400 },
+    2025: { sales: 63600, purchases: 22600, payroll: 8300, taxes: 3650, opEx: 3550 },
   };
 
   const OP_MONTH_WEIGHTS: Record<string, number> = {
@@ -685,7 +687,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   // Para 2026: Meses sin transacciones (o futuros como Sep-Dic) muestran $0
   const opMonthlyEvolution = useMemo(() => {
     const isCurrentYear = opFilterYear === 2026;
-    const profile = OP_ANNUAL_PROFILES[opFilterYear];
+    const profile = currentCompany.id === 'comp_1' ? OP_ANNUAL_PROFILES[opFilterYear] : undefined;
 
     return OP_MONTHS.filter((m) => m.key !== 'all').map((m) => {
       let monthSales = 0;
@@ -735,7 +737,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
         hasData: monthSales > 0 || monthOutflows > 0,
       };
     });
-  }, [opFilterYear, branchFilteredInvoices, branchFilteredPurchases, employees]);
+  }, [opFilterYear, branchFilteredInvoices, branchFilteredPurchases, employees, currentCompany.id]);
 
   // Operational Branch Performance filtered by Year and Month
   const opBranchPerformance = useMemo(() => {

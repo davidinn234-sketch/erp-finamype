@@ -51,9 +51,6 @@ import {
   SAMPLE_JOURNAL_ENTRIES,
   INITIAL_DYNAMIC_WIDGETS,
   SAMPLE_OTHER_INCOMES,
-  SAMPLE_PERSONAL_TRANSACTIONS,
-  SAMPLE_PERSONAL_BUDGETS,
-  SAMPLE_PERSONAL_GOALS,
   SAMPLE_PROFESSIONAL_SERVICES,
   SAMPLE_CANDIDATE_FOLDERS,
   SAMPLE_CANDIDATE_APPLICANTS,
@@ -361,7 +358,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
       } catch (e) {}
     }
-    return SAMPLE_PERSONAL_TRANSACTIONS;
+    return [];
   });
 
   const [personalBudgets, setPersonalBudgets] = useState<PersonalBudgetCategory[]>(() => {
@@ -374,7 +371,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
       } catch (e) {}
     }
-    return SAMPLE_PERSONAL_BUDGETS;
+    return [];
   });
 
   const [personalSavingGoals, setPersonalSavingGoals] = useState<PersonalSavingGoal[]>(() => {
@@ -387,7 +384,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
       } catch (e) {}
     }
-    return SAMPLE_PERSONAL_GOALS;
+    return [];
   });
 
   const [isExhaustiveCustomizationOpen, setIsExhaustiveCustomizationOpen] = useState<boolean>(false);
@@ -1050,7 +1047,6 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           if (Array.isArray(sData.customerPayments) && sData.customerPayments.length > 0) setCustomerPayments(sData.customerPayments);
           if (Array.isArray(sData.supplierPayments) && sData.supplierPayments.length > 0) setSupplierPayments(sData.supplierPayments);
           if (Array.isArray(sData.bankAccounts) && sData.bankAccounts.length > 0) setRawBankAccounts(sData.bankAccounts);
-          if (Array.isArray(sData.personalTransactions) && sData.personalTransactions.length > 0) setPersonalTransactions(sData.personalTransactions);
         }
 
         // 2. Query individual collections to ensure 100% cloud accuracy
@@ -1434,13 +1430,81 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       (err) => console.warn('Live invoices sync note:', err)
     );
 
+    // Sucursales: fuente de verdad en tiempo real, para que una sucursal eliminada
+    // o reemplazada en el Gran Formulario no reaparezca al recargar.
+    const unsubBranches = onSnapshot(
+      collection(db, 'branches'),
+      (snap) => {
+        const liveBranches: Branch[] = [];
+        snap.forEach((d) => {
+          const data = d.data() as Branch;
+          if (data.id && data.name) liveBranches.push(data);
+        });
+        setRawBranches(liveBranches);
+      },
+      (err) => console.warn('Live branches sync note:', err)
+    );
+
+    // Finanzas Personales — Transacciones: fuente de verdad en tiempo real.
+    // Antes dependía del snapshot general (system_state) con retraso, lo que
+    // causaba que al refrescar rápido se restauraran transacciones ya borradas.
+    const unsubPersonalTransactions = onSnapshot(
+      collection(db, 'personal_finances'),
+      (snap) => {
+        const liveTx: PersonalTransaction[] = [];
+        snap.forEach((d) => {
+          const data = d.data() as PersonalTransaction;
+          if (data.id) liveTx.push(data);
+        });
+        setPersonalTransactions(liveTx);
+      },
+      (err) => console.warn('Live personal transactions sync note:', err)
+    );
+
+    // Finanzas Personales — Presupuestos y Metas de Ahorro: documento propio,
+    // ya que antes nunca se guardaban en Firestore (solo quedaban en memoria/localStorage).
+    const unsubPersonalMeta = onSnapshot(
+      doc(db, 'personal_finance_meta', 'data'),
+      (snap) => {
+        if (snap.exists()) {
+          const d = snap.data() as any;
+          setPersonalBudgets(Array.isArray(d.personalBudgets) ? d.personalBudgets : []);
+          setPersonalSavingGoals(Array.isArray(d.personalSavingGoals) ? d.personalSavingGoals : []);
+        } else {
+          setPersonalBudgets([]);
+          setPersonalSavingGoals([]);
+        }
+      },
+      (err) => console.warn('Live personal budgets/goals sync note:', err)
+    );
+
     return () => {
       unsubCompanies();
       unsubUsers();
       unsubProducts();
       unsubInvoices();
+      unsubBranches();
+      unsubPersonalTransactions();
+      unsubPersonalMeta();
     };
   }, []);
+
+  // Guardado rápido y dedicado de Presupuestos y Metas de Ahorro (0.5s), ya que
+  // antes solo vivían en memoria local y nunca llegaban a Firestore.
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      try {
+        await setDoc(
+          doc(db, 'personal_finance_meta', 'data'),
+          { personalBudgets, personalSavingGoals, updatedAt: new Date().toISOString() },
+          { merge: false }
+        );
+      } catch (err) {
+        console.debug('Autosave de presupuestos/metas personales:', err);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [personalBudgets, personalSavingGoals]);
 
   // User & Access Management (Admin vs Cajero / Roles)
   const createUser = (newUserData: Omit<UserProfile, 'id'> & { id?: string }) => {
@@ -1756,6 +1820,12 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // 3. Update branches if provided
     if (branchesUpdates && Array.isArray(branchesUpdates)) {
+      // Sucursales que existían para esta empresa (p. ej. la "Casa Matriz" automática
+      // creada al registrar la cuenta) y que el usuario NO conservó en el formulario:
+      // hay que borrarlas también de Firestore, si no, reaparecen al recargar.
+      const keptIds = new Set(branchesUpdates.map((b) => b.id));
+      const staleBranches = branches.filter((b) => b.companyId === currentCompany.id && !keptIds.has(b.id));
+
       setBranches((prev) => {
         const others = prev.filter((b) => b.companyId !== currentCompany.id);
         return [...others, ...branchesUpdates];
@@ -1763,6 +1833,11 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       branchesUpdates.forEach((b) => {
         try {
           setDoc(doc(db, 'branches', b.id), b).catch(console.warn);
+        } catch (e) {}
+      });
+      staleBranches.forEach((b) => {
+        try {
+          deleteDoc(doc(db, 'branches', b.id)).catch(console.warn);
         } catch (e) {}
       });
     }
