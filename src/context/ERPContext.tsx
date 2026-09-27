@@ -774,14 +774,17 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     addNotification('success', 'Datos en CERO', 'Todas las operaciones de la empresa han sido vaciadas a $0.00.');
   };
 
-  const deleteCompany = (companyId: string) => {
+  const deleteCompany = async (companyId: string) => {
     setCompanies((prev) => prev.filter((c) => c.id !== companyId));
     setUsers((prev) => prev.filter((u) => u.companyId !== companyId));
     resetCompanyDataToZero(companyId);
     try {
-      deleteDoc(doc(db, 'companies', companyId)).catch(console.warn);
-    } catch (e) {}
-    addNotification('info', 'Empresa Eliminada', 'La empresa y sus cuentas fueron removidas permanentemente.');
+      await deleteDoc(doc(db, 'companies', companyId));
+      addNotification('info', 'Empresa Eliminada', 'La empresa y sus cuentas fueron removidas permanentemente.');
+    } catch (e) {
+      console.error('No se pudo eliminar la empresa en la nube:', e);
+      addNotification('error', 'Error al Eliminar', 'Se quitó localmente pero no se pudo borrar en la nube. Puede reaparecer al recargar — revisa tu conexión e inténtalo de nuevo.');
+    }
   };
 
   const clearAllDemoData = () => {
@@ -1065,36 +1068,21 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           getDocs(collection(db, 'personal_finances')).catch(() => null),
         ]);
 
+        // Firestore es la fuente de verdad para companies una vez que ya tiene datos:
+        // se REEMPLAZA el estado local en vez de "solo agregar", para que una empresa
+        // borrada en la nube no reaparezca. Si la colección está vacía (proyecto nuevo
+        // sin datos aún subidos), se respeta el estado local/demo en vez de vaciarlo.
         if (companiesSnap && !companiesSnap.empty) {
           const cloudComps: Company[] = [];
           companiesSnap.forEach((d) => { const item = d.data() as Company; if (item.id && item.name) cloudComps.push(item); });
-          if (cloudComps.length > 0) {
-            setCompanies((prev) => {
-              const merged = [...prev];
-              cloudComps.forEach((cc) => {
-                const idx = merged.findIndex((c) => c.id === cc.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...cc };
-                else merged.push(cc);
-              });
-              return merged;
-            });
-          }
+          setCompanies(cloudComps);
         }
 
+        // Mismo criterio para users: la nube manda, así un usuario eliminado no vuelve.
         if (usersSnap && !usersSnap.empty) {
           const cloudUsers: UserProfile[] = [];
           usersSnap.forEach((d) => { const item = d.data() as UserProfile; if (item.id && item.email) cloudUsers.push(item); });
-          if (cloudUsers.length > 0) {
-            setUsers((prev) => {
-              const merged = [...prev];
-              cloudUsers.forEach((cu) => {
-                const idx = merged.findIndex((u) => u.id === cu.id || u.email.toLowerCase() === cu.email.toLowerCase());
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...cu };
-                else merged.push(cu);
-              });
-              return merged;
-            });
-          }
+          setUsers(cloudUsers);
         }
 
         if (prodSnap && !prodSnap.empty) {
@@ -1343,27 +1331,18 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     loadCloudData();
 
     // Realtime listeners for immediate cross-device sync
+    // Firestore es la fuente de verdad en tiempo real: se reemplaza el estado local
+    // completo con lo que hay en la nube (en vez de solo agregar/actualizar), para
+    // que una empresa o usuario eliminado no vuelva a aparecer al refrescar.
     const unsubCompanies = onSnapshot(
       collection(db, 'companies'),
       (snap) => {
-        if (!snap.empty) {
-          const liveComps: Company[] = [];
-          snap.forEach((d) => {
-            const data = d.data() as Company;
-            if (data.id && data.name) liveComps.push(data);
-          });
-          if (liveComps.length > 0) {
-            setCompanies((prev) => {
-              const merged = [...prev];
-              liveComps.forEach((lc) => {
-                const idx = merged.findIndex((c) => c.id === lc.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...lc };
-                else merged.push(lc);
-              });
-              return merged;
-            });
-          }
-        }
+        const liveComps: Company[] = [];
+        snap.forEach((d) => {
+          const data = d.data() as Company;
+          if (data.id && data.name) liveComps.push(data);
+        });
+        setCompanies(liveComps);
       },
       (err) => console.warn('Live companies sync note:', err)
     );
@@ -1371,24 +1350,12 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const unsubUsers = onSnapshot(
       collection(db, 'users'),
       (snap) => {
-        if (!snap.empty) {
-          const liveUsers: UserProfile[] = [];
-          snap.forEach((d) => {
-            const data = d.data() as UserProfile;
-            if (data.id && data.email) liveUsers.push(data);
-          });
-          if (liveUsers.length > 0) {
-            setUsers((prev) => {
-              const merged = [...prev];
-              liveUsers.forEach((lu) => {
-                const idx = merged.findIndex((u) => u.id === lu.id || u.email.toLowerCase() === lu.email.toLowerCase());
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...lu };
-                else merged.push(lu);
-              });
-              return merged;
-            });
-          }
-        }
+        const liveUsers: UserProfile[] = [];
+        snap.forEach((d) => {
+          const data = d.data() as UserProfile;
+          if (data.id && data.email) liveUsers.push(data);
+        });
+        setUsers(liveUsers);
       },
       (err) => console.warn('Live users sync note:', err)
     );
@@ -1493,7 +1460,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     addNotification('success', 'Usuario Actualizado', 'Los accesos y datos fueron actualizados correctamente.');
   };
 
-  const deleteUser = (id: string) => {
+  const deleteUser = async (id: string) => {
     if (users.length <= 1) {
       addNotification('error', 'Acción Denegada', 'No puedes eliminar el único usuario del sistema.');
       return;
@@ -1504,9 +1471,12 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (fallback) setCurrentUserId(fallback.id);
     }
     try {
-      deleteDoc(doc(db, 'users', id)).catch(console.warn);
-    } catch (e) {}
-    addNotification('info', 'Acceso Revocado', 'El usuario ha sido eliminado del sistema.');
+      await deleteDoc(doc(db, 'users', id));
+      addNotification('info', 'Acceso Revocado', 'El usuario ha sido eliminado del sistema.');
+    } catch (e) {
+      console.error('No se pudo eliminar el usuario en la nube:', e);
+      addNotification('error', 'Error al Eliminar', 'Se quitó localmente pero no se pudo borrar en la nube. Puede reaparecer al recargar — revisa tu conexión e inténtalo de nuevo.');
+    }
   };
 
   // Authentication: Login & Logout
