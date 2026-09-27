@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { db, testFirebaseConnection } from '../../lib/firebase';
 import { collection, doc, setDoc, getDocs } from 'firebase/firestore';
-import { UserProfile, SystemArchetype, UserRole } from '../../types';
+import { UserProfile, SystemArchetype, UserRole, Company, Branch } from '../../types';
+import { DEFAULT_FISCAL_CONFIG } from '../../utils/salvadoranTax';
 import {
   Cloud,
   CheckCircle2,
@@ -41,6 +42,8 @@ export const CloudUserManagerModal: React.FC<Props> = ({ isOpen, onClose }) => {
     setActiveModule,
     addNotification,
     currentCompany,
+    createCompany,
+    createBranch,
   } = useERP();
 
   // Cloud status
@@ -101,8 +104,49 @@ export const CloudUserManagerModal: React.FC<Props> = ({ isOpen, onClose }) => {
       role = businessRole;
     }
 
+    const compId = `comp_${Date.now()}`;
+    const cleanBizName = businessName.trim() || `${name.trim()} Negocios`;
+
+    // 1. Crear empresa dedicada para la nueva cuenta
+    const newComp: Company = {
+      id: compId,
+      name: cleanBizName,
+      tradeName: cleanBizName,
+      nit: '0614-010190-001-0',
+      nrc: '000000-0',
+      giro: businessGiro.trim() || (accountType === 'finanzas_personales' ? 'Finanzas Personales' : 'Comercial y Servicios'),
+      address: 'San Salvador, El Salvador',
+      department: 'San Salvador',
+      municipality: 'San Salvador Centro',
+      phone: phone.trim() || '+503 7000-0000',
+      email: email.trim().toLowerCase(),
+      isGranContribuyente: false,
+      currency: 'USD',
+      fiscalYear: 2026,
+      fiscalConfig: { ...DEFAULT_FISCAL_CONFIG },
+      systemArchetype: archetype,
+      primaryAdminUserId: userId,
+      createdAt: new Date().toISOString().split('T')[0],
+    };
+
+    // 2. Crear sucursal propia para la empresa
+    const initialBranch: Branch = {
+      id: `branch_${Date.now()}`,
+      companyId: compId,
+      code: 'SUC-01',
+      name: 'Casa Matriz - Sede Central',
+      address: newComp.address,
+      department: 'San Salvador',
+      municipality: 'San Salvador Centro',
+      phone: newComp.phone,
+      managerName: name.trim(),
+      isMain: true,
+      isActive: true,
+    };
+
     const newUser: UserProfile = {
       id: userId,
+      companyId: compId,
       name: name.trim(),
       email: email.trim().toLowerCase(),
       password: password.trim() || '123456',
@@ -120,37 +164,26 @@ export const CloudUserManagerModal: React.FC<Props> = ({ isOpen, onClose }) => {
           : 'Director de Negocio',
       department: 'San Salvador',
       municipality: 'San Salvador',
-      isConfigured: true,
+      isConfigured: false, // Disparará el Gran Formulario de Sucursales en el primer login
       createdAt: new Date().toISOString().split('T')[0],
+      storedInCloud: true,
     };
 
     try {
-      // 1. Save directly to Firebase Firestore with full credentials and companyId
-      const userDocRef = doc(db, 'users', userId);
-      await setDoc(userDocRef, {
-        id: newUser.id,
-        name: newUser.name,
-        email: newUser.email,
-        password: newUser.password,
-        role: newUser.role,
-        systemArchetype: newUser.systemArchetype,
-        companyId: currentCompany.id,
-        phone: newUser.phone,
-        dui: newUser.dui,
-        jobTitle: newUser.jobTitle,
-        businessName: businessName.trim() || currentCompany.name,
-        createdAt: newUser.createdAt,
-        storedInCloud: true,
-        isConfigured: true,
-      });
+      // 1. Guardar en Firestore
+      await setDoc(doc(db, 'companies', compId), newComp);
+      await setDoc(doc(db, 'branches', initialBranch.id), initialBranch);
+      await setDoc(doc(db, 'users', userId), newUser);
 
-      // 2. Also register in local state for immediate access
+      // 2. Registrar en estado local
+      createCompany(newComp);
+      createBranch(initialBranch);
       createUser(newUser);
 
       addNotification(
         'success',
-        '¡Cuenta Creada en la Nube!',
-        `Usuario ${newUser.name} registrado en Firebase Firestore exitosamente.`
+        '¡Cuenta y Sucursal Creadas en la Nube!',
+        `Usuario ${newUser.name} registrado con su propia empresa y sucursal. En su primer inicio completará su personalización.`
       );
 
       // Reset form fields

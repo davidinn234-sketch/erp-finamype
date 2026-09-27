@@ -598,6 +598,8 @@ export interface CandidateApplicant {
 export interface Payroll {
   id: string;
   companyId: string;
+  branchId?: string;
+  branchName?: string;
   periodNumber: number;
   periodType: PayrollPeriod;
   year: number;

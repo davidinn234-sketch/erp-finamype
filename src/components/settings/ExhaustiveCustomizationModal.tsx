@@ -22,7 +22,26 @@ import {
   Trash2,
   MapPin,
   Phone,
+  Star,
+  Check,
 } from 'lucide-react';
+
+const SALVADORAN_DEPARTMENTS = [
+  'San Salvador',
+  'La Libertad',
+  'Santa Ana',
+  'San Miguel',
+  'Sonsonate',
+  'Usulután',
+  'Ahuachapán',
+  'La Paz',
+  'Chalatenango',
+  'Cuscatlán',
+  'Morazán',
+  'San Vicente',
+  'Cabañas',
+  'La Unión',
+];
 
 interface Props {
   isOpen: boolean;
@@ -80,7 +99,10 @@ export const ExhaustiveCustomizationModal: React.FC<Props> = ({
     code: string;
     name: string;
     address: string;
+    department: string;
+    municipality: string;
     phone: string;
+    managerName: string;
     isMain: boolean;
   }>>([]);
 
@@ -136,8 +158,11 @@ export const ExhaustiveCustomizationModal: React.FC<Props> = ({
           id: b.id,
           code: b.code || 'SUC-01',
           name: b.name,
-          address: b.address || '',
-          phone: b.phone || '',
+          address: b.address || currentCompany.address || '',
+          department: b.department || currentCompany.department || 'San Salvador',
+          municipality: b.municipality || currentCompany.municipality || 'San Salvador Centro',
+          phone: b.phone || currentCompany.phone || '',
+          managerName: b.managerName || currentUser.name || '',
           isMain: b.isMain,
         })));
       } else {
@@ -145,9 +170,12 @@ export const ExhaustiveCustomizationModal: React.FC<Props> = ({
           {
             id: `branch_${Date.now()}`,
             code: 'SUC-01',
-            name: 'Casa Matriz',
+            name: `${currentCompany.tradeName || currentCompany.name || 'Mi Negocio'} - Casa Matriz`,
             address: currentCompany.address || 'San Salvador, El Salvador',
+            department: currentCompany.department || 'San Salvador',
+            municipality: currentCompany.municipality || 'San Salvador Centro',
             phone: currentCompany.phone || '+503 7000-0000',
+            managerName: currentUser.name || '',
             isMain: true,
           }
         ]);
@@ -185,10 +213,93 @@ export const ExhaustiveCustomizationModal: React.FC<Props> = ({
         code: `SUC-0${nextNum}`,
         name: `Sucursal ${nextNum}`,
         address: companyAddress || 'San Salvador, El Salvador',
+        department: userDepartment || 'San Salvador',
+        municipality: userMunicipality || 'San Salvador Centro',
         phone: companyPhone || '+503 7000-0000',
+        managerName: '',
         isMain: prev.length === 0,
       }
     ]);
+  };
+
+  const handleSetPresetBranches = (count: number) => {
+    const baseName = companyTradeName || companyName || 'Mi Empresa';
+    if (count === 1) {
+      setUserBranches([
+        {
+          id: userBranches[0]?.id || `branch_${Date.now()}`,
+          code: 'SUC-01',
+          name: `${baseName} - Casa Matriz`,
+          address: companyAddress || 'San Salvador, El Salvador',
+          department: userDepartment || 'San Salvador',
+          municipality: userMunicipality || 'San Salvador Centro',
+          phone: companyPhone || '+503 7000-0000',
+          managerName: userName || '',
+          isMain: true,
+        }
+      ]);
+    } else if (count === 2) {
+      setUserBranches([
+        {
+          id: userBranches[0]?.id || `branch_${Date.now()}_1`,
+          code: 'SUC-01',
+          name: `${baseName} - Casa Matriz Central`,
+          address: companyAddress || 'San Salvador, El Salvador',
+          department: userDepartment || 'San Salvador',
+          municipality: userMunicipality || 'San Salvador Centro',
+          phone: companyPhone || '+503 7000-0000',
+          managerName: userName || '',
+          isMain: true,
+        },
+        {
+          id: userBranches[1]?.id || `branch_${Date.now()}_2`,
+          code: 'SUC-02',
+          name: 'Sucursal Escalón',
+          address: 'Paseo General Escalón, San Salvador',
+          department: 'San Salvador',
+          municipality: 'San Salvador Centro',
+          phone: companyPhone || '+503 7000-0000',
+          managerName: '',
+          isMain: false,
+        }
+      ]);
+    } else if (count === 3) {
+      setUserBranches([
+        {
+          id: userBranches[0]?.id || `branch_${Date.now()}_1`,
+          code: 'SUC-01',
+          name: `${baseName} - Casa Matriz Central`,
+          address: companyAddress || 'San Salvador, El Salvador',
+          department: userDepartment || 'San Salvador',
+          municipality: userMunicipality || 'San Salvador Centro',
+          phone: companyPhone || '+503 7000-0000',
+          managerName: userName || '',
+          isMain: true,
+        },
+        {
+          id: userBranches[1]?.id || `branch_${Date.now()}_2`,
+          code: 'SUC-02',
+          name: 'Sucursal Escalón',
+          address: 'Paseo General Escalón, San Salvador',
+          department: 'San Salvador',
+          municipality: 'San Salvador Centro',
+          phone: companyPhone || '+503 7000-0000',
+          managerName: '',
+          isMain: false,
+        },
+        {
+          id: userBranches[2]?.id || `branch_${Date.now()}_3`,
+          code: 'SUC-03',
+          name: 'Sucursal Santa Tecla',
+          address: 'Centro Comercial Las Ramblas, Santa Tecla',
+          department: 'La Libertad',
+          municipality: 'La Libertad Centro',
+          phone: companyPhone || '+503 7000-0000',
+          managerName: '',
+          isMain: false,
+        }
+      ]);
+    }
   };
 
   const handleRemoveBranch = (id: string) => {
@@ -208,7 +319,11 @@ export const ExhaustiveCustomizationModal: React.FC<Props> = ({
     );
   };
 
-  const handleUpdateBranch = (id: string, field: 'name' | 'address' | 'phone' | 'code', val: string) => {
+  const handleUpdateBranch = (
+    id: string,
+    field: 'name' | 'address' | 'phone' | 'code' | 'department' | 'municipality' | 'managerName',
+    val: string
+  ) => {
     setUserBranches((prev) =>
       prev.map((b) => (b.id === id ? { ...b, [field]: val } : b))
     );
@@ -221,9 +336,10 @@ export const ExhaustiveCustomizationModal: React.FC<Props> = ({
       code: b.code || 'SUC-01',
       name: b.name.trim() || 'Sucursal',
       address: b.address.trim() || companyAddress || 'San Salvador',
-      department: userDepartment || 'San Salvador',
-      municipality: userMunicipality || 'San Salvador Centro',
+      department: b.department || userDepartment || 'San Salvador',
+      municipality: b.municipality || userMunicipality || 'San Salvador Centro',
       phone: b.phone.trim() || companyPhone || '+503 7000-0000',
+      managerName: b.managerName ? b.managerName.trim() : undefined,
       isMain: b.isMain,
       isActive: true,
     }));
@@ -354,6 +470,23 @@ export const ExhaustiveCustomizationModal: React.FC<Props> = ({
 
           <button
             type="button"
+            id="tab-branches-btn"
+            onClick={() => setActiveTab('branches')}
+            className={`px-3 py-2 rounded-t-lg transition-all flex items-center gap-1.5 border-b-2 cursor-pointer whitespace-nowrap ${
+              activeTab === 'branches'
+                ? 'border-blue-600 text-blue-600 dark:text-blue-400 bg-white dark:bg-slate-900 font-semibold'
+                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            <Store className="w-3.5 h-3.5" />
+            <span>4. Sucursales & Puntos de Venta</span>
+            <span className="ml-1 px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 text-[10px] font-bold">
+              {userBranches.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('tax')}
             className={`px-3 py-2 rounded-t-lg transition-all flex items-center gap-1.5 border-b-2 cursor-pointer whitespace-nowrap ${
               activeTab === 'tax'
@@ -362,7 +495,7 @@ export const ExhaustiveCustomizationModal: React.FC<Props> = ({
             }`}
           >
             <FileText className="w-3.5 h-3.5" />
-            <span>4. Régimen Tributario</span>
+            <span>5. Régimen Tributario</span>
           </button>
 
           <button
@@ -375,7 +508,7 @@ export const ExhaustiveCustomizationModal: React.FC<Props> = ({
             }`}
           >
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>5. Facturación DTE (Hacienda)</span>
+            <span>6. Facturación DTE (Hacienda)</span>
           </button>
 
           <button
@@ -388,7 +521,7 @@ export const ExhaustiveCustomizationModal: React.FC<Props> = ({
             }`}
           >
             <Briefcase className="w-3.5 h-3.5" />
-            <span>6. Operativa & Personal</span>
+            <span>7. Operativa & Personal</span>
           </button>
         </div>
 
@@ -798,7 +931,233 @@ export const ExhaustiveCustomizationModal: React.FC<Props> = ({
             </div>
           )}
 
-          {/* TAB 4: RÉGIMEN TRIBUTARIO */}
+          {/* TAB 4: SUCURSALES & PUNTOS DE VENTA */}
+          {activeTab === 'branches' && (
+            <div className="space-y-5 animate-fadeIn">
+              <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border border-blue-200 dark:border-blue-900/50 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                    <Store className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      Establecimientos, Sucursales y Puntos de Venta
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Personaliza las sucursales de tu empresa. Estas sedes estarán vinculadas a tu Terminal POS, Facturas DTE, Compras y Planilla Laboral.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  id="add-custom-branch-btn"
+                  onClick={handleAddBranch}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-sm cursor-pointer shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ Agregar Sucursal</span>
+                </button>
+              </div>
+
+              {/* Quick Presets */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                  Plantillas Rápidas:
+                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSetPresetBranches(1)}
+                    className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium transition cursor-pointer"
+                  >
+                    1 Sede (Casa Matriz)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSetPresetBranches(2)}
+                    className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium transition cursor-pointer"
+                  >
+                    2 Sedes (Matriz + 1 Sucursal)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSetPresetBranches(3)}
+                    className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium transition cursor-pointer"
+                  >
+                    3 Sedes (Matriz + 2 Sucursales)
+                  </button>
+                </div>
+              </div>
+
+              {/* Branches List */}
+              <div className="space-y-4">
+                {userBranches.map((branch, index) => (
+                  <div
+                    key={branch.id}
+                    className={`p-4 rounded-xl border transition-all ${
+                      branch.isMain
+                        ? 'border-blue-400 dark:border-blue-700 bg-blue-50/20 dark:bg-blue-950/20 shadow-sm'
+                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
+                    }`}
+                  >
+                    {/* Branch Card Header */}
+                    <div className="flex flex-wrap items-center justify-between pb-3 mb-3 border-b border-slate-100 dark:border-slate-800 gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-bold text-xs flex items-center justify-center">
+                          {index + 1}
+                        </span>
+                        <span className="font-bold text-sm text-slate-900 dark:text-white">
+                          {branch.name || `Sucursal ${index + 1}`}
+                        </span>
+                        <span className="px-2 py-0.5 rounded font-mono text-[11px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                          {branch.code || `SUC-0${index + 1}`}
+                        </span>
+                        {branch.isMain && (
+                          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 text-[10px] font-bold">
+                            <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                            Casa Matriz / Sede Principal
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {!branch.isMain && (
+                          <button
+                            type="button"
+                            onClick={() => handleSetMainBranch(branch.id)}
+                            className="text-xs px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition cursor-pointer"
+                          >
+                            Hacer Casa Matriz
+                          </button>
+                        )}
+                        {userBranches.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveBranch(branch.id)}
+                            className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
+                            title="Eliminar esta sucursal"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Branch Fields Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                      <div>
+                        <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          Nombre del Establecimiento / Sucursal:
+                        </label>
+                        <input
+                          type="text"
+                          value={branch.name}
+                          onChange={(e) => handleUpdateBranch(branch.id, 'name', e.target.value)}
+                          placeholder="ej: Casa Matriz - Escalón"
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-medium"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          Código de Establecimiento:
+                        </label>
+                        <input
+                          type="text"
+                          value={branch.code}
+                          onChange={(e) => handleUpdateBranch(branch.id, 'code', e.target.value)}
+                          placeholder="ej: SUC-01"
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          Teléfono de la Sucursal:
+                        </label>
+                        <input
+                          type="text"
+                          value={branch.phone}
+                          onChange={(e) => handleUpdateBranch(branch.id, 'phone', e.target.value)}
+                          placeholder="+503 2244-8800"
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          Dirección Física Completa:
+                        </label>
+                        <input
+                          type="text"
+                          value={branch.address}
+                          onChange={(e) => handleUpdateBranch(branch.id, 'address', e.target.value)}
+                          placeholder="Calle, Edificio o Local, Referencia geográfica"
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          Departamento (El Salvador):
+                        </label>
+                        <select
+                          value={branch.department}
+                          onChange={(e) => handleUpdateBranch(branch.id, 'department', e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                        >
+                          {SALVADORAN_DEPARTMENTS.map((dept) => (
+                            <option key={dept} value={dept}>
+                              {dept}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          Municipio:
+                        </label>
+                        <input
+                          type="text"
+                          value={branch.municipality}
+                          onChange={(e) => handleUpdateBranch(branch.id, 'municipality', e.target.value)}
+                          placeholder="ej: San Salvador Centro, Santa Tecla"
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          Encargado / Responsable de Sucursal:
+                        </label>
+                        <input
+                          type="text"
+                          value={branch.managerName}
+                          onChange={(e) => handleUpdateBranch(branch.id, 'managerName', e.target.value)}
+                          placeholder="Nombre del Administrador de la Sede"
+                          className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs flex items-center gap-2.5">
+                <Sparkles className="w-4 h-4 text-blue-500 shrink-0" />
+                <span>
+                  Al guardar, estas sucursales se sincronizarán directamente en Firebase Firestore y se activarán como opciones seleccionables en la <strong>Terminal POS de Venta</strong>, <strong>Facturación DTE</strong>, <strong>Compras a Proveedores</strong> y <strong>Nómina de Empleados</strong>.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: RÉGIMEN TRIBUTARIO */}
           {activeTab === 'tax' && (
             <div className="space-y-5">
               <h3 className="text-sm font-semibold text-slate-900 dark:text-white">

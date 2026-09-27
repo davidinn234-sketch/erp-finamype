@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { db } from '../../lib/firebase';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
-import { UserProfile, SystemArchetype, UserRole } from '../../types';
+import { UserProfile, SystemArchetype, UserRole, Company, Branch } from '../../types';
+import { DEFAULT_FISCAL_CONFIG } from '../../utils/salvadoranTax';
 import {
   Users,
   UserPlus,
@@ -47,7 +48,7 @@ const AVAILABLE_SERVICES = [
 ];
 
 export const AdminProfilesManagerModule: React.FC = () => {
-  const { users, createUser, deleteUser, updateUser, login, addNotification, currentUser } = useERP();
+  const { users, createUser, deleteUser, updateUser, login, addNotification, currentUser, createCompany, createBranch } = useERP();
 
   // Form State for New User
   const [name, setName] = useState('');
@@ -121,8 +122,49 @@ export const AdminProfilesManagerModule: React.FC = () => {
 
     setIsSaving(true);
     const userId = `usr_${Date.now()}`;
+    const companyId = `comp_${Date.now()}`;
+
+    // 1. Crear empresa independiente aislada para esta cuenta
+    const newCompany: Company = {
+      id: companyId,
+      name: name.trim() ? `${name.trim()} - Empresa` : 'Mi Empresa',
+      tradeName: name.trim() ? `${name.trim()} Negocios` : 'Mi Negocio',
+      nit: '0614-010190-001-0',
+      nrc: '000000-0',
+      giro: selectedArchetype === 'finanzas_personales' ? 'Finanzas Personales y Control Doméstico' : 'Comercial y Servicios',
+      address: 'San Salvador, El Salvador',
+      department: 'San Salvador',
+      municipality: 'San Salvador Centro',
+      phone: phone.trim() || '+503 7000-0000',
+      email: email.trim().toLowerCase(),
+      isGranContribuyente: false,
+      currency: 'USD',
+      fiscalYear: 2026,
+      fiscalConfig: { ...DEFAULT_FISCAL_CONFIG },
+      systemArchetype: selectedArchetype,
+      primaryAdminUserId: userId,
+      createdAt: new Date().toISOString().split('T')[0],
+    };
+
+    // 2. Crear sucursal inicial propia (Casa Matriz) para la cuenta
+    const initialBranch: Branch = {
+      id: `branch_${Date.now()}`,
+      companyId: companyId,
+      code: 'SUC-01',
+      name: 'Casa Matriz - Sede Central',
+      address: newCompany.address,
+      department: 'San Salvador',
+      municipality: 'San Salvador Centro',
+      phone: newCompany.phone,
+      managerName: name.trim(),
+      isMain: true,
+      isActive: true,
+    };
+
+    // 3. Crear el perfil de usuario con isConfigured: false para que al entrar por primera vez llene el Gran Formulario
     const newProfile: UserProfile = {
       id: userId,
+      companyId: companyId,
       name: name.trim(),
       email: email.trim().toLowerCase(),
       password: password.trim(),
@@ -131,20 +173,25 @@ export const AdminProfilesManagerModule: React.FC = () => {
       systemArchetype: selectedArchetype,
       enabledServices: selectedServices,
       createdAt: new Date().toISOString().split('T')[0],
-      isConfigured: true,
+      isConfigured: false, // Disparará el Gran Formulario de Sucursales y Empresa en su primer inicio de sesión
       storedInCloud: true,
     };
 
     try {
-      // 1. Save directly to Firebase Firestore
+      // Guardar en Firestore
+      await setDoc(doc(db, 'companies', companyId), newCompany);
+      await setDoc(doc(db, 'branches', initialBranch.id), initialBranch);
       await setDoc(doc(db, 'users', userId), newProfile);
-      // 2. Add to ERP context
+
+      // Guardar en contexto local
+      createCompany(newCompany);
+      createBranch(initialBranch);
       createUser(newProfile);
 
       addNotification(
         'success',
-        'Perfil Creado y Guardado en Firebase',
-        `La cuenta ${newProfile.name} está lista y sincronizada en la nube.`
+        '¡Perfil y Empresa Creados en Firebase!',
+        `La cuenta ${newProfile.name} está lista. Al iniciar sesión por primera vez, completará su formulario de sucursales.`
       );
 
       // Reset form
@@ -155,8 +202,10 @@ export const AdminProfilesManagerModule: React.FC = () => {
     } catch (err: any) {
       console.error('Firebase save error:', err);
       // Fallback local save
+      createCompany(newCompany);
+      createBranch(initialBranch);
       createUser(newProfile);
-      addNotification('warning', 'Guardado Localmente', 'La cuenta se guardó de inmediato en memoria.');
+      addNotification('warning', 'Guardado Localmente', 'La cuenta y empresa se guardaron de inmediato en memoria.');
     } finally {
       setIsSaving(false);
     }

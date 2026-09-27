@@ -53,11 +53,30 @@ export const POSTerminalModule: React.FC = () => {
     currentUser,
     branches,
     selectedBranchId,
+    setSelectedBranchId,
     createInvoice,
     createProduct,
     invoices,
     bankAccounts,
   } = useERP();
+
+  // Selected POS Branch State
+  const [posBranchId, setPosBranchId] = useState<string>(() => {
+    if (selectedBranchId !== 'all' && branches.some((b) => b.id === selectedBranchId)) {
+      return selectedBranchId;
+    }
+    return branches[0]?.id || '';
+  });
+
+  useEffect(() => {
+    if (branches.length > 0 && (!posBranchId || !branches.some((b) => b.id === posBranchId))) {
+      setPosBranchId(branches[0].id);
+    }
+  }, [branches, posBranchId]);
+
+  const activeBranch = useMemo(() => {
+    return branches.find((b) => b.id === posBranchId) || branches[0];
+  }, [branches, posBranchId]);
 
   // State: Cart & Sale
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -454,8 +473,8 @@ export const POSTerminalModule: React.FC = () => {
     }));
 
     const invoicePayload = {
-      branchId: selectedBranchId !== 'all' ? selectedBranchId : branches[0]?.id,
-      branchName: branches.find((b) => b.id === selectedBranchId)?.name || branches[0]?.name || 'Casa Matriz',
+      branchId: activeBranch?.id,
+      branchName: activeBranch?.name || 'Casa Matriz',
       type: invoiceType,
       correlativeNumber: nextCorrelative,
       dteCode,
@@ -566,13 +585,39 @@ export const POSTerminalModule: React.FC = () => {
                 ACTIVADO Y LISTO
               </span>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-slate-500 dark:text-slate-400">
               <span>Cajero: <strong className="text-slate-700 dark:text-slate-200">{currentUser.name}</strong></span>
               <span>•</span>
-              <span>Sucursal: <strong className="text-slate-700 dark:text-slate-200">{branches[0]?.name || 'Escalón'}</strong></span>
+              <div className="flex items-center gap-1.5 bg-indigo-50/80 dark:bg-indigo-950/50 px-2.5 py-1 rounded-xl border border-indigo-200 dark:border-indigo-800">
+                <Store className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                <span className="font-semibold text-slate-700 dark:text-slate-300">Sucursal de Venta:</span>
+                {branches.length > 1 ? (
+                  <select
+                    id="pos-branch-selector"
+                    value={posBranchId}
+                    onChange={(e) => {
+                      setPosBranchId(e.target.value);
+                      setSelectedBranchId(e.target.value);
+                    }}
+                    className="bg-white dark:bg-slate-800 px-2 py-0.5 rounded-lg border border-indigo-300 dark:border-indigo-700 font-bold text-indigo-700 dark:text-indigo-300 focus:outline-none cursor-pointer text-xs"
+                  >
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id} className="text-slate-900 dark:text-white">
+                        {b.name} ({b.code})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <strong className="text-indigo-700 dark:text-indigo-300 font-bold">
+                    {activeBranch?.name || 'Casa Matriz - Sede Central'} ({activeBranch?.code || 'SUC-01'})
+                  </strong>
+                )}
+              </div>
               <span>•</span>
-              <span className="font-mono">{currentCompany.dteActive ? 'Modo DTE MH Oficial' : 'Modo Control Interno'}</span>
-            </p>
+              <span className="font-mono text-[11px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                {currentCompany.dteActive ? 'Modo DTE MH Oficial' : 'Modo Control Interno'}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -1348,6 +1393,11 @@ export const POSTerminalModule: React.FC = () => {
                     {currentCompany.name}
                   </h4>
                   <p className="text-[11px] font-bold text-slate-600">{currentCompany.tradeName}</p>
+                  {completedInvoice.branchName && (
+                    <p className="text-[11px] font-bold text-indigo-700">
+                      Sucursal: {completedInvoice.branchName}
+                    </p>
+                  )}
                   <p className="text-[10px] text-slate-500">{currentCompany.address}</p>
                   <p className="text-[10px] text-slate-500">
                     NIT: {currentCompany.nit} | NRC: {currentCompany.nrc}
@@ -1381,6 +1431,12 @@ export const POSTerminalModule: React.FC = () => {
                     <span>Atendió:</span>
                     <span>{currentUser.name}</span>
                   </div>
+                  {completedInvoice.branchName && (
+                    <div className="flex justify-between">
+                      <span>Sucursal:</span>
+                      <span className="font-bold text-indigo-700">{completedInvoice.branchName}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Item list */}

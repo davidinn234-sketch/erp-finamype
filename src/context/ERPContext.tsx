@@ -213,7 +213,7 @@ interface ERPContextType {
   deleteEmployee: (id: string) => void;
   addEmployeeEvaluation: (employeeId: string, evalData: Omit<EmployeeEvaluation, 'id' | 'date'>) => void;
   addDisciplinaryAction: (employeeId: string, action: Omit<DisciplinaryAction, 'id' | 'date'>) => void;
-  generatePayrollForPeriod: (periodType: 'quincenal' | 'mensual', month: number, year: number) => Payroll;
+  generatePayrollForPeriod: (periodType: 'quincenal' | 'mensual', month: number, year: number, branchId?: string) => Payroll;
   saveCustomPayroll: (payroll: Payroll) => void;
   deletePayroll: (id: string) => void;
   payPayroll: (payrollId: string, bankAccountId: string) => void;
@@ -293,7 +293,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const [currentCompanyId, setCurrentCompanyId] = useState<string>(() => companies[0]?.id || 'comp_1');
 
-  const [branches, setBranches] = useState<Branch[]>(() => {
+  const [rawBranches, setRawBranches] = useState<Branch[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
     if (saved) {
       try {
@@ -664,6 +664,12 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isSupportMode, setIsSupportMode] = useState<boolean>(false);
 
   // Filter collections per currentCompany so new companies start at ZERO ($0.00)
+  const branches = useMemo(
+    () => rawBranches.filter((b) => b.companyId === currentCompany.id),
+    [rawBranches, currentCompany.id]
+  );
+  const setBranches = setRawBranches;
+
   const products = useMemo(
     () => rawProducts.filter((p) => p.companyId === currentCompany.id),
     [rawProducts, currentCompany.id]
@@ -820,18 +826,35 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       phone: adminData.phone || undefined,
       role: 'gerente',
       systemArchetype: newComp.systemArchetype || 'emprendedor_control_interno',
-      isConfigured: true,
+      isConfigured: false, // Permite que en el primer inicio de sesión se abra el Gran Formulario de Sucursales
       createdAt: new Date().toISOString().split('T')[0],
       storedInCloud: true,
     };
     newComp.primaryAdminUserId = userId;
 
+    // Crear sucursal inicial aislada para la nueva empresa
+    const initialBranch: Branch = {
+      id: `branch_${Date.now()}`,
+      companyId: compId,
+      code: 'SUC-01',
+      name: 'Casa Matriz - Sede Central',
+      address: newComp.address || 'San Salvador, El Salvador',
+      department: newComp.department || 'San Salvador',
+      municipality: newComp.municipality || 'San Salvador Centro',
+      phone: newComp.phone || adminData.phone || '+503 7000-0000',
+      managerName: adminData.name.trim(),
+      isMain: true,
+      isActive: true,
+    };
+
     setCompanies((prev) => [...prev, newComp]);
     setUsers((prev) => [...prev, newUser]);
+    setBranches((prev) => [...prev, initialBranch]);
 
     try {
       await setDoc(doc(db, 'companies', compId), newComp);
       await setDoc(doc(db, 'users', userId), newUser);
+      await setDoc(doc(db, 'branches', initialBranch.id), initialBranch);
     } catch (e) {
       console.warn('Firestore write note:', e);
     }
@@ -871,7 +894,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     const appState = {
       companies,
-      branches,
+      branches: rawBranches,
       users,
       products: rawProducts,
       customers: rawCustomers,
@@ -903,7 +926,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [
     companies,
-    branches,
+    rawBranches,
     users,
     rawProducts,
     rawCustomers,
@@ -936,7 +959,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const cloudSnapshot = {
           updatedAt: new Date().toISOString(),
           companies,
-          branches,
+          branches: rawBranches,
           users,
           products: rawProducts,
           customers: rawCustomers,
@@ -962,7 +985,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return () => clearTimeout(timer);
   }, [
     companies,
-    branches,
+    rawBranches,
     users,
     rawProducts,
     rawCustomers,
@@ -1170,7 +1193,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const cloudBranches: Branch[] = [];
           branchSnap.forEach((d) => { const item = d.data() as Branch; if (item.id) cloudBranches.push(item); });
           if (cloudBranches.length > 0) {
-            setBranches((prev) => {
+            setRawBranches((prev) => {
               const merged = [...prev];
               cloudBranches.forEach((cb) => {
                 const idx = merged.findIndex((b) => b.id === cb.id);
@@ -2313,8 +2336,24 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const purchaseId = `pur_${Date.now()}`;
     const nextEntryNumber = journalEntries.length + 1;
 
+    // Asignar sucursal activa si no está definida
+    let finalBranchId = purchaseData.branchId;
+    let finalBranchName = purchaseData.branchName;
+    if (!finalBranchId && selectedBranchId !== 'all') {
+      const activeBranch = branches.find((b) => b.id === selectedBranchId);
+      if (activeBranch) {
+        finalBranchId = activeBranch.id;
+        finalBranchName = activeBranch.name;
+      }
+    } else if (!finalBranchId && branches.length > 0) {
+      finalBranchId = branches[0].id;
+      finalBranchName = branches[0].name;
+    }
+
     const newPurchase: Purchase = {
       ...purchaseData,
+      branchId: finalBranchId,
+      branchName: finalBranchName,
       id: purchaseId,
       companyId: currentCompany.id,
       createdAt: new Date().toISOString(),
@@ -2546,8 +2585,23 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // MÓDULO 3: RRHH 360° & PLANILLA LEGAL EL SALVADOR
   // ----------------------------------------------------
   const createEmployee = (employeeData: Omit<Employee, 'id' | 'companyId'>) => {
+    let finalBranchId = employeeData.branchId;
+    let finalBranchName = employeeData.branchName;
+    if (!finalBranchId && selectedBranchId !== 'all') {
+      const activeBranch = branches.find((b) => b.id === selectedBranchId);
+      if (activeBranch) {
+        finalBranchId = activeBranch.id;
+        finalBranchName = activeBranch.name;
+      }
+    } else if (!finalBranchId && branches.length > 0) {
+      finalBranchId = branches[0].id;
+      finalBranchName = branches[0].name;
+    }
+
     const newEmp: Employee = {
       ...employeeData,
+      branchId: finalBranchId,
+      branchName: finalBranchName,
       id: `emp_${Date.now()}`,
       companyId: currentCompany.id,
       rating: 5,
@@ -2628,13 +2682,29 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const generatePayrollForPeriod = (
     periodType: 'quincenal' | 'mensual',
     month: number,
-    year: number
+    year: number,
+    branchId?: string
   ): Payroll => {
-    const activeEmployees = employees.filter((e) => e.isActive);
-    const periodNumber = periodType === 'quincenal' ? 1 : 1;
-    const isCompanyOver10 = activeEmployees.length >= fiscalConfig.insaforpMinEmployees;
+    let targetEmployees = employees.filter((e) => e.isActive);
+    let targetBranchName: string | undefined;
 
-    const details = activeEmployees.map((emp) => {
+    if (branchId && branchId !== 'all') {
+      const bObj = branches.find((b) => b.id === branchId);
+      if (bObj) {
+        targetBranchName = bObj.name;
+        targetEmployees = targetEmployees.filter((e) => e.branchId === branchId);
+      }
+    } else if (selectedBranchId !== 'all') {
+      const bObj = branches.find((b) => b.id === selectedBranchId);
+      if (bObj) {
+        targetBranchName = bObj.name;
+      }
+    }
+
+    const periodNumber = periodType === 'quincenal' ? 1 : 1;
+    const isCompanyOver10 = targetEmployees.length >= fiscalConfig.insaforpMinEmployees;
+
+    const details = targetEmployees.map((emp) => {
       const baseSalaryPeriod = periodType === 'quincenal' ? emp.baseSalary / 2 : emp.baseSalary;
       const calc = calculateEmployeePayroll({
         baseSalary: baseSalaryPeriod,
@@ -2695,6 +2765,8 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const newPayroll: Payroll = {
       id: `pay_${Date.now()}`,
       companyId: currentCompany.id,
+      branchId: branchId && branchId !== 'all' ? branchId : undefined,
+      branchName: targetBranchName,
       periodNumber,
       periodType,
       year,
