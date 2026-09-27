@@ -385,6 +385,7 @@ export const SAMPLE_PRODUCTS: Product[] = [
 export const SAMPLE_CUSTOMERS: Customer[] = [
   {
     id: 'cust_1',
+    companyId: 'comp_1',
     name: 'Innovaciones Digitales de El Salvador S.A. de C.V.',
     tradeName: 'InnovaDigital SV',
     nrc: '245678-9',
@@ -423,6 +424,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
   },
   {
     id: 'cust_2',
+    companyId: 'comp_1',
     name: 'Farmacias La Esperanza S.A. de C.V.',
     tradeName: 'Farmacias La Esperanza',
     nrc: '198765-4',
@@ -454,6 +456,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
   },
   {
     id: 'cust_3',
+    companyId: 'comp_1',
     name: 'Andrea Michelle Guardado Portillo',
     tradeName: 'Boutique & Café Vainilla',
     nit: '0511-190392-102-3',
@@ -486,6 +489,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
   },
   {
     id: 'cust_4',
+    companyId: 'comp_1',
     name: 'Roberto Ernesto Menjívar Alvarenga',
     tradeName: 'Taller & Repuestos Menjívar',
     nit: '0614-110885-101-7',
@@ -517,6 +521,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
   },
   {
     id: 'cust_5',
+    companyId: 'comp_1',
     name: 'Gabriela María Zavaleta S.A. de C.V.',
     tradeName: 'Zavaleta & Asociados Abogados',
     nrc: '289104-2',
@@ -548,6 +553,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
   },
   {
     id: 'cust_6',
+    companyId: 'comp_1',
     name: 'Mateo Alejandro Benítez',
     tradeName: 'Studio Gamer & Streaming SV',
     nit: '0614-140201-106-8',
@@ -579,6 +585,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
   },
   {
     id: 'cust_7',
+    companyId: 'comp_1',
     name: 'Valeria Nicole Campos Rivas',
     tradeName: 'Agencia de Marketing ViralSV',
     nit: '0614-290799-105-1',
@@ -613,6 +620,7 @@ export const SAMPLE_CUSTOMERS: Customer[] = [
 export const SAMPLE_SUPPLIERS: Supplier[] = [
   {
     id: 'supp_1',
+    companyId: 'comp_1',
     name: 'Importadora Tecnológica Global S.A. de C.V.',
     tradeName: 'TechGlobal SV',
     nrc: '154320-1',
@@ -643,6 +651,7 @@ export const SAMPLE_SUPPLIERS: Supplier[] = [
   },
   {
     id: 'supp_2',
+    companyId: 'comp_1',
     name: 'Papelería e Impresos de Centroamérica S.A. de C.V.',
     tradeName: 'PapelCentro SV',
     nrc: '201948-7',
@@ -673,6 +682,7 @@ export const SAMPLE_SUPPLIERS: Supplier[] = [
   },
   {
     id: 'supp_3',
+    companyId: 'comp_1',
     name: 'Lic. Mauricio Alexander Ramos (Consultor Legal)',
     tradeName: 'Ramos & Asociados Consultoría',
     nrc: '',
@@ -703,6 +713,7 @@ export const SAMPLE_SUPPLIERS: Supplier[] = [
   },
   {
     id: 'supp_4',
+    companyId: 'comp_1',
     name: 'Servicios de Nube y Conectividad SV S.A.',
     tradeName: 'CloudSV Datacenter',
     nrc: '267891-3',
@@ -2333,8 +2344,3 @@ export const SAMPLE_CANDIDATE_APPLICANTS: CandidateApplicant[] = [
     createdAt: '2026-09-14T14:15:00Z',
   },
 ];
-
-
-
-
-

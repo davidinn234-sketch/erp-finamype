@@ -147,14 +147,14 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   // Scaled totals according to timeHorizon (Mes Actual vs Histórico Anual)
   const totalSales = useMemo(() => {
     if (timeHorizon === 'anual_historico') {
-      return baseMonthlySales > 0 ? Math.round(baseMonthlySales * 14.5) : 114200;
+      return baseMonthlySales > 0 ? Math.round(baseMonthlySales * 14.5) : 0;
     }
     return baseMonthlySales;
   }, [baseMonthlySales, timeHorizon]);
 
   const totalOtherIncomes = useMemo(() => {
     if (timeHorizon === 'anual_historico') {
-      return baseMonthlyOtherIncomes > 0 ? Math.round(baseMonthlyOtherIncomes * 4.8) : 5800;
+      return baseMonthlyOtherIncomes > 0 ? Math.round(baseMonthlyOtherIncomes * 4.8) : 0;
     }
     return baseMonthlyOtherIncomes;
   }, [baseMonthlyOtherIncomes, timeHorizon]);
@@ -174,7 +174,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
 
   const totalPurchases = useMemo(() => {
     if (timeHorizon === 'anual_historico') {
-      return baseMonthlyPurchases > 0 ? Math.round(baseMonthlyPurchases * 13.9) : 58400;
+      return baseMonthlyPurchases > 0 ? Math.round(baseMonthlyPurchases * 13.9) : 0;
     }
     return baseMonthlyPurchases;
   }, [baseMonthlyPurchases, timeHorizon]);
@@ -182,7 +182,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   const totalPayrollCost = useMemo(() => {
     const monthlyPayroll = (employees || [])
       .filter((e) => e && e.isActive)
-      .reduce((acc, e) => acc + (e.baseSalary || 0) * 1.34, 0) || 2200; // Sueldo + ISSS 7.5% + AFP 8.75% + INSAFORP 1% + Provisiones
+      .reduce((acc, e) => acc + (e.baseSalary || 0) * 1.34, 0); // Sueldo + ISSS 7.5% + AFP 8.75% + INSAFORP 1% + Provisiones
     return timeHorizon === 'anual_historico' ? Math.round(monthlyPayroll * 12) : Math.round(monthlyPayroll);
   }, [employees, timeHorizon]);
 
@@ -209,8 +209,8 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
     return Math.round(monthlyTotalTaxesMH);
   }, [timeHorizon, totalSales, totalPurchases, monthlyTotalTaxesMH, fiscalConfig]);
 
-  // Gastos operativos y servicios generales
-  const operatingExpenses = timeHorizon === 'anual_historico' ? 1500 * 12 : 1500;
+  // Gastos operativos y servicios generales (estimado; ajústalo cuando tengas datos reales de gastos fijos)
+  const operatingExpenses = 0;
 
   // Egresos Totales Integrales (Compras mercadería + Nómina patronal + Impuestos MH + Gastos operativos)
   const totalOutflows = totalPurchases + totalPayrollCost + totalTaxesMH + operatingExpenses;
@@ -265,17 +265,10 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   // ----------------------------------------------------
   const monthlyFlowData = useMemo(() => {
     return [
-      { month: 'Ene', ingresosTotales: 4600, egresosTotales: 4200, flujoNeto: 400 },
-      { month: 'Feb', ingresosTotales: 5450, egresosTotales: 4500, flujoNeto: 950 },
-      { month: 'Mar', ingresosTotales: 6900, egresosTotales: 5350, flujoNeto: 1550 },
-      { month: 'Abr', ingresosTotales: 6200, egresosTotales: 5100, flujoNeto: 1100 },
-      { month: 'May', ingresosTotales: 7650, egresosTotales: 5750, flujoNeto: 1900 },
-      { month: 'Jun', ingresosTotales: 8800, egresosTotales: 6450, flujoNeto: 2350 },
-      { month: 'Jul', ingresosTotales: 9400, egresosTotales: 6800, flujoNeto: 2600 },
       {
-        month: 'Ago (Actual)',
-        ingresosTotales: totalIncomes > 0 ? totalIncomes : 10250,
-        egresosTotales: totalOutflows > 0 ? totalOutflows : 7400,
+        month: 'Actual',
+        ingresosTotales: totalIncomes,
+        egresosTotales: totalOutflows,
         flujoNeto: totalIncomes - totalOutflows,
       },
     ];

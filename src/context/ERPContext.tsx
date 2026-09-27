@@ -664,11 +664,11 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Filter collections per currentCompany so new companies start at ZERO ($0.00)
   const products = useMemo(
-    () => rawProducts.filter((p) => !p.companyId || p.companyId === currentCompany.id),
+    () => rawProducts.filter((p) => p.companyId === currentCompany.id),
     [rawProducts, currentCompany.id]
   );
   const customers = useMemo(
-    () => rawCustomers.filter((c) => !c.companyId || c.companyId === currentCompany.id),
+    () => rawCustomers.filter((c) => c.companyId === currentCompany.id),
     [rawCustomers, currentCompany.id]
   );
   const invoices = useMemo(
@@ -676,7 +676,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     [rawInvoices, currentCompany.id]
   );
   const suppliers = useMemo(
-    () => rawSuppliers.filter((s) => !s.companyId || s.companyId === currentCompany.id),
+    () => rawSuppliers.filter((s) => s.companyId === currentCompany.id),
     [rawSuppliers, currentCompany.id]
   );
   const purchases = useMemo(
