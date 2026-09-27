@@ -144,6 +144,7 @@ interface ERPContextType {
     userUpdates: Partial<UserProfile>;
     companyUpdates: Partial<Company>;
     chosenArchetype: SystemArchetype;
+    branchesUpdates?: Branch[];
   }) => void;
   
   // Customization & Lean Regime Management
@@ -1708,8 +1709,9 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     userUpdates: Partial<UserProfile>;
     companyUpdates: Partial<Company>;
     chosenArchetype: SystemArchetype;
+    branchesUpdates?: Branch[];
   }) => {
-    const { userUpdates, companyUpdates, chosenArchetype } = data;
+    const { userUpdates, companyUpdates, chosenArchetype, branchesUpdates } = data;
 
     // 1. Update current user
     updateUser(currentUser.id, {
@@ -1729,7 +1731,20 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       regimeType,
     });
 
-    // 3. Set visual default module
+    // 3. Update branches if provided
+    if (branchesUpdates && Array.isArray(branchesUpdates)) {
+      setBranches((prev) => {
+        const others = prev.filter((b) => b.companyId !== currentCompany.id);
+        return [...others, ...branchesUpdates];
+      });
+      branchesUpdates.forEach((b) => {
+        try {
+          setDoc(doc(db, 'branches', b.id), b).catch(console.warn);
+        } catch (e) {}
+      });
+    }
+
+    // 4. Set visual default module
     if (chosenArchetype === 'finanzas_personales') {
       setActiveModule('personal_finances');
     } else {

@@ -192,6 +192,7 @@ export interface CustomerNote {
 
 export interface Customer {
   id: string;
+  companyId?: string;
   name: string;
   tradeName?: string;
   nrc?: string;
@@ -328,6 +329,7 @@ export interface SupplierNote {
 
 export interface Supplier {
   id: string;
+  companyId?: string;
   name: string;
   tradeName?: string;
   nrc: string;
