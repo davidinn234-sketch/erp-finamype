@@ -40,6 +40,7 @@ export const PurchasesModule: React.FC<PurchasesModuleProps> = ({
     createPurchase,
     registerSupplierPayment,
     createSupplier,
+    deleteSupplier,
     createProduct,
     bankAccounts,
   } = useERP();
@@ -47,6 +48,9 @@ export const PurchasesModule: React.FC<PurchasesModuleProps> = ({
   const [activeTab, setActiveTab] = useState<'purchases' | 'cxp' | 'kardex' | 'suppliers' | 'inventory'>('purchases');
   const [valuationMethod, setValuationMethod] = useState<ValuationMethod>('promedio_ponderado');
   const [searchTerm, setSearchTerm] = useState('');
+  const [listSearch, setListSearch] = useState('');
+  const matchList = (...vals: (string | number | undefined)[]) =>
+    vals.join(' ').toLowerCase().includes(listSearch.trim().toLowerCase());
   const [selectedProductForKardex, setSelectedProductForKardex] = useState<string>('all');
 
   // Supplier Payment Modal
@@ -589,7 +593,17 @@ export const PurchasesModule: React.FC<PurchasesModuleProps> = ({
       {/* Tab 4: Inventario & Stock */}
       {activeTab === 'inventory' && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {products.map((p) => (
+          <div className="col-span-full relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={listSearch}
+              onChange={(e) => setListSearch(e.target.value)}
+              placeholder="Buscar producto por nombre, código, categoría o código de barras..."
+              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+            />
+          </div>
+          {products.filter((p) => matchList(p.name, p.code, p.category, p.barcode)).map((p) => (
             <div
               key={p.id}
               className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm space-y-3"
@@ -642,7 +656,17 @@ export const PurchasesModule: React.FC<PurchasesModuleProps> = ({
       {/* Tab 5: Suppliers */}
       {activeTab === 'suppliers' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {suppliers.map((s) => (
+          <div className="col-span-full relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={listSearch}
+              onChange={(e) => setListSearch(e.target.value)}
+              placeholder="Buscar proveedor por nombre, giro, NIT, NRC o teléfono..."
+              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+            />
+          </div>
+          {suppliers.filter((s) => matchList(s.name, s.tradeName, s.giro, s.nit, s.nrc, s.phone)).map((s) => (
             <div
               key={s.id}
               className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm space-y-3"
@@ -670,6 +694,15 @@ export const PurchasesModule: React.FC<PurchasesModuleProps> = ({
                 <p><span className="text-slate-400">Plazo Pago:</span> {s.paymentTermDays} Días</p>
                 <p><span className="text-slate-400">Tel:</span> {s.phone}</p>
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm(`¿Eliminar al proveedor "${s.name}"? Esta acción no se puede deshacer.`)) deleteSupplier(s.id);
+                }}
+                className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 cursor-pointer"
+              >
+                Eliminar proveedor
+              </button>
             </div>
           ))}
         </div>

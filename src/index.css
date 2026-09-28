@@ -1,3 +1,67 @@
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------------------------------------------------------------------------
+   Paleta Finapyme: verde suave + blanco (minimalista, sin el look "IA" azul/morado).
+   Se redefinen las escalas que el sistema ya usa, así cambia en TODA la app.
+   --------------------------------------------------------------------------- */
+@theme {
+  /* Acento principal (antes índigo) -> verde salvia */
+  --color-indigo-50:  #f1faf5;
+  --color-indigo-100: #dff3e8;
+  --color-indigo-200: #bfe6d1;
+  --color-indigo-300: #92d2b3;
+  --color-indigo-400: #62b992;
+  --color-indigo-500: #3fa077;
+  --color-indigo-600: #2f855f;
+  --color-indigo-700: #286a4e;
+  --color-indigo-800: #235640;
+  --color-indigo-900: #1e4535;
+  --color-indigo-950: #10261d;
+
+  /* Azul / violeta / púrpura -> verde azulado (teal) */
+  --color-blue-50:  #eefaf9;
+  --color-blue-100: #d5f3f0;
+  --color-blue-200: #aee7e1;
+  --color-blue-300: #7cd5cc;
+  --color-blue-400: #48bdb2;
+  --color-blue-500: #27a397;
+  --color-blue-600: #1c8379;
+  --color-blue-700: #1a6a63;
+  --color-blue-800: #1a5550;
+  --color-blue-900: #1a4844;
+  --color-blue-950: #0b2a28;
+  --color-violet-50:  #eefaf9;  --color-violet-100: #d5f3f0;  --color-violet-200: #aee7e1;
+  --color-violet-300: #7cd5cc;  --color-violet-400: #48bdb2;  --color-violet-500: #27a397;
+  --color-violet-600: #1c8379;  --color-violet-700: #1a6a63;  --color-violet-800: #1a5550;
+  --color-violet-900: #1a4844;  --color-violet-950: #0b2a28;
+  --color-purple-50:  #eefaf9;  --color-purple-100: #d5f3f0;  --color-purple-200: #aee7e1;
+  --color-purple-300: #7cd5cc;  --color-purple-400: #48bdb2;  --color-purple-500: #27a397;
+  --color-purple-600: #1c8379;  --color-purple-700: #1a6a63;  --color-purple-800: #1a5550;
+  --color-purple-900: #1a4844;  --color-purple-950: #0b2a28;
+
+  /* Fondos claros con un toque verdoso (blanco + verde clarito) */
+  --color-slate-50:  #f6fbf8;
+  --color-slate-100: #ebf5ef;
+  --color-slate-200: #dbeae1;
+}
+
+/* ---------------------------------------------------------------------------
+   Impresión del ticket POS: imprime SOLO el ticket (80mm), no toda la pantalla.
+   Solo aplica cuando existe el ticket, así no afecta otras impresiones (planillas, etc.).
+   --------------------------------------------------------------------------- */
+@media print {
+  body:has(#thermal-ticket-print-area) * { visibility: hidden !important; }
+  body:has(#thermal-ticket-print-area) #thermal-ticket-print-area,
+  body:has(#thermal-ticket-print-area) #thermal-ticket-print-area * { visibility: visible !important; }
+  body:has(#thermal-ticket-print-area) *:has(#thermal-ticket-print-area) {
+    position: static !important; overflow: visible !important; height: auto !important; max-height: none !important;
+    transform: none !important; filter: none !important; backdrop-filter: none !important;
+  }
+  body:has(#thermal-ticket-print-area) #thermal-ticket-print-area {
+    position: absolute !important; left: 0; top: 0; width: 80mm; max-width: 80mm; margin: 0 !important;
+    border: 0 !important; box-shadow: none !important; border-radius: 0 !important; background: #fff !important; color: #000 !important;
+  }
+  @page { margin: 3mm; }
+}

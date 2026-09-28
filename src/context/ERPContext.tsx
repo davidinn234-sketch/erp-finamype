@@ -267,6 +267,88 @@ interface ERPContextType {
   importDatabaseJSON: (jsonStr: string) => boolean;
 }
 
+
+// ---------- Sincronización con la nube (Firestore) ----------
+// Comparación estable (ignora el orden de las llaves y los undefined) para no
+// re-escribir datos que ya son idénticos en la nube.
+const stableStringify = (v: any): string => {
+  if (v === undefined) return '';
+  if (v === null || typeof v !== 'object') return JSON.stringify(v);
+  if (Array.isArray(v)) return '[' + v.map((x) => stableStringify(x) || 'null').join(',') + ']';
+  return '{' + Object.keys(v).sort().filter((k) => v[k] !== undefined).map((k) => JSON.stringify(k) + ':' + stableStringify(v[k])).join(',') + '}';
+};
+
+// Aplica cambios por documento (agregado / modificado / ELIMINADO) sobre una lista local.
+const applyDocChanges = <T extends { id: string }>(prev: T[], upserts: T[], removed: Set<string>): T[] => {
+  const next = removed.size ? prev.filter((x) => !removed.has(x.id)) : [...prev];
+  upserts.forEach((u) => {
+    const i = next.findIndex((x) => x.id === u.id);
+    if (i >= 0) next[i] = { ...next[i], ...u };
+    else next.push(u);
+  });
+  return next;
+};
+
+// Espejo bidireccional lista local <-> colección de Firestore, para datos que se
+// modifican en muchos lugares (kardex, tesorería, otros ingresos) sin tocar cada función.
+function useCloudMirror<T extends { id: string }>(
+  name: string,
+  items: T[],
+  setItems: React.Dispatch<React.SetStateAction<T[]>>,
+  skipIds: Set<string>,
+  onError: (e: any) => void
+) {
+  const known = React.useRef<Map<string, string>>(new Map());
+  const [hydrated, setHydrated] = React.useState(false);
+
+  useEffect(() => {
+    const unsub = onSnapshot(
+      collection(db, name),
+      (snap) => {
+        const upserts: T[] = [];
+        const removed = new Set<string>();
+        snap.docChanges().forEach((ch) => {
+          const data = ch.doc.data() as T;
+          if (ch.type === 'removed') {
+            removed.add(ch.doc.id);
+            known.current.delete(ch.doc.id);
+          } else if (data && data.id) {
+            upserts.push(data);
+            known.current.set(data.id, stableStringify(data));
+          }
+        });
+        if (upserts.length || removed.size) setItems((prev) => applyDocChanges(prev, upserts, removed));
+        setHydrated(true);
+      },
+      (err) => {
+        console.warn(`Sync ${name}:`, err);
+        onError(err);
+      }
+    );
+    return unsub;
+  }, [name]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const current = new Set(items.map((i) => i.id));
+    items.forEach((it) => {
+      if (skipIds.has(it.id)) return;
+      const sig = stableStringify(it);
+      if (known.current.get(it.id) !== sig) {
+        known.current.set(it.id, sig);
+        setDoc(doc(db, name, it.id), it as any).catch(onError);
+      }
+    });
+    Array.from(known.current.keys()).forEach((id) => {
+      if (!current.has(id)) {
+        known.current.delete(id);
+        deleteDoc(doc(db, name, id)).catch(onError);
+      }
+    });
+  }, [items, hydrated]);
+}
+
+
 const STORAGE_KEY = 'sivarflow_sv_erp_state_v3';
 const LEGACY_STORAGE_KEY = 'sivarflow_sv_erp_state_v2';
 const ANCIENT_STORAGE_KEY = 'contatech_sv_erp_state_v1';
@@ -887,6 +969,23 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   };
 
+  // Avisa en pantalla cuando algo NO se pudo guardar en la nube (antes fallaba en silencio).
+  const lastCloudErrorRef = React.useRef(0);
+  const reportCloudError = (err: any) => {
+    console.warn('Firestore:', err);
+    const now = Date.now();
+    if (now - lastCloudErrorRef.current > 8000) {
+      lastCloudErrorRef.current = now;
+      const code = err?.code ? ` (${err.code})` : '';
+      addNotification('error', 'No se guardó en la nube', `Revisa tu conexión o las reglas de Firebase${code}. El dato quedó solo en este dispositivo.`);
+    }
+  };
+
+  // Datos que antes solo vivían en el dispositivo (o en un "bloque" general que se pisaba):
+  useCloudMirror<KardexMovement>('kardex_movements', rawKardexMovements, setRawKardexMovements, new Set(SAMPLE_KARDEX_MOVEMENTS.map((k) => k.id)), reportCloudError);
+  useCloudMirror<TreasuryMovement>('treasury_movements', rawTreasuryMovements, setRawTreasuryMovements, new Set<string>(), reportCloudError);
+  useCloudMirror<OtherIncome>('other_incomes', rawOtherIncomes, setRawOtherIncomes, new Set(SAMPLE_OTHER_INCOMES.map((o) => o.id)), reportCloudError);
+
   // Sync to LocalStorage
   useEffect(() => {
     const appState = {
@@ -949,56 +1048,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     personalSavingGoals,
   ]);
 
-  // Debounced cloud autosave to Firebase Firestore (mi-erp-nube)
-  useEffect(() => {
-    const timer = setTimeout(async () => {
-      try {
-        const cloudSnapshot = {
-          updatedAt: new Date().toISOString(),
-          companies,
-          branches: rawBranches,
-          users,
-          products: rawProducts,
-          customers: rawCustomers,
-          invoices: rawInvoices,
-          purchases: rawPurchases,
-          customerPayments,
-          suppliers: rawSuppliers,
-          supplierPayments,
-          kardexMovements: rawKardexMovements,
-          employees: rawEmployees,
-          payrolls: rawPayrolls,
-          bankAccounts: rawBankAccounts,
-          treasuryMovements: rawTreasuryMovements,
-          otherIncomes: rawOtherIncomes,
-          personalTransactions,
-        };
-        await setDoc(doc(db, 'system_state', 'current_erp_state'), cloudSnapshot, { merge: true });
-      } catch (err) {
-        console.debug('Autosave snapshot to Firestore:', err);
-      }
-    }, 1500);
-
-    return () => clearTimeout(timer);
-  }, [
-    companies,
-    rawBranches,
-    users,
-    rawProducts,
-    rawCustomers,
-    rawInvoices,
-    rawPurchases,
-    customerPayments,
-    rawSuppliers,
-    supplierPayments,
-    rawKardexMovements,
-    rawEmployees,
-    rawPayrolls,
-    rawBankAccounts,
-    rawTreasuryMovements,
-    rawOtherIncomes,
-    personalTransactions,
-  ]);
+  // (El antiguo bloque único 'system_state' se eliminó: se pisaba entre dispositivos y empresas.)
 
   // Company management
   const createCompany = (companyData: Omit<Company, 'id'>) => {
@@ -1012,7 +1062,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setCompanies((prev) => [...prev, newComp]);
     setCurrentCompanyId(newComp.id);
     try {
-      setDoc(doc(db, 'companies', newComp.id), newComp).catch(console.warn);
+      setDoc(doc(db, 'companies', newComp.id), newComp).catch(reportCloudError);
     } catch (e) {}
     addNotification('success', 'Razón Social Creada', `Empresa "${newComp.name}" registrada con éxito.`);
   };
@@ -1022,7 +1072,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       prev.map((c) => (c.id === id ? { ...c, ...updates } : c))
     );
     try {
-      setDoc(doc(db, 'companies', id), updates, { merge: true }).catch(console.warn);
+      setDoc(doc(db, 'companies', id), updates, { merge: true }).catch(reportCloudError);
     } catch (e) {}
   };
 
@@ -1033,22 +1083,6 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       testFirebaseConnection().catch(() => {});
 
       try {
-        // 1. Try restoring full ERP state snapshot first for ultra-fast complete sync
-        const stateSnap = await getDoc(doc(db, 'system_state', 'current_erp_state')).catch(() => null);
-        if (stateSnap && stateSnap.exists()) {
-          const sData = stateSnap.data();
-          if (Array.isArray(sData.companies) && sData.companies.length > 0) setCompanies(sData.companies);
-          if (Array.isArray(sData.branches) && sData.branches.length > 0) setBranches(sData.branches);
-          if (Array.isArray(sData.products) && sData.products.length > 0) setRawProducts(sData.products);
-          if (Array.isArray(sData.customers) && sData.customers.length > 0) setRawCustomers(sData.customers);
-          if (Array.isArray(sData.invoices) && sData.invoices.length > 0) setRawInvoices(sData.invoices);
-          if (Array.isArray(sData.purchases) && sData.purchases.length > 0) setRawPurchases(sData.purchases);
-          if (Array.isArray(sData.suppliers) && sData.suppliers.length > 0) setRawSuppliers(sData.suppliers);
-          if (Array.isArray(sData.customerPayments) && sData.customerPayments.length > 0) setCustomerPayments(sData.customerPayments);
-          if (Array.isArray(sData.supplierPayments) && sData.supplierPayments.length > 0) setSupplierPayments(sData.supplierPayments);
-          if (Array.isArray(sData.bankAccounts) && sData.bankAccounts.length > 0) setRawBankAccounts(sData.bankAccounts);
-        }
-
         // 2. Query individual collections to ensure 100% cloud accuracy
         const [
           companiesSnap,
@@ -1380,70 +1414,45 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       (err) => console.warn('Live users sync note:', err)
     );
 
-    const unsubProducts = onSnapshot(
-      collection(db, 'products'),
-      (snap) => {
-        if (!snap.empty) {
-          const liveProds: Product[] = [];
-          snap.forEach((d) => {
-            const data = d.data() as Product;
-            if (data.id && data.name) liveProds.push(data);
+    // Sincronización en tiempo real POR DOCUMENTO: lo nuevo/modificado se aplica y lo
+    // ELIMINADO en cualquier dispositivo también se elimina aquí (antes solo se agregaba).
+    const syncCol = <T extends { id: string }>(name: string, setter: React.Dispatch<React.SetStateAction<T[]>>) =>
+      onSnapshot(
+        collection(db, name),
+        (snap) => {
+          const upserts: T[] = [];
+          const removed = new Set<string>();
+          snap.docChanges().forEach((ch) => {
+            if (ch.type === 'removed') removed.add(ch.doc.id);
+            else {
+              const data = ch.doc.data() as T;
+              if (data && data.id) upserts.push(data);
+            }
           });
-          if (liveProds.length > 0) {
-            setRawProducts((prev) => {
-              const merged = [...prev];
-              liveProds.forEach((lp) => {
-                const idx = merged.findIndex((p) => p.id === lp.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...lp };
-                else merged.push(lp);
-              });
-              return merged;
-            });
-          }
+          if (upserts.length || removed.size) setter((prev) => applyDocChanges(prev, upserts, removed));
+        },
+        (err) => {
+          console.warn(`Sync ${name}:`, err);
+          reportCloudError(err);
         }
-      },
-      (err) => console.warn('Live products sync note:', err)
-    );
+      );
 
-    const unsubInvoices = onSnapshot(
-      collection(db, 'invoices'),
-      (snap) => {
-        if (!snap.empty) {
-          const liveInvs: Invoice[] = [];
-          snap.forEach((d) => {
-            const data = d.data() as Invoice;
-            if (data.id && data.correlativeNumber) liveInvs.push(data);
-          });
-          if (liveInvs.length > 0) {
-            setRawInvoices((prev) => {
-              const merged = [...prev];
-              liveInvs.forEach((li) => {
-                const idx = merged.findIndex((i) => i.id === li.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...li };
-                else merged.push(li);
-              });
-              return merged;
-            });
-          }
-        }
-      },
-      (err) => console.warn('Live invoices sync note:', err)
-    );
-
-    // Sucursales: fuente de verdad en tiempo real, para que una sucursal eliminada
-    // o reemplazada en el Gran Formulario no reaparezca al recargar.
-    const unsubBranches = onSnapshot(
-      collection(db, 'branches'),
-      (snap) => {
-        const liveBranches: Branch[] = [];
-        snap.forEach((d) => {
-          const data = d.data() as Branch;
-          if (data.id && data.name) liveBranches.push(data);
-        });
-        setRawBranches(liveBranches);
-      },
-      (err) => console.warn('Live branches sync note:', err)
-    );
+    const unsubCollections = [
+      syncCol<Product>('products', setRawProducts),
+      syncCol<Customer>('customers', setRawCustomers),
+      syncCol<Invoice>('invoices', setRawInvoices),
+      syncCol<Supplier>('suppliers', setRawSuppliers),
+      syncCol<Purchase>('purchases', setRawPurchases),
+      syncCol<CustomerPayment>('customer_payments', setCustomerPayments),
+      syncCol<SupplierPayment>('supplier_payments', setSupplierPayments),
+      syncCol<BankAccount>('bank_accounts', setRawBankAccounts),
+      syncCol<Employee>('employees', setRawEmployees),
+      syncCol<Payroll>('payrolls', setRawPayrolls),
+      syncCol<ProfessionalServiceRecord>('professional_services', setRawProfessionalServices),
+      syncCol<CandidateFolder>('candidate_folders', setRawCandidateFolders),
+      syncCol<CandidateApplicant>('candidates', setRawCandidateApplicants),
+      syncCol<Branch>('branches', setRawBranches),
+    ];
 
     // Finanzas Personales — Transacciones: fuente de verdad en tiempo real.
     // Antes dependía del snapshot general (system_state) con retraso, lo que
@@ -1481,9 +1490,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return () => {
       unsubCompanies();
       unsubUsers();
-      unsubProducts();
-      unsubInvoices();
-      unsubBranches();
+      unsubCollections.forEach((u) => u());
       unsubPersonalTransactions();
       unsubPersonalMeta();
     };
@@ -1543,7 +1550,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const updateUser = (id: string, updates: Partial<UserProfile>) => {
     setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, ...updates } : u)));
     try {
-      setDoc(doc(db, 'users', id), updates, { merge: true }).catch(console.warn);
+      setDoc(doc(db, 'users', id), updates, { merge: true }).catch(reportCloudError);
     } catch (e) {}
     addNotification('success', 'Usuario Actualizado', 'Los accesos y datos fueron actualizados correctamente.');
   };
@@ -1613,7 +1620,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       // Save user & login log in Cloud Firestore
       try {
-        setDoc(doc(db, 'users', davidUser.id), { ...davidUser, storedInCloud: true, lastLoginAt: new Date().toISOString() }, { merge: true }).catch(console.warn);
+        setDoc(doc(db, 'users', davidUser.id), { ...davidUser, storedInCloud: true, lastLoginAt: new Date().toISOString() }, { merge: true }).catch(reportCloudError);
         setDoc(doc(db, 'logins', `login_${Date.now()}`), {
           userId: davidUser.id,
           userName: davidUser.name,
@@ -1621,7 +1628,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           role: davidUser.role,
           loginAt: new Date().toISOString(),
           status: 'success'
-        }).catch(console.warn);
+        }).catch(reportCloudError);
       } catch (e) {}
 
       setActiveModule('admin_profiles');
@@ -1696,7 +1703,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // Save user last login & log event in Cloud Firestore
     try {
-      setDoc(doc(db, 'users', foundUser.id), { lastLoginAt: new Date().toISOString() }, { merge: true }).catch(console.warn);
+      setDoc(doc(db, 'users', foundUser.id), { lastLoginAt: new Date().toISOString() }, { merge: true }).catch(reportCloudError);
       setDoc(doc(db, 'logins', `login_${Date.now()}`), {
         userId: foundUser.id,
         userName: foundUser.name,
@@ -1704,7 +1711,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         role: foundUser.role,
         loginAt: new Date().toISOString(),
         status: 'success'
-      }).catch(console.warn);
+      }).catch(reportCloudError);
     } catch (e) {}
 
     // Adapt module view according to archetype or role
@@ -1759,7 +1766,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const deletePersonalTransaction = (id: string) => {
     setPersonalTransactions((prev) => prev.filter((t) => t.id !== id));
     try {
-      deleteDoc(doc(db, 'personal_finances', id)).catch(console.warn);
+      deleteDoc(doc(db, 'personal_finances', id)).catch(reportCloudError);
     } catch (e) {}
     addNotification('info', 'Movimiento Eliminado', 'El registro de finanzas personales fue removido.');
   };
@@ -1832,12 +1839,12 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       });
       branchesUpdates.forEach((b) => {
         try {
-          setDoc(doc(db, 'branches', b.id), b).catch(console.warn);
+          setDoc(doc(db, 'branches', b.id), b).catch(reportCloudError);
         } catch (e) {}
       });
       staleBranches.forEach((b) => {
         try {
-          deleteDoc(doc(db, 'branches', b.id)).catch(console.warn);
+          deleteDoc(doc(db, 'branches', b.id)).catch(reportCloudError);
         } catch (e) {}
       });
     }
@@ -1909,7 +1916,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     setBranches((prev) => [...prev, newBranch]);
     try {
-      setDoc(doc(db, 'branches', newBranch.id), newBranch).catch(console.warn);
+      setDoc(doc(db, 'branches', newBranch.id), newBranch).catch(reportCloudError);
     } catch (e) {}
     addNotification('success', 'Sucursal Registrada', `"${newBranch.name}" añadida a ${currentCompany.name}.`);
   };
@@ -1919,7 +1926,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       prev.map((b) => (b.id === id ? { ...b, ...updates } : b))
     );
     try {
-      setDoc(doc(db, 'branches', id), updates, { merge: true }).catch(console.warn);
+      setDoc(doc(db, 'branches', id), updates, { merge: true }).catch(reportCloudError);
     } catch (e) {}
     addNotification('info', 'Sucursal Actualizada', 'Datos de la sucursal guardados.');
   };
@@ -1928,7 +1935,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setBranches((prev) => prev.filter((b) => b.id !== id));
     if (selectedBranchId === id) setSelectedBranchId('all');
     try {
-      deleteDoc(doc(db, 'branches', id)).catch(console.warn);
+      deleteDoc(doc(db, 'branches', id)).catch(reportCloudError);
     } catch (e) {}
     addNotification('warning', 'Sucursal Eliminada', 'La sucursal ha sido removida.');
   };
@@ -1940,13 +1947,14 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const newCustomer: Customer = {
       ...customerData,
       id: `cust_${Date.now()}`,
+      companyId: currentCompany.id, // sin esto el filtro por empresa lo ocultaba al instante
       rating: customerData.rating || 5,
       stage: customerData.stage || 'prospecto',
       notesTimeline: customerData.notesTimeline || [],
     };
     setCustomers((prev) => [...prev, newCustomer]);
     try {
-      setDoc(doc(db, 'customers', newCustomer.id), newCustomer).catch(console.warn);
+      setDoc(doc(db, 'customers', newCustomer.id), newCustomer).catch(reportCloudError);
     } catch (e) {}
     addNotification('success', 'Cliente Registrado', `"${newCustomer.name}" añadido al CRM y sincronizado en la nube.`);
     return newCustomer;
@@ -1957,7 +1965,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       prev.map((c) => (c.id === id ? { ...c, ...updates } : c))
     );
     try {
-      setDoc(doc(db, 'customers', id), updates, { merge: true }).catch(console.warn);
+      setDoc(doc(db, 'customers', id), updates, { merge: true }).catch(reportCloudError);
     } catch (e) {}
     addNotification('info', 'Cliente Actualizado', 'Información del cliente sincronizada en la nube.');
   };
@@ -1965,7 +1973,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const deleteCustomer = (id: string) => {
     setCustomers((prev) => prev.filter((c) => c.id !== id));
     try {
-      deleteDoc(doc(db, 'customers', id)).catch(console.warn);
+      deleteDoc(doc(db, 'customers', id)).catch(reportCloudError);
     } catch (e) {}
     addNotification('warning', 'Cliente Eliminado', 'El registro del cliente ha sido removido del CRM.');
   };
@@ -1982,7 +1990,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const notes = c.notesTimeline ? [newNote, ...c.notesTimeline] : [newNote];
           const updated = { ...c, notesTimeline: notes };
           try {
-            setDoc(doc(db, 'customers', customerId), { notesTimeline: notes }, { merge: true }).catch(console.warn);
+            setDoc(doc(db, 'customers', customerId), { notesTimeline: notes }, { merge: true }).catch(reportCloudError);
           } catch (e) {}
           return updated;
         }
@@ -2000,7 +2008,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     setProducts((prev) => [...prev, newProd]);
     try {
-      setDoc(doc(db, 'products', newProd.id), newProd).catch(console.warn);
+      setDoc(doc(db, 'products', newProd.id), newProd).catch(reportCloudError);
     } catch (e) {}
     addNotification('success', 'Producto Creado', `"${newProd.name}" registrado en inventario y guardado en la nube.`);
   };
@@ -2010,14 +2018,14 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       prev.map((p) => (p.id === id ? { ...p, ...updates } : p))
     );
     try {
-      setDoc(doc(db, 'products', id), updates, { merge: true }).catch(console.warn);
+      setDoc(doc(db, 'products', id), updates, { merge: true }).catch(reportCloudError);
     } catch (e) {}
   };
 
   const deleteProduct = (id: string) => {
     setProducts((prev) => prev.filter((p) => p.id !== id));
     try {
-      deleteDoc(doc(db, 'products', id)).catch(console.warn);
+      deleteDoc(doc(db, 'products', id)).catch(reportCloudError);
     } catch (e) {}
     addNotification('warning', 'Producto Eliminado', 'El producto ha sido removido del catálogo.');
   };
@@ -2156,7 +2164,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           prev.map((p) => (p.id === product.id ? { ...p, stock: newStock } : p))
         );
         try {
-          setDoc(doc(db, 'products', product.id), { stock: newStock }, { merge: true }).catch(console.warn);
+          setDoc(doc(db, 'products', product.id), { stock: newStock }, { merge: true }).catch(reportCloudError);
         } catch (e) {}
 
         kMovements.push({
@@ -2185,7 +2193,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     try {
-      setDoc(doc(db, 'invoices', newInvoice.id), newInvoice).catch(console.warn);
+      setDoc(doc(db, 'invoices', newInvoice.id), newInvoice).catch(reportCloudError);
     } catch (e) {}
 
     addNotification(
@@ -2202,7 +2210,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       prev.map((inv) => (inv.id === id ? { ...inv, ...updates } : inv))
     );
     try {
-      setDoc(doc(db, 'invoices', id), updates, { merge: true }).catch(console.warn);
+      setDoc(doc(db, 'invoices', id), updates, { merge: true }).catch(reportCloudError);
     } catch (e) {}
     addNotification('info', 'Venta Modificada', 'Registro de venta actualizado correctamente.');
   };
@@ -2219,7 +2227,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           prev.map((p) => (p.id === prod.id ? { ...p, stock: p.stock + item.quantity } : p))
         );
         try {
-          setDoc(doc(db, 'products', prod.id), { stock: prod.stock + item.quantity }, { merge: true }).catch(console.warn);
+          setDoc(doc(db, 'products', prod.id), { stock: prod.stock + item.quantity }, { merge: true }).catch(reportCloudError);
         } catch (e) {}
       }
     });
@@ -2241,7 +2249,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // 6. Eliminar la factura
     setInvoices((prev) => prev.filter((i) => i.id !== invoiceId));
     try {
-      deleteDoc(doc(db, 'invoices', invoiceId)).catch(console.warn);
+      deleteDoc(doc(db, 'invoices', invoiceId)).catch(reportCloudError);
     } catch (e) {}
 
     addNotification('warning', 'Venta Eliminada', `Documento #${inv.correlativeNumber} y sus asientos/kardex han sido revertidos.`);
@@ -2257,7 +2265,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const restoredSaldo = Number((inv.saldoPendiente + p.amount).toFixed(2));
           const restoredStatus = restoredSaldo >= inv.totalPagar ? 'emitida' : 'parcial';
           try {
-            setDoc(doc(db, 'invoices', p.invoiceId), { saldoPendiente: restoredSaldo, status: restoredStatus }, { merge: true }).catch(console.warn);
+            setDoc(doc(db, 'invoices', p.invoiceId), { saldoPendiente: restoredSaldo, status: restoredStatus }, { merge: true }).catch(reportCloudError);
           } catch (e) {}
           return {
             ...inv,
@@ -2271,7 +2279,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     setCustomerPayments((prev) => prev.filter((cp) => cp.id !== paymentId));
     try {
-      deleteDoc(doc(db, 'customer_payments', paymentId)).catch(console.warn);
+      deleteDoc(doc(db, 'customer_payments', paymentId)).catch(reportCloudError);
     } catch (e) {}
     addNotification('info', 'Pago Revertido', `Abono de $${p.amount.toFixed(2)} eliminado y saldo de factura restaurado.`);
   };
@@ -2338,8 +2346,8 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setTreasuryMovements((prev) => [tMovement, ...prev]);
 
     try {
-      setDoc(doc(db, 'customer_payments', newPayment.id), newPayment).catch(console.warn);
-      setDoc(doc(db, 'invoices', paymentData.invoiceId), { saldoPendiente: newSaldo, status: newStatus }, { merge: true }).catch(console.warn);
+      setDoc(doc(db, 'customer_payments', newPayment.id), newPayment).catch(reportCloudError);
+      setDoc(doc(db, 'invoices', paymentData.invoiceId), { saldoPendiente: newSaldo, status: newStatus }, { merge: true }).catch(reportCloudError);
     } catch (e) {}
 
     addNotification(
@@ -2354,7 +2362,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       prev.map((inv) => (inv.id === id ? { ...inv, status: 'anulada', saldoPendiente: 0 } : inv))
     );
     try {
-      setDoc(doc(db, 'invoices', id), { status: 'anulada', saldoPendiente: 0 }, { merge: true }).catch(console.warn);
+      setDoc(doc(db, 'invoices', id), { status: 'anulada', saldoPendiente: 0 }, { merge: true }).catch(reportCloudError);
     } catch (e) {}
     addNotification('warning', 'Factura Anulada', 'El documento DTE ha sido marcado como anulado.');
   };
@@ -2366,6 +2374,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const newSupp: Supplier = {
       ...supplierData,
       id: `supp_${Date.now()}`,
+      companyId: currentCompany.id, // sin esto el proveedor "no se guardaba" (el filtro por empresa lo ocultaba)
       rating: supplierData.rating || 5,
       qualityScore: supplierData.qualityScore || 5,
       timelinessScore: supplierData.timelinessScore || 5,
@@ -2374,7 +2383,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     setSuppliers((prev) => [...prev, newSupp]);
     try {
-      setDoc(doc(db, 'suppliers', newSupp.id), newSupp).catch(console.warn);
+      setDoc(doc(db, 'suppliers', newSupp.id), newSupp).catch(reportCloudError);
     } catch (e) {}
     addNotification('success', 'Proveedor Registrado', `"${newSupp.name}" añadido al catálogo.`);
   };
@@ -2384,7 +2393,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       prev.map((s) => (s.id === id ? { ...s, ...updates } : s))
     );
     try {
-      setDoc(doc(db, 'suppliers', id), updates, { merge: true }).catch(console.warn);
+      setDoc(doc(db, 'suppliers', id), updates, { merge: true }).catch(reportCloudError);
     } catch (e) {}
     addNotification('info', 'Proveedor Actualizado', 'Información del proveedor sincronizada.');
   };
@@ -2455,7 +2464,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           )
         );
         try {
-          setDoc(doc(db, 'products', product.id), { stock: newStock, currentCost: newWeightedAverageCost }, { merge: true }).catch(console.warn);
+          setDoc(doc(db, 'products', product.id), { stock: newStock, currentCost: newWeightedAverageCost }, { merge: true }).catch(reportCloudError);
         } catch (e) {}
 
         kMovements.push({
@@ -2484,7 +2493,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     try {
-      setDoc(doc(db, 'purchases', newPurchase.id), newPurchase).catch(console.warn);
+      setDoc(doc(db, 'purchases', newPurchase.id), newPurchase).catch(reportCloudError);
     } catch (e) {}
 
     addNotification(
@@ -2558,8 +2567,8 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setTreasuryMovements((prev) => [tMovement, ...prev]);
 
     try {
-      setDoc(doc(db, 'supplier_payments', newPayment.id), newPayment).catch(console.warn);
-      setDoc(doc(db, 'purchases', paymentData.purchaseId), { saldoPendiente: newSaldo, status: newStatus }, { merge: true }).catch(console.warn);
+      setDoc(doc(db, 'supplier_payments', newPayment.id), newPayment).catch(reportCloudError);
+      setDoc(doc(db, 'purchases', paymentData.purchaseId), { saldoPendiente: newSaldo, status: newStatus }, { merge: true }).catch(reportCloudError);
     } catch (e) {}
 
     addNotification(
@@ -2574,7 +2583,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       prev.map((pur) => (pur.id === id ? { ...pur, ...updates } : pur))
     );
     try {
-      setDoc(doc(db, 'purchases', id), updates, { merge: true }).catch(console.warn);
+      setDoc(doc(db, 'purchases', id), updates, { merge: true }).catch(reportCloudError);
     } catch (e) {}
     addNotification('info', 'Compra Modificada', 'Registro de compra/gasto actualizado.');
   };
@@ -2591,7 +2600,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           prev.map((p) => (p.id === prod.id ? { ...p, stock: Math.max(0, p.stock - item.quantity) } : p))
         );
         try {
-          setDoc(doc(db, 'products', prod.id), { stock: Math.max(0, prod.stock - item.quantity) }, { merge: true }).catch(console.warn);
+          setDoc(doc(db, 'products', prod.id), { stock: Math.max(0, prod.stock - item.quantity) }, { merge: true }).catch(reportCloudError);
         } catch (e) {}
       }
     });
@@ -2613,7 +2622,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // 6. Eliminar compra
     setPurchases((prev) => prev.filter((p) => p.id !== purchaseId));
     try {
-      deleteDoc(doc(db, 'purchases', purchaseId)).catch(console.warn);
+      deleteDoc(doc(db, 'purchases', purchaseId)).catch(reportCloudError);
     } catch (e) {}
 
     addNotification('warning', 'Compra Eliminada', `Documento #${pur.documentNumber} y sus efectos contables han sido revertidos.`);
@@ -2629,7 +2638,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const restoredSaldo = Number((pur.saldoPendiente + p.amount).toFixed(2));
           const restoredStatus = restoredSaldo >= pur.totalPagar ? 'emitida' : 'parcial';
           try {
-            setDoc(doc(db, 'purchases', p.purchaseId), { saldoPendiente: restoredSaldo, status: restoredStatus }, { merge: true }).catch(console.warn);
+            setDoc(doc(db, 'purchases', p.purchaseId), { saldoPendiente: restoredSaldo, status: restoredStatus }, { merge: true }).catch(reportCloudError);
           } catch (e) {}
           return {
             ...pur,
@@ -2643,7 +2652,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     setSupplierPayments((prev) => prev.filter((sp) => sp.id !== paymentId));
     try {
-      deleteDoc(doc(db, 'supplier_payments', paymentId)).catch(console.warn);
+      deleteDoc(doc(db, 'supplier_payments', paymentId)).catch(reportCloudError);
     } catch (e) {}
     addNotification('info', 'Pago a Proveedor Revertido', `Abono de $${p.amount.toFixed(2)} eliminado y saldo de deuda restaurado.`);
   };
@@ -2651,7 +2660,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const deleteSupplier = (id: string) => {
     setSuppliers((prev) => prev.filter((s) => s.id !== id));
     try {
-      deleteDoc(doc(db, 'suppliers', id)).catch(console.warn);
+      deleteDoc(doc(db, 'suppliers', id)).catch(reportCloudError);
     } catch (e) {}
     addNotification('warning', 'Proveedor Eliminado', 'El proveedor ha sido removido del catálogo.');
   };
@@ -2685,7 +2694,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     setEmployees((prev) => [...prev, newEmp]);
     try {
-      setDoc(doc(db, 'employees', newEmp.id), newEmp).catch(console.warn);
+      setDoc(doc(db, 'employees', newEmp.id), newEmp).catch(reportCloudError);
     } catch (e) {}
     addNotification('success', 'Colaborador Registrado', `"${newEmp.firstName} ${newEmp.lastName}" ingresado al sistema de RRHH.`);
   };
@@ -2695,7 +2704,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       prev.map((e) => (e.id === id ? { ...e, ...updates } : e))
     );
     try {
-      setDoc(doc(db, 'employees', id), updates, { merge: true }).catch(console.warn);
+      setDoc(doc(db, 'employees', id), updates, { merge: true }).catch(reportCloudError);
     } catch (e) {}
     addNotification('info', 'Empleado Actualizado', 'Ficha de colaborador modificada con éxito.');
   };
@@ -2703,7 +2712,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const deleteEmployee = (id: string) => {
     setEmployees((prev) => prev.filter((e) => e.id !== id));
     try {
-      deleteDoc(doc(db, 'employees', id)).catch(console.warn);
+      deleteDoc(doc(db, 'employees', id)).catch(reportCloudError);
     } catch (e) {}
     addNotification('warning', 'Colaborador Retirado', 'El colaborador ha sido removido del directorio.');
   };
@@ -2722,7 +2731,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const avg = Number((evals.reduce((acc, v) => acc + v.score, 0) / evals.length).toFixed(1));
           const updated = { ...e, rating: avg, evaluations: evals };
           try {
-            setDoc(doc(db, 'employees', e.id), { rating: avg, evaluations: evals }, { merge: true }).catch(console.warn);
+            setDoc(doc(db, 'employees', e.id), { rating: avg, evaluations: evals }, { merge: true }).catch(reportCloudError);
           } catch (err) {}
           return updated;
         }
@@ -2744,7 +2753,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const actions = e.disciplinaryActions ? [newAction, ...e.disciplinaryActions] : [newAction];
           const updated = { ...e, disciplinaryActions: actions };
           try {
-            setDoc(doc(db, 'employees', e.id), { disciplinaryActions: actions }, { merge: true }).catch(console.warn);
+            setDoc(doc(db, 'employees', e.id), { disciplinaryActions: actions }, { merge: true }).catch(reportCloudError);
           } catch (err) {}
           return updated;
         }
@@ -2872,7 +2881,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setJournalEntries((prev) => [entry, ...prev]);
 
     try {
-      setDoc(doc(db, 'payrolls', newPayroll.id), newPayroll).catch(console.warn);
+      setDoc(doc(db, 'payrolls', newPayroll.id), newPayroll).catch(reportCloudError);
     } catch (e) {}
 
     addNotification(
@@ -2895,7 +2904,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return [payroll, ...prev];
     });
     try {
-      setDoc(doc(db, 'payrolls', payroll.id), payroll).catch(console.warn);
+      setDoc(doc(db, 'payrolls', payroll.id), payroll).catch(reportCloudError);
     } catch (e) {}
     addNotification('success', 'Planilla Actualizada', `Cambios en la planilla ${payroll.periodType.toUpperCase()} guardados.`);
   };
@@ -2903,7 +2912,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const deletePayroll = (id: string) => {
     setPayrolls((prev) => prev.filter((p) => p.id !== id));
     try {
-      deleteDoc(doc(db, 'payrolls', id)).catch(console.warn);
+      deleteDoc(doc(db, 'payrolls', id)).catch(reportCloudError);
     } catch (e) {}
     addNotification('warning', 'Planilla Eliminada', 'El registro de planilla fue removido del historial.');
   };
@@ -2917,7 +2926,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       prev.map((p) => (p.id === payrollId ? { ...p, status: 'pagada' } : p))
     );
     try {
-      setDoc(doc(db, 'payrolls', payrollId), { status: 'pagada' }, { merge: true }).catch(console.warn);
+      setDoc(doc(db, 'payrolls', payrollId), { status: 'pagada' }, { merge: true }).catch(reportCloudError);
     } catch (e) {}
 
     // 2. Descontar fondos del banco
@@ -2979,7 +2988,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     setRawProfessionalServices((prev) => [newRecord, ...prev]);
     try {
-      setDoc(doc(db, 'professional_services', newRecord.id), newRecord).catch(console.warn);
+      setDoc(doc(db, 'professional_services', newRecord.id), newRecord).catch(reportCloudError);
     } catch (e) {}
 
     addNotification(
@@ -3003,7 +3012,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             updated.netAmount = Number((gross - updated.retentionAmount).toFixed(2));
           }
           try {
-            setDoc(doc(db, 'professional_services', id), updated, { merge: true }).catch(console.warn);
+            setDoc(doc(db, 'professional_services', id), updated, { merge: true }).catch(reportCloudError);
           } catch (e) {}
           return updated;
         }
@@ -3016,7 +3025,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const deleteProfessionalService = (id: string) => {
     setRawProfessionalServices((prev) => prev.filter((s) => s.id !== id));
     try {
-      deleteDoc(doc(db, 'professional_services', id)).catch(console.warn);
+      deleteDoc(doc(db, 'professional_services', id)).catch(reportCloudError);
     } catch (e) {}
     addNotification('warning', 'Servicio Eliminado', 'El registro de servicios profesionales fue removido.');
   };
@@ -3033,7 +3042,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     setRawCandidateFolders((prev) => [...prev, newFolder]);
     try {
-      setDoc(doc(db, 'candidate_folders', newFolder.id), newFolder).catch(console.warn);
+      setDoc(doc(db, 'candidate_folders', newFolder.id), newFolder).catch(reportCloudError);
     } catch (e) {}
     addNotification('success', 'Carpeta Creada', `Vacante / Carpeta "${newFolder.name}" habilitada.`);
     return newFolder;
@@ -3043,7 +3052,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setRawCandidateFolders((prev) => prev.filter((f) => f.id !== id));
     setRawCandidateApplicants((prev) => prev.filter((a) => a.folderId !== id));
     try {
-      deleteDoc(doc(db, 'candidate_folders', id)).catch(console.warn);
+      deleteDoc(doc(db, 'candidate_folders', id)).catch(reportCloudError);
     } catch (e) {}
     addNotification('info', 'Carpeta Eliminada', 'La carpeta de selección y sus candidatos fueron removidos.');
   };
@@ -3057,7 +3066,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     setRawCandidateApplicants((prev) => [newApp, ...prev]);
     try {
-      setDoc(doc(db, 'candidates', newApp.id), newApp).catch(console.warn);
+      setDoc(doc(db, 'candidates', newApp.id), newApp).catch(reportCloudError);
     } catch (e) {}
     addNotification('success', 'Candidato Registrado', `"${newApp.fullName}" agregado a la vacante ${newApp.folderName}.`);
     return newApp;
@@ -3068,7 +3077,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       prev.map((a) => (a.id === id ? { ...a, ...updates } : a))
     );
     try {
-      setDoc(doc(db, 'candidates', id), updates, { merge: true }).catch(console.warn);
+      setDoc(doc(db, 'candidates', id), updates, { merge: true }).catch(reportCloudError);
     } catch (e) {}
     addNotification('info', 'Candidato Actualizado', 'Estado y datos de postulación guardados.');
   };
@@ -3076,7 +3085,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const deleteCandidateApplicant = (id: string) => {
     setRawCandidateApplicants((prev) => prev.filter((a) => a.id !== id));
     try {
-      deleteDoc(doc(db, 'candidates', id)).catch(console.warn);
+      deleteDoc(doc(db, 'candidates', id)).catch(reportCloudError);
     } catch (e) {}
     addNotification('warning', 'Postulante Eliminado', 'El candidato fue retirado del proceso.');
   };
@@ -3115,7 +3124,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     setEmployees((prev) => [...prev, newEmp]);
     try {
-      setDoc(doc(db, 'employees', newEmp.id), newEmp).catch(console.warn);
+      setDoc(doc(db, 'employees', newEmp.id), newEmp).catch(reportCloudError);
     } catch (e) {}
 
     // Mark applicant as seleccionado
@@ -3140,7 +3149,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     setBankAccounts((prev) => [...prev, newAcc]);
     try {
-      setDoc(doc(db, 'bank_accounts', newAcc.id), newAcc).catch(console.warn);
+      setDoc(doc(db, 'bank_accounts', newAcc.id), newAcc).catch(reportCloudError);
     } catch (e) {}
     addNotification('success', 'Cuenta Bancaria Registrada', `"${newAcc.accountName}" añadida a tesorería.`);
   };

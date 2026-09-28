@@ -26,6 +26,7 @@ import {
   FolderOpen,
   Sliders,
   Trash2,
+  Search,
 } from 'lucide-react';
 import { Employee, Payroll, ContractType, PayrollPeriod, PayrollDetail } from '../../types';
 import {
@@ -68,6 +69,7 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
   } = useERP();
 
   const [activeTab, setActiveTab] = useState<'payrolls' | 'services' | 'employees' | 'recruitment' | 'calculator'>('payrolls');
+  const [employeeSearch, setEmployeeSearch] = useState('');
   const [payrollTableViewMode, setPayrollTableViewMode] = useState<'all' | 'employer' | 'employee'>('all');
   const [isNewEmployeeModalOpen, setIsNewEmployeeModalOpen] = useState(false);
   const [selectedPayrollId, setSelectedPayrollId] = useState<string | null>(payrolls[0]?.id || null);
@@ -635,8 +637,21 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
             </div>
           </div>
 
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={employeeSearch}
+              onChange={(e) => setEmployeeSearch(e.target.value)}
+              placeholder="Buscar colaborador por nombre, cargo, DUI o departamento..."
+              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+            />
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {employees.map((e) => {
+            {employees
+              .filter((e) => [e.firstName, e.lastName, e.position, e.dui, e.department, e.code].join(' ').toLowerCase().includes(employeeSearch.trim().toLowerCase()))
+              .map((e) => {
               const patronalIsss = Math.min(e.baseSalary * fiscalConfig.isssPatronalRate, fiscalConfig.isssMaxPatronalMensual);
               const patronalAfp = e.baseSalary * fiscalConfig.afpPatronalRate;
               const patronalInsaforp = e.baseSalary * fiscalConfig.insaforpPatronalRate;
