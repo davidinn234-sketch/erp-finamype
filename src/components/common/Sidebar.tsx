@@ -17,6 +17,7 @@ import {
   ScanBarcode,
   Cloud,
   FileText,
+  Target,
 } from 'lucide-react';
 import { FinaPymeTermsAndProjectModal } from './FinaPymeTermsAndProjectModal';
 
@@ -39,10 +40,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
   const navigationItems = [
     {
       id: 'dashboard',
-      label: 'Dashboard Ejecutivo',
-      subtitle: 'BI, Métricas, AI & Break-Even',
+      label: 'Dashboard Corporativo',
+      subtitle: 'Operativo, Flujo, Tesorería & DTE',
       icon: LayoutDashboard,
       roles: ['admin_maestro', 'contador', 'gerente', 'cajero'],
+    },
+    {
+      id: 'marketing',
+      label: 'Dashboard de Marketing',
+      subtitle: 'Análisis Histórico, Clientes & BI',
+      icon: Target,
+      roles: ['admin_maestro', 'contador', 'gerente'],
+      badge: 'Histórico',
     },
     {
       id: 'admin_profiles',

@@ -91,6 +91,7 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
 
   // Generator State
   const [genPeriodType, setGenPeriodType] = useState<PayrollPeriod>('quincenal');
+  const [genQuincenaNumber, setGenQuincenaNumber] = useState<1 | 2>(1);
   const [genMonth, setGenMonth] = useState<number>(new Date().getMonth() + 1);
   const [genYear, setGenYear] = useState<number>(2026);
 
@@ -149,7 +150,13 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
 
   const handleGeneratePayroll = (e: React.FormEvent) => {
     e.preventDefault();
-    const created = generatePayrollForPeriod(genPeriodType, genMonth, genYear);
+    const created = generatePayrollForPeriod(
+      genPeriodType,
+      genMonth,
+      genYear,
+      undefined,
+      genPeriodType === 'quincenal' ? genQuincenaNumber : 1
+    );
     setSelectedPayrollId(created.id);
     onCloseNewPayrollModal();
   };
@@ -268,12 +275,16 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
                 onChange={(e) => setSelectedPayrollId(e.target.value)}
                 className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
               >
-                {payrolls.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    Periodo {p.periodNumber} ({p.periodType.toUpperCase()}) - {p.startDate} al {p.endDate} [
-                    {p.status.toUpperCase()}]
-                  </option>
-                ))}
+                {payrolls.map((p) => {
+                  const quincenaLabel = p.periodType === 'quincenal' 
+                    ? (p.periodNumber === 2 ? '2ª Quincena (16 al fin de mes)' : '1ª Quincena (01 al 15)')
+                    : 'Mensual Completo';
+                  return (
+                    <option key={p.id} value={p.id}>
+                      {quincenaLabel} • {p.startDate} al {p.endDate} [{p.status.toUpperCase()}]
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
@@ -873,10 +884,44 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
                   onChange={(e) => setGenPeriodType(e.target.value as PayrollPeriod)}
                   className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-semibold"
                 >
-                  <option value="quincenal">Quincenal (Días 1-15 o 16-30)</option>
+                  <option value="quincenal">Quincenal (El Salvador)</option>
                   <option value="mensual">Mensual Completo</option>
                 </select>
               </div>
+
+              {genPeriodType === 'quincenal' && (
+                <div>
+                  <label className="block font-semibold mb-1.5 text-purple-700 dark:text-purple-300">
+                    Selecciona la Quincena Específica:
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setGenQuincenaNumber(1)}
+                      className={`p-2.5 rounded-xl border text-xs font-bold transition flex flex-col items-center cursor-pointer ${
+                        genQuincenaNumber === 1
+                          ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                          : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      <span>1ª Quincena</span>
+                      <span className="text-[10px] opacity-80 font-normal">Días 01 al 15</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGenQuincenaNumber(2)}
+                      className={`p-2.5 rounded-xl border text-xs font-bold transition flex flex-col items-center cursor-pointer ${
+                        genQuincenaNumber === 2
+                          ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                          : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      <span>2ª Quincena</span>
+                      <span className="text-[10px] opacity-80 font-normal">Días 16 al fin de mes</span>
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>

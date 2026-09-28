@@ -210,7 +210,13 @@ interface ERPContextType {
   deleteEmployee: (id: string) => void;
   addEmployeeEvaluation: (employeeId: string, evalData: Omit<EmployeeEvaluation, 'id' | 'date'>) => void;
   addDisciplinaryAction: (employeeId: string, action: Omit<DisciplinaryAction, 'id' | 'date'>) => void;
-  generatePayrollForPeriod: (periodType: 'quincenal' | 'mensual', month: number, year: number, branchId?: string) => Payroll;
+  generatePayrollForPeriod: (
+    periodType: 'quincenal' | 'mensual',
+    month: number,
+    year: number,
+    branchId?: string,
+    periodNumber?: number
+  ) => Payroll;
   saveCustomPayroll: (payroll: Payroll) => void;
   deletePayroll: (id: string) => void;
   payPayroll: (payrollId: string, bankAccountId: string) => void;
@@ -339,7 +345,7 @@ function useCloudMirror<T extends { id: string }>(
         setDoc(doc(db, name, it.id), it as any).catch(onError);
       }
     });
-    Array.from(known.current.keys()).forEach((id) => {
+    Array.from(known.current.keys()).forEach((id: string) => {
       if (!current.has(id)) {
         known.current.delete(id);
         deleteDoc(doc(db, name, id)).catch(onError);
@@ -2767,7 +2773,8 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     periodType: 'quincenal' | 'mensual',
     month: number,
     year: number,
-    branchId?: string
+    branchId?: string,
+    periodNumber?: number
   ): Payroll => {
     let targetEmployees = employees.filter((e) => e.isActive);
     let targetBranchName: string | undefined;
@@ -2785,7 +2792,11 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     }
 
-    const periodNumber = periodType === 'quincenal' ? 1 : 1;
+    const finalPeriodNumber = periodNumber || 1;
+    const isSecondFortnight = periodType === 'quincenal' && finalPeriodNumber === 2;
+    const startDay = isSecondFortnight ? '16' : '01';
+    const lastDayOfMonth = new Date(year, month, 0).getDate();
+    const endDay = periodType === 'quincenal' ? (isSecondFortnight ? String(lastDayOfMonth) : '15') : String(lastDayOfMonth);
     const isCompanyOver10 = targetEmployees.length >= fiscalConfig.insaforpMinEmployees;
 
     const details = targetEmployees.map((emp) => {
@@ -2851,12 +2862,12 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       companyId: currentCompany.id,
       branchId: branchId && branchId !== 'all' ? branchId : undefined,
       branchName: targetBranchName,
-      periodNumber,
+      periodNumber: finalPeriodNumber,
       periodType,
       year,
       month,
-      startDate: `${year}-${month.toString().padStart(2, '0')}-01`,
-      endDate: `${year}-${month.toString().padStart(2, '0')}-${periodType === 'quincenal' ? '15' : '30'}`,
+      startDate: `${year}-${month.toString().padStart(2, '0')}-${startDay}`,
+      endDate: `${year}-${month.toString().padStart(2, '0')}-${endDay}`,
       paymentDate: new Date().toISOString().split('T')[0],
       status: 'aprobada',
       details,

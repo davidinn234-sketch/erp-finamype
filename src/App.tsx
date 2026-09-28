@@ -12,6 +12,7 @@ import { PersonalFinancesModule } from './components/personal/PersonalFinancesMo
 import { POSTerminalModule } from './components/pos/POSTerminalModule';
 
 import { ExecutiveDashboard } from './components/dashboard/ExecutiveDashboard';
+import { MarketingDashboard } from './components/dashboard/MarketingDashboard';
 import { ForecastingModule } from './components/forecasting/ForecastingModule';
 import { SalesModule } from './components/sales/SalesModule';
 import { PurchasesModule } from './components/purchases/PurchasesModule';
@@ -144,6 +145,8 @@ const MainLayout: React.FC = () => {
                 />
               )}
 
+              {activeModule === 'marketing' && <MarketingDashboard />}
+
               {activeModule === 'forecasting' && <ForecastingModule />}
 
               {activeModule === 'sales' && (
@@ -154,11 +157,12 @@ const MainLayout: React.FC = () => {
                 />
               )}
 
-              {activeModule === 'purchases' && (
+              {(activeModule === 'purchases' || activeModule === 'inventory') && (
                 <PurchasesModule
                   isNewPurchaseModalOpen={isNewPurchaseModalOpen}
                   onCloseNewPurchaseModal={() => setIsNewPurchaseModalOpen(false)}
                   onOpenNewPurchaseModal={() => setIsNewPurchaseModalOpen(true)}
+                  initialTab={activeModule === 'inventory' ? 'inventory' : 'purchases'}
                 />
               )}
 

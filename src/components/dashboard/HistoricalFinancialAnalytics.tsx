@@ -35,11 +35,11 @@ import {
 import { formatCurrencyUSD } from '../../utils/salvadoranTax';
 import { Invoice, Purchase, OtherIncome, Employee, FiscalConfig } from '../../types';
 
-export type HistoricalMetricType = 'ventas' | 'egresos' | 'utilidad_neta' | 'flujo_neto' | 'comparativa';
+export type HistoricalMetricType = 'comparativa' | 'ventas' | 'egresos' | 'utilidad_neta' | 'flujo_neto';
 export type TimeGranularity = 'meses' | 'anos';
 
 export const MONTHS_CATALOG = [
-  { key: 'all', name: 'Todos los Meses (Ene - Dic / 12 Meses)', short: 'Todos' },
+  { key: 'all', name: 'Todos los Meses (Ene - Dic)', short: 'Todos' },
   { key: '01', name: '01 - Enero', short: 'Ene' },
   { key: '02', name: '02 - Febrero', short: 'Feb' },
   { key: '03', name: '03 - Marzo', short: 'Mar' },
@@ -54,16 +54,20 @@ export const MONTHS_CATALOG = [
   { key: '12', name: '12 - Diciembre', short: 'Dic' },
 ];
 
-interface HistoricalFinancialAnalyticsProps {
+export interface HistoricalFinancialAnalyticsProps {
   invoices: Invoice[];
   purchases: Purchase[];
   otherIncomes: OtherIncome[];
   employees: Employee[];
   fiscalConfig?: FiscalConfig;
   selectedBranchName?: string;
+  selectedYear?: number;
+  selectedMonth?: string;
+  onSelectYear?: (year: number) => void;
+  onSelectMonth?: (month: string) => void;
 }
 
-interface PeriodData {
+export interface PeriodData {
   periodKey: string;
   label: string;
   shortLabel: string;
@@ -77,7 +81,7 @@ interface PeriodData {
   egresosTotales: number;
   utilidadBruta: number;
   utilidadOperativa: number;
-  utilidadNeta: number; // Utilidad última ya pagando todo
+  utilidadNeta: number; // Ganancia líquida final
   flujoNeto: number; // Flujo de caja neto: Ingresos - Egresos
   margenNetoPct: number;
   growthVentas?: number;
@@ -90,40 +94,43 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
   employees,
   fiscalConfig,
   selectedBranchName = 'Consolidado Global',
+  selectedYear: propSelectedYear,
+  selectedMonth: propSelectedMonth,
+  onSelectYear,
+  onSelectMonth,
 }) => {
-  // Available Years
-  const availableYears = [2022, 2023, 2024, 2025, 2026];
+  const availableYears = [2026, 2025, 2024, 2023, 2022];
 
-  // Master Console State (Años vs Meses vs Mes Específico como Agosto 2026)
-  const [granularity, setGranularity] = useState<TimeGranularity>('meses');
-  const [selectedMasterYear, setSelectedMasterYear] = useState<number>(2026);
-  const [selectedMasterMonth, setSelectedMasterMonth] = useState<string>('all'); // 'all' or '01'..'12' (e.g. '08' para Agosto)
-  const [activeMetric, setActiveMetric] = useState<HistoricalMetricType>('ventas');
-  const [chartType, setChartType] = useState<'area' | 'bars' | 'lines'>('area');
+  // Internal state fallback if not controlled by parent
+  const [internalGranularity, setInternalGranularity] = useState<TimeGranularity>('meses');
+  const [internalYear, setInternalYear] = useState<number>(2026);
+  const [internalMonth, setInternalMonth] = useState<string>('all');
+
+  const selectedMasterYear = propSelectedYear !== undefined ? propSelectedYear : internalYear;
+  const selectedMasterMonth = propSelectedMonth !== undefined ? propSelectedMonth : internalMonth;
+  const granularity = internalGranularity;
+
+  const handleYearChange = (year: number) => {
+    if (onSelectYear) onSelectYear(year);
+    else setInternalYear(year);
+  };
+
+  const handleMonthChange = (month: string) => {
+    if (onSelectMonth) onSelectMonth(month);
+    else setInternalMonth(month);
+  };
+
+  const [activeMetric, setActiveMetric] = useState<HistoricalMetricType>('comparativa');
+  const [chartType, setChartType] = useState<'bars' | 'lines' | 'area'>('bars');
   const [showTable, setShowTable] = useState(false);
-
-  // Individual Cards Granularities, Year and Month states for the 4 Mini-Charts
-  const [cardGranularityVentas, setCardGranularityVentas] = useState<TimeGranularity>('meses');
-  const [cardYearVentas, setCardYearVentas] = useState<number>(2026);
-  const [cardMonthVentas, setCardMonthVentas] = useState<string>('all');
-
-  const [cardGranularityEgresos, setCardGranularityEgresos] = useState<TimeGranularity>('meses');
-  const [cardYearEgresos, setCardYearEgresos] = useState<number>(2026);
-  const [cardMonthEgresos, setCardMonthEgresos] = useState<string>('all');
-
-  const [cardGranularityUtilidad, setCardGranularityUtilidad] = useState<TimeGranularity>('meses');
-  const [cardYearUtilidad, setCardYearUtilidad] = useState<number>(2026);
-  const [cardMonthUtilidad, setCardMonthUtilidad] = useState<string>('all');
-
-  const [cardGranularityFlujo, setCardGranularityFlujo] = useState<TimeGranularity>('meses');
-  const [cardYearFlujo, setCardYearFlujo] = useState<number>(2026);
-  const [cardMonthFlujo, setCardMonthFlujo] = useState<string>('all');
 
   // Baseline monthly payroll cost with SV employer contributions (ISSS 7.5% + AFP 8.75% + INSAFORP 1% + Provisiones ~17%)
   const baseMonthlyPayroll = useMemo(() => {
-    return (employees || [])
-      .filter((e) => e && e.isActive)
-      .reduce((acc, e) => acc + (e.baseSalary || 0) * 1.34, 0) || 2200;
+    return (
+      (employees || [])
+        .filter((e) => e && e.isActive)
+        .reduce((acc, e) => acc + (e.baseSalary || 0) * 1.34, 0) || 2200
+    );
   }, [employees]);
 
   const baseOperatingExpenses = 1500;
@@ -135,26 +142,24 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
   const realOtherIncomes = useMemo(() => (otherIncomes || []).reduce((acc, o) => acc + (o.amount || 0), 0) || 1200, [otherIncomes]);
 
   // ----------------------------------------------------
-  // 1. GENERADOR DINÁMICO DE 12 MESES PARA CUALQUIER AÑO SELECCIONADO (2022, 2023, 2024, 2025, 2026, 2027)
+  // GENERADOR DINÁMICO DE 12 MESES PARA CUALQUIER AÑO
   // ----------------------------------------------------
   const generateMonthlyDataForYear = (targetYear: number): PeriodData[] => {
-    // Seasonal month profile
     const monthConfigs = [
       { key: '01', name: 'Enero', short: 'Ene', factor: 0.72, purFactor: 0.74, other: 0 },
       { key: '02', name: 'Febrero', short: 'Feb', factor: 0.81, purFactor: 0.78, other: 250 },
       { key: '03', name: 'Marzo', short: 'Mar', factor: 0.92, purFactor: 0.84, other: 150 },
       { key: '04', name: 'Abril', short: 'Abr', factor: 0.88, purFactor: 0.82, other: 0 },
-      { key: '05', name: 'Mayo', short: 'May', factor: 1.05, purFactor: 0.95, other: 300 }, // Día de las Madres
-      { key: '06', name: 'Junio', short: 'Jun', factor: 1.15, purFactor: 1.02, other: 1200 }, // Cierre semestral + Remanente MH
+      { key: '05', name: 'Mayo', short: 'May', factor: 1.05, purFactor: 0.95, other: 300 },
+      { key: '06', name: 'Junio', short: 'Jun', factor: 1.15, purFactor: 1.02, other: 1200 },
       { key: '07', name: 'Julio', short: 'Jul', factor: 1.22, purFactor: 1.08, other: 100 },
-      { key: '08', name: 'Agosto', short: 'Ago', factor: 1.30, purFactor: 1.12, other: 500 }, // Fiestas agostinas
-      { key: '09', name: 'Septiembre', short: 'Sep', factor: 1.18, purFactor: 1.05, other: 200 }, // Fiestas patrias
+      { key: '08', name: 'Agosto', short: 'Ago', factor: 1.30, purFactor: 1.12, other: 500 },
+      { key: '09', name: 'Septiembre', short: 'Sep', factor: 1.18, purFactor: 1.05, other: 200 },
       { key: '10', name: 'Octubre', short: 'Oct', factor: 1.25, purFactor: 1.10, other: 150 },
-      { key: '11', name: 'Noviembre', short: 'Nov', factor: 1.45, purFactor: 1.28, other: 350 }, // Black Friday
-      { key: '12', name: 'Diciembre', short: 'Dic', factor: 1.68, purFactor: 1.40, other: 800 }, // Temporada Navideña
+      { key: '11', name: 'Noviembre', short: 'Nov', factor: 1.45, purFactor: 1.28, other: 350 },
+      { key: '12', name: 'Diciembre', short: 'Dic', factor: 1.68, purFactor: 1.40, other: 800 },
     ];
 
-    // Baseline scale for the target year
     let yearSalesBase = realSales;
     let yearPurchasesBase = realPurchases;
     let yearPayrollBase = baseMonthlyPayroll;
@@ -187,15 +192,10 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
       yearOpExpBase = baseOperatingExpenses;
     }
 
-    const currentDate = new Date();
-    const currentSystemYear = currentDate.getFullYear();
-    const currentSystemMonth = currentDate.getMonth() + 1;
-    const currentMonthKey = String(currentSystemMonth).padStart(2, '0');
-
+    const currentSystemYear = new Date().getFullYear();
     let prevSales = 0;
 
     return monthConfigs.map((m) => {
-      // Filtrar transacciones contables reales del mes específico en la base de datos
       const monthInvs = (invoices || []).filter(
         (inv) => inv.date && inv.date.startsWith(`${targetYear}-${m.key}`) && inv.status !== 'anulada'
       );
@@ -211,14 +211,12 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
       let opExpenses = 0;
 
       if (targetYear < currentSystemYear) {
-        // Años históricos concluidos (2022-2025): Balances de cierre fiscal auditados
         sales = Math.round(yearSalesBase * (m.factor / 1.30));
         purchasesVal = Math.round(yearPurchasesBase * (m.purFactor / 1.12));
         other = m.other;
         payroll = Math.round(yearPayrollBase);
         opExpenses = Math.round(yearOpExpBase);
       } else if (targetYear === currentSystemYear) {
-        // Año en curso: ÚNICAMENTE lo que efectivamente ha transcurrido y tiene DTEs/facturas registradas
         if (hasActualRecords) {
           sales = monthInvs.reduce((sum, inv) => sum + (inv.totalPagar || 0), 0);
           purchasesVal = monthPurs.reduce((sum, p) => sum + (p.totalPagar || 0), 0);
@@ -226,25 +224,15 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
           payroll = Math.round(baseMonthlyPayroll);
           opExpenses = Math.round(baseOperatingExpenses);
         } else {
-          // Si el mes aún no ha llegado (ej: Sep, Oct, Nov, Dic) o no tiene registros: Estrictamente $0.00
           sales = 0;
           purchasesVal = 0;
           other = 0;
           payroll = 0;
           opExpenses = 0;
         }
-      } else {
-        // Años futuros (2027 en adelante no pertenecen al histórico real): Cero absoluto
-        sales = 0;
-        purchasesVal = 0;
-        other = 0;
-        payroll = 0;
-        opExpenses = 0;
       }
 
       const totalIncomesVal = sales + other;
-
-      // Taxes calculation: IVA + Pago a Cuenta F-07
       const ivaDebito = sales * 0.13;
       const ivaCredito = purchasesVal * 0.13;
       const ivaNeto = Math.max(0, ivaDebito - ivaCredito);
@@ -252,35 +240,18 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
       const taxesMH = Math.round(ivaNeto + pagoCuenta);
 
       const totalOutflows = purchasesVal + payroll + opExpenses + taxesMH;
-
       const gross = sales - purchasesVal;
       const operating = gross - payroll - opExpenses;
       const netFinal = operating + other - taxesMH;
       const cashFlow = totalIncomesVal - totalOutflows;
       const netPct = totalIncomesVal > 0 ? (netFinal / totalIncomesVal) * 100 : 0;
-
       const growth = prevSales > 0 ? ((sales - prevSales) / prevSales) * 100 : 0;
-      if (sales > 0) {
-        prevSales = sales;
-      }
-
-      let statusTag = '';
-      if (targetYear === currentSystemYear) {
-        if (m.key === currentMonthKey) {
-          statusTag = hasActualRecords ? ' (En Curso)' : ' (En Curso - Sin registros)';
-        } else if (m.key > currentMonthKey) {
-          statusTag = ' (No Transcurrido - $0.00)';
-        } else if (!hasActualRecords) {
-          statusTag = ' (Sin Movimientos - $0.00)';
-        }
-      }
-
-      const fullLabel = `${m.name} ${targetYear}${statusTag}`;
+      prevSales = sales;
 
       return {
         periodKey: `${targetYear}-${m.key}`,
-        label: fullLabel,
-        shortLabel: m.name, // "Enero", "Febrero", "Marzo", etc. - secuencia cronológica pura
+        label: `${m.name} ${targetYear}`,
+        shortLabel: m.short,
         ventas: sales,
         otrosIngresos: other,
         ingresosTotales: totalIncomesVal,
@@ -299,28 +270,21 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
     });
   };
 
-  // Monthly dataset for Master Chart based on selectedMasterYear
-  const monthlyHistoricalData: PeriodData[] = useMemo(() => {
-    return generateMonthlyDataForYear(selectedMasterYear);
-  }, [selectedMasterYear, realSales, realPurchases, realOtherIncomes, baseMonthlyPayroll, baseOperatingExpenses, pagoCuentaRate]);
-
   // ----------------------------------------------------
-  // 1.1 GENERADOR DINÁMICO DE DETALLE INTRA-MES (Semanas y Cortes de Quincena)
-  // Permite al usuario seleccionar un mes específico (ej: Agosto 2026) y analizar su desglose
+  // GENERADOR DINÁMICO DE DETALLE INTRA-MES (Semanas)
   // ----------------------------------------------------
   const generateIntraMonthData = (targetYear: number, monthKey: string): PeriodData[] => {
     const monthlyList = generateMonthlyDataForYear(targetYear);
     const monthData = monthlyList.find((m) => m.periodKey.endsWith(`-${monthKey}`)) || monthlyList[0];
     const monthInfo = MONTHS_CATALOG.find((m) => m.key === monthKey) || { name: 'Mes', short: 'M' };
 
-    // Subdivisiones del mes: 4 semanas operativas, corte quincenal de pago (15) y cierre fiscal/MH (29-31)
     const intraIntervals = [
-      { key: 'w1', name: 'Semana 1 (Días 01 al 07)', short: `01-07 ${monthInfo.short}`, weight: 0.22, payrollWeight: 0, taxWeight: 0 },
-      { key: 'w2', name: 'Semana 2 (Días 08 al 14)', short: `08-14 ${monthInfo.short}`, weight: 0.23, payrollWeight: 0, taxWeight: 0 },
-      { key: 'q1', name: 'Corte Quincenal (Día 15)', short: `15 ${monthInfo.short} (Q1)`, weight: 0.08, payrollWeight: 0.50, taxWeight: 0 },
-      { key: 'w3', name: 'Semana 3 (Días 16 al 21)', short: `16-21 ${monthInfo.short}`, weight: 0.21, payrollWeight: 0, taxWeight: 0 },
-      { key: 'w4', name: 'Semana 4 (Días 22 al 28)', short: `22-28 ${monthInfo.short}`, weight: 0.16, payrollWeight: 0, taxWeight: 0 },
-      { key: 'cl', name: 'Cierre de Mes (Días 29 al 31)', short: `29-31 ${monthInfo.short}`, weight: 0.10, payrollWeight: 0.50, taxWeight: 1.0 },
+      { key: 'w1', name: 'Semana 1 (Días 01-07)', short: `01-07 ${monthInfo.short}`, weight: 0.22, payrollWeight: 0, taxWeight: 0 },
+      { key: 'w2', name: 'Semana 2 (Días 08-14)', short: `08-14 ${monthInfo.short}`, weight: 0.23, payrollWeight: 0, taxWeight: 0 },
+      { key: 'q1', name: 'Corte Quincena (Día 15)', short: `15 ${monthInfo.short} (Q1)`, weight: 0.08, payrollWeight: 0.50, taxWeight: 0 },
+      { key: 'w3', name: 'Semana 3 (Días 16-21)', short: `16-21 ${monthInfo.short}`, weight: 0.21, payrollWeight: 0, taxWeight: 0 },
+      { key: 'w4', name: 'Semana 4 (Días 22-28)', short: `22-28 ${monthInfo.short}`, weight: 0.16, payrollWeight: 0, taxWeight: 0 },
+      { key: 'cl', name: 'Cierre de Mes (Días 29-31)', short: `29-31 ${monthInfo.short}`, weight: 0.10, payrollWeight: 0.50, taxWeight: 1.0 },
     ];
 
     let prevSales = 0;
@@ -365,9 +329,8 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
     });
   };
 
-
   // ----------------------------------------------------
-  // 2. GENERACIÓN DE BASE DE DATOS HISTÓRICA POR AÑOS (Multi-Anual Completo 2022 - 2027)
+  // BASE DE DATOS HISTÓRICA POR AÑOS (Multi-Anual 2022 - 2026)
   // ----------------------------------------------------
   const annualHistoricalData: PeriodData[] = useMemo(() => {
     const data2026 = generateMonthlyDataForYear(2026);
@@ -377,11 +340,11 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
     const curYearNetProfit = data2026.reduce((acc, m) => acc + m.utilidadNeta, 0);
     const curYearCashFlow = data2026.reduce((acc, m) => acc + m.flujoNeto, 0);
 
-    const years = [
+    return [
       {
-        year: '2022',
+        periodKey: '2022',
         label: 'Año Fiscal 2022',
-        short: '2022',
+        shortLabel: '2022',
         ventas: 52400,
         otrosIngresos: 1800,
         ingresosTotales: 54200,
@@ -397,9 +360,9 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
         margenNetoPct: -20.1,
       },
       {
-        year: '2023',
+        periodKey: '2023',
         label: 'Año Fiscal 2023',
-        short: '2023',
+        shortLabel: '2023',
         ventas: 68500,
         otrosIngresos: 2400,
         ingresosTotales: 70900,
@@ -415,9 +378,9 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
         margenNetoPct: -13.2,
       },
       {
-        year: '2024',
+        periodKey: '2024',
         label: 'Año Fiscal 2024',
-        short: '2024',
+        shortLabel: '2024',
         ventas: 89400,
         otrosIngresos: 3800,
         ingresosTotales: 93200,
@@ -433,9 +396,9 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
         margenNetoPct: -1.4,
       },
       {
-        year: '2025',
+        periodKey: '2025',
         label: 'Año Fiscal 2025',
-        short: '2025',
+        shortLabel: '2025',
         ventas: 112800,
         otrosIngresos: 5600,
         ingresosTotales: 118400,
@@ -451,190 +414,106 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
         margenNetoPct: 8.4,
       },
       {
-        year: '2026',
+        periodKey: '2026',
         label: 'Año Fiscal 2026 (En Curso)',
-        short: '2026',
-        ventas: curYearSales,
-        otrosIngresos: Math.round(curYearIncomes - curYearSales),
-        ingresosTotales: curYearIncomes,
-        compras: Math.round(curYearSales * 0.52),
-        nomina: Math.round(baseMonthlyPayroll * 8), // 8 meses transcurridos
-        gastosOperativos: baseOperatingExpenses * 8,
-        impuestosMH: Math.round(curYearSales * 0.085),
-        egresosTotales: curYearOutflows,
-        utilidadBruta: Math.round(curYearSales * 0.48),
-        utilidadOperativa: Math.round(curYearNetProfit * 1.15),
-        utilidadNeta: curYearNetProfit,
-        flujoNeto: curYearCashFlow,
-        margenNetoPct: curYearIncomes > 0 ? Number(((curYearNetProfit / curYearIncomes) * 100).toFixed(1)) : 14.5,
+        shortLabel: '2026',
+        ventas: curYearSales || 63600,
+        otrosIngresos: 6800,
+        ingresosTotales: curYearIncomes || 70400,
+        compras: curYearSales ? Math.round(curYearSales * 0.45) : 28600,
+        nomina: Math.round(baseMonthlyPayroll * 12),
+        gastosOperativos: baseOperatingExpenses * 12,
+        impuestosMH: Math.round((curYearSales || 63600) * 0.05),
+        egresosTotales: curYearOutflows || 55200,
+        utilidadBruta: (curYearSales || 63600) - (curYearSales ? Math.round(curYearSales * 0.45) : 28600),
+        utilidadOperativa: 21800,
+        utilidadNeta: curYearNetProfit || 15200,
+        flujoNeto: curYearCashFlow || 15200,
+        margenNetoPct: Number((((curYearNetProfit || 15200) / (curYearIncomes || 70400)) * 100).toFixed(1)),
       },
     ];
+  }, [realSales, realPurchases, realOtherIncomes, baseMonthlyPayroll, baseOperatingExpenses, invoices, purchases]);
 
-    let prev = 0;
-    return years.map((y) => {
-      const growth = prev > 0 ? ((y.ventas - prev) / prev) * 100 : 0;
-      prev = y.ventas;
-      return {
-        periodKey: y.year,
-        label: y.label,
-        shortLabel: y.short,
-        ventas: y.ventas,
-        otrosIngresos: y.otrosIngresos,
-        ingresosTotales: y.ingresosTotales,
-        compras: y.compras,
-        nomina: y.nomina,
-        gastosOperativos: y.gastosOperativos,
-        impuestosMH: y.impuestosMH,
-        egresosTotales: y.egresosTotales,
-        utilidadBruta: y.utilidadBruta,
-        utilidadOperativa: y.utilidadOperativa,
-        utilidadNeta: y.utilidadNeta,
-        flujoNeto: y.flujoNeto,
-        margenNetoPct: y.margenNetoPct,
-        growthVentas: Number(growth.toFixed(1)),
-      };
-    });
-  }, [realSales, realPurchases, realOtherIncomes, baseMonthlyPayroll, baseOperatingExpenses, pagoCuentaRate]);
-
-  // Datasets for individual 4 mini cards with Month and Year granularities
-  const cardDataVentas = useMemo(() => {
-    if (cardGranularityVentas === 'anos') return annualHistoricalData;
-    if (cardMonthVentas === 'all') return generateMonthlyDataForYear(cardYearVentas);
-    return generateIntraMonthData(cardYearVentas, cardMonthVentas);
-  }, [cardGranularityVentas, cardYearVentas, cardMonthVentas, annualHistoricalData, realSales, realPurchases, realOtherIncomes, baseMonthlyPayroll, baseOperatingExpenses, pagoCuentaRate]);
-
-  const cardDataEgresos = useMemo(() => {
-    if (cardGranularityEgresos === 'anos') return annualHistoricalData;
-    if (cardMonthEgresos === 'all') return generateMonthlyDataForYear(cardYearEgresos);
-    return generateIntraMonthData(cardYearEgresos, cardMonthEgresos);
-  }, [cardGranularityEgresos, cardYearEgresos, cardMonthEgresos, annualHistoricalData, realSales, realPurchases, realOtherIncomes, baseMonthlyPayroll, baseOperatingExpenses, pagoCuentaRate]);
-
-  const cardDataUtilidad = useMemo(() => {
-    if (cardGranularityUtilidad === 'anos') return annualHistoricalData;
-    if (cardMonthUtilidad === 'all') return generateMonthlyDataForYear(cardYearUtilidad);
-    return generateIntraMonthData(cardYearUtilidad, cardMonthUtilidad);
-  }, [cardGranularityUtilidad, cardYearUtilidad, cardMonthUtilidad, annualHistoricalData, realSales, realPurchases, realOtherIncomes, baseMonthlyPayroll, baseOperatingExpenses, pagoCuentaRate]);
-
-  const cardDataFlujo = useMemo(() => {
-    if (cardGranularityFlujo === 'anos') return annualHistoricalData;
-    if (cardMonthFlujo === 'all') return generateMonthlyDataForYear(cardYearFlujo);
-    return generateIntraMonthData(cardYearFlujo, cardMonthFlujo);
-  }, [cardGranularityFlujo, cardYearFlujo, cardMonthFlujo, annualHistoricalData, realSales, realPurchases, realOtherIncomes, baseMonthlyPayroll, baseOperatingExpenses, pagoCuentaRate]);
-
-  // Master console active dataset according to granularity and selected month
-  const currentDataset = useMemo(() => {
-    if (granularity === 'anos') return annualHistoricalData;
-    if (selectedMasterMonth === 'all') return monthlyHistoricalData;
-    return generateIntraMonthData(selectedMasterYear, selectedMasterMonth);
-  }, [granularity, selectedMasterMonth, selectedMasterYear, monthlyHistoricalData, annualHistoricalData, realSales, realPurchases, realOtherIncomes, baseMonthlyPayroll, baseOperatingExpenses, pagoCuentaRate]);
-
-  // Resumen del mes seleccionado para Spotlight Panel en la Consola Maestra
-  const selectedMonthSummary = useMemo(() => {
-    if (granularity !== 'meses' || selectedMasterMonth === 'all') return null;
-    const mData = monthlyHistoricalData.find((m) => m.periodKey.endsWith(`-${selectedMasterMonth}`));
-    const mInfo = MONTHS_CATALOG.find((m) => m.key === selectedMasterMonth);
-    if (!mData || !mInfo) return null;
-    return {
-      ...mData,
-      monthName: mInfo.name,
-      monthShort: mInfo.short,
-      year: selectedMasterYear,
-    };
-  }, [granularity, selectedMasterMonth, selectedMasterYear, monthlyHistoricalData]);
-
-  // ----------------------------------------------------
-  // 3. CÁLCULO DE KPIS RESUMEN DE LA MÉTRICA SELECCIONADA
-  // ----------------------------------------------------
-  const metricStats = useMemo(() => {
-    const data = currentDataset;
-    if (data.length === 0) {
-      return { total: 0, avg: 0, maxLabel: '-', maxVal: 0, minLabel: '-', minVal: 0, growthPct: 0 };
+  // Current dataset selector
+  const currentDataset: PeriodData[] = useMemo(() => {
+    if (granularity === 'anos') {
+      return annualHistoricalData;
     }
+    if (selectedMasterMonth === 'all') {
+      return generateMonthlyDataForYear(selectedMasterYear);
+    }
+    return generateIntraMonthData(selectedMasterYear, selectedMasterMonth);
+  }, [granularity, selectedMasterYear, selectedMasterMonth, annualHistoricalData]);
 
-    let field: keyof PeriodData = 'ventas';
-    if (activeMetric === 'egresos') field = 'egresosTotales';
-    else if (activeMetric === 'utilidad_neta') field = 'utilidadNeta';
-    else if (activeMetric === 'flujo_neto') field = 'flujoNeto';
-    else if (activeMetric === 'comparativa') field = 'ventas';
-
-    const values = data.map((d) => (d[field] as number) || 0);
-    const total = values.reduce((sum, v) => sum + v, 0);
-    const avg = total / data.length;
-
-    let maxVal = -Infinity;
-    let maxLabel = '';
-    let minVal = Infinity;
-    let minLabel = '';
-
-    data.forEach((d) => {
-      const val = (d[field] as number) || 0;
-      if (val > maxVal) {
-        maxVal = val;
-        maxLabel = d.shortLabel;
-      }
-      if (val < minVal) {
-        minVal = val;
-        minLabel = d.shortLabel;
-      }
+  // Summary statistics for the current active metric
+  const metricStats = useMemo(() => {
+    const values = currentDataset.map((d) => {
+      if (activeMetric === 'ventas') return d.ventas;
+      if (activeMetric === 'egresos') return d.egresosTotales;
+      if (activeMetric === 'utilidad_neta') return d.utilidadNeta;
+      if (activeMetric === 'flujo_neto') return d.flujoNeto;
+      return d.ventas;
     });
 
-    const first = values[0] || 1;
-    const last = values[values.length - 1] || 0;
-    const growthPct = first !== 0 ? ((last - first) / Math.abs(first)) * 100 : 0;
+    const total = values.reduce((sum, v) => sum + v, 0);
+    const avg = values.length > 0 ? Math.round(total / values.length) : 0;
+    const maxVal = values.length > 0 ? Math.max(...values) : 0;
+    const maxIndex = values.indexOf(maxVal);
+    const maxLabel = currentDataset[maxIndex]?.shortLabel || '-';
 
-    return { total, avg, maxLabel, maxVal, minLabel, minVal, growthPct };
+    const first = values[0] || 0;
+    const last = values[values.length - 1] || 0;
+    const growthPct = first > 0 ? ((last - first) / first) * 100 : 0;
+
+    return { total, avg, maxVal, maxLabel, growthPct };
   }, [currentDataset, activeMetric]);
 
-  // Color config for active metric
   const metricConfig = {
+    comparativa: {
+      name: 'Evolución de 4 Variables (Integral)',
+      color: '#10b981',
+      badge: 'Multivariable',
+      desc: 'Correlación simultánea de Ventas, Egresos Totales, Utilidad Neta y Flujo Neto de Caja.',
+    },
     ventas: {
-      name: 'Ventas Totales Facturadas',
-      color: '#10b981', // Emerald
-      secondaryColor: '#34d399',
-      badge: 'Facturación & DTE',
-      desc: 'Ingresos netos por ventas de bienes y servicios emitidos.',
+      name: 'Ventas Facturadas (DTE & Consumidor)',
+      color: '#10b981',
+      badge: 'Ingresos Operativos',
+      desc: 'Ingresos netos por ventas gravadas, exentas y no sujetas emitidas.',
     },
     egresos: {
-      name: 'Egresos & Costos Totales',
-      color: '#ef4444', // Red/Rose
-      secondaryColor: '#f87171',
+      name: 'Egresos Totales (Compras + Nómina + Gastos + MH)',
+      color: '#f43f5e',
       badge: 'Desembolsos & Costos',
-      desc: 'Suma de compras de mercadería, nómina con cargas patronales, gastos fijos e impuestos.',
+      desc: 'Suma de compras de mercadería, nómina patronal SV, gastos fijos y tributos.',
     },
     utilidad_neta: {
-      name: 'Utilidad Neta Final (Post-Todo)',
-      color: '#6366f1', // Indigo
-      secondaryColor: '#818cf8',
-      badge: 'Ganancia Neta',
-      desc: 'Ganancia líquida final deduciendo compras, nómina, gastos operativos y tributos F-07.',
+      name: 'Utilidad Neta Final (Rentabilidad)',
+      color: '#2f855f',
+      badge: 'Ganancia Líquida',
+      desc: 'Resultado neto positivo después de cubrir todos los costos, nómina y obligaciones fiscales.',
     },
     flujo_neto: {
       name: 'Flujo Neto de Caja',
-      color: '#06b6d4', // Cyan
-      secondaryColor: '#22d3ee',
+      color: '#0ea5e9',
       badge: 'Saldo de Caja',
-      desc: 'Flujo de efectivo resultante de Ingresos Totales menos Egresos Totales.',
-    },
-    comparativa: {
-      name: 'Vista Comparativa Integral',
-      color: '#8b5cf6',
-      secondaryColor: '#a78bfa',
-      badge: 'Multivariable',
-      desc: 'Correlación de Ventas vs Egresos vs Utilidad Neta vs Flujo de Caja.',
+      desc: 'Flujo de efectivo real resultante de Ingresos Totales menos Egresos Totales.',
     },
   }[activeMetric];
 
-  // Helper to export CSV
   const handleExportCSV = () => {
-    const headers = ['Periodo,Ventas,Otros_Ingresos,Ingresos_Totales,Compras,Nomina,Gastos_Operativos,Impuestos_MH,Egresos_Totales,Utilidad_Bruta,Utilidad_Operativa,Utilidad_Neta,Flujo_Neto,Margen_Neto_Pct'];
-    const rows = currentDataset.map((d) =>
-      `"${d.label}",${d.ventas},${d.otrosIngresos},${d.ingresosTotales},${d.compras},${d.nomina},${d.gastosOperativos},${d.impuestosMH},${d.egresosTotales},${d.utilidadBruta},${d.utilidadOperativa},${d.utilidadNeta},${d.flujoNeto},${d.margenNetoPct}%`
+    const headers = [
+      'Periodo,Ventas,Otros_Ingresos,Ingresos_Totales,Compras,Nomina,Gastos_Operativos,Impuestos_MH,Egresos_Totales,Utilidad_Bruta,Utilidad_Operativa,Utilidad_Neta,Flujo_Neto,Margen_Neto_Pct',
+    ];
+    const rows = currentDataset.map(
+      (d) =>
+        `"${d.label}",${d.ventas},${d.otrosIngresos},${d.ingresosTotales},${d.compras},${d.nomina},${d.gastosOperativos},${d.impuestosMH},${d.egresosTotales},${d.utilidadBruta},${d.utilidadOperativa},${d.utilidadNeta},${d.flujoNeto},${d.margenNetoPct}%`
     );
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers, ...rows].join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `historico_financiero_${granularity}_${Date.now()}.csv`);
+    link.setAttribute('download', `analitica_financiera_${granularity}_${Date.now()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -645,1201 +524,582 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
       const pKey = state.activePayload[0]?.payload?.periodKey;
       if (typeof pKey === 'string' && pKey.includes('-')) {
         const parts = pKey.split('-');
-        if (parts[1]) setSelectedMasterMonth(parts[1]);
+        if (parts[1]) handleMonthChange(parts[1]);
       }
     }
   };
 
+  const selectedMonthInfo = MONTHS_CATALOG.find((m) => m.key === selectedMasterMonth);
+
   return (
-    <div className="space-y-6">
-      {/* ---------------------------------------------------- */}
-      {/* MASTER HISTORICAL CONSOLE (CONSOLA HISTÓRICA CONMUTABLE) */}
-      {/* ---------------------------------------------------- */}
-      <div className="p-6 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl space-y-6 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
-
-        {/* Top Header: Title, Scope & Temporal Granularity Toggle (Meses vs Años) */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="px-2.5 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 text-[11px] font-extrabold">
-                {metricConfig.badge}
-              </span>
-              <span className="text-xs text-slate-400 font-medium">
-                • {selectedBranchName}
-              </span>
-            </div>
-            <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-indigo-600" />
-              <span>Analítica Histórica Financiera Dinámica</span>
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {metricConfig.desc}
-            </p>
+    <div className="rounded-3xl bg-white dark:bg-slate-900 border border-emerald-100 dark:border-slate-800 p-6 sm:p-7 shadow-xs space-y-6 relative overflow-hidden">
+      {/* Top Header: Title, Scope & Temporal Granularity Toggle */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 text-[11px] font-extrabold">
+              {metricConfig.badge}
+            </span>
+            <span className="text-xs text-slate-400 font-medium">• {selectedBranchName}</span>
           </div>
+          <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-emerald-600" />
+            <span>{metricConfig.name}</span>
+          </h2>
+          <p className="text-xs text-slate-500 mt-0.5">{metricConfig.desc}</p>
+        </div>
 
-          {/* Controls: Granularity [Meses | Años] + Year Picker (when Meses) + Chart Visualizer [Área | Barras | Líneas] */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            {/* BOTÓN CONMUTADOR DE MESES Y AÑOS */}
-            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-inner">
-              <button
-                onClick={() => setGranularity('meses')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${
-                  granularity === 'meses'
-                    ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                }`}
-                title="Ver desglose mes a mes del ejercicio fiscal"
-              >
-                <Calendar className="w-3.5 h-3.5" />
-                <span>Meses</span>
-              </button>
-              <button
-                onClick={() => setGranularity('anos')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${
-                  granularity === 'anos'
-                    ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                }`}
-                title="Ver consolidado multianual de toda la base de datos"
-              >
-                <Layers className="w-3.5 h-3.5" />
-                <span>Años</span>
-              </button>
-            </div>
-
-            {/* SELECTOR DE AÑO Y MES DINÁMICO (CUANDO SELECCIONA MESES) */}
-            {granularity === 'meses' && (
-              <div className="flex flex-wrap items-center gap-2">
-                {/* Selector de Año */}
-                <div className="flex items-center gap-1.5 bg-indigo-50/80 dark:bg-indigo-950/40 p-1 rounded-2xl border border-indigo-200 dark:border-indigo-800">
-                  <span className="text-[11px] font-bold text-indigo-900 dark:text-indigo-300 pl-2">
-                    Año:
-                  </span>
-                  <div className="flex items-center gap-1">
-                    {availableYears.map((yr) => (
-                      <button
-                        key={yr}
-                        onClick={() => setSelectedMasterYear(yr)}
-                        className={`px-2 py-1 text-[11px] font-black rounded-xl transition cursor-pointer ${
-                          selectedMasterYear === yr
-                            ? 'bg-indigo-600 text-white shadow-xs'
-                            : 'text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60'
-                        }`}
-                        title={`Ver datos del año fiscal ${yr}`}
-                      >
-                        {yr}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* NUEVO: Selector Desplegable de Mes */}
-                <div className="flex items-center gap-1.5 bg-indigo-50/80 dark:bg-indigo-950/40 p-1 rounded-2xl border border-indigo-200 dark:border-indigo-800">
-                  <span className="text-[11px] font-bold text-indigo-900 dark:text-indigo-300 pl-2">
-                    Mes:
-                  </span>
-                  <select
-                    value={selectedMasterMonth}
-                    onChange={(e) => setSelectedMasterMonth(e.target.value)}
-                    className="bg-white dark:bg-slate-800 text-indigo-900 dark:text-indigo-200 text-xs font-bold rounded-xl px-2.5 py-1 border border-indigo-300 dark:border-indigo-700 outline-none cursor-pointer"
-                  >
-                    {MONTHS_CATALOG.map((m) => (
-                      <option key={m.key} value={m.key}>
-                        {m.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )}
-
-            {/* Visualizer Type */}
-            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700">
-              <button
-                onClick={() => setChartType('area')}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                  chartType === 'area'
-                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
-                    : 'text-slate-400 hover:text-slate-700'
-                }`}
-                title="Área"
-              >
-                Área
-              </button>
-              <button
-                onClick={() => setChartType('bars')}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                  chartType === 'bars'
-                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
-                    : 'text-slate-400 hover:text-slate-700'
-                }`}
-                title="Barras"
-              >
-                Barras
-              </button>
-              <button
-                onClick={() => setChartType('lines')}
-                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                  chartType === 'lines'
-                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
-                    : 'text-slate-400 hover:text-slate-700'
-                }`}
-                title="Líneas"
-              >
-                Líneas
-              </button>
-            </div>
-
-            {/* Actions: Table & Export */}
+        {/* Controls: Granularity [12 Meses | 5 Años] + Chart Visualizer [Barras | Líneas | Áreas] + Table toggle */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* BOTÓN CONMUTADOR DE MESES Y AÑOS */}
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700">
             <button
-              onClick={() => setShowTable(!showTable)}
-              className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+              onClick={() => setInternalGranularity('meses')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                granularity === 'meses'
+                  ? 'bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-300 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title="Ver desglose mes a mes del año seleccionado"
             >
-              <Eye className="w-3.5 h-3.5" />
-              <span>{showTable ? 'Ocultar Tabla' : 'Ver Tabla'}</span>
+              <Calendar className="w-3.5 h-3.5" />
+              <span>12 Meses ({selectedMasterYear})</span>
             </button>
-
             <button
-              onClick={handleExportCSV}
-              className="px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 text-xs font-bold flex items-center gap-1.5 border border-indigo-200 dark:border-indigo-800 transition cursor-pointer"
-              title="Descargar datos en CSV"
+              onClick={() => setInternalGranularity('anos')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                granularity === 'anos'
+                  ? 'bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-300 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title="Ver histórico multianual 2022 - 2026"
             >
-              <Download className="w-3.5 h-3.5" />
-              <span>CSV</span>
+              <Layers className="w-3.5 h-3.5" />
+              <span>Histórico 5 Años</span>
             </button>
           </div>
-        </div>
 
-        {/* BARRA DE PÍLDORAS RÁPIDAS DE MESES (CUANDO GRANULARIDAD ES MESES) */}
-        {granularity === 'meses' && (
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 shrink-0">
-              <Calendar className="w-4 h-4 text-indigo-600" />
-              <span>Filtrar Mes ({selectedMasterYear}):</span>
-            </div>
-
-            {/* Píldoras con botones para cada mes */}
-            <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 scrollbar-thin">
-              {MONTHS_CATALOG.map((m) => {
-                const isSelected = selectedMasterMonth === m.key;
-                return (
-                  <button
-                    key={m.key}
-                    onClick={() => setSelectedMasterMonth(m.key)}
-                    className={`px-2.5 py-1 text-xs rounded-xl font-bold transition whitespace-nowrap cursor-pointer shrink-0 ${
-                      isSelected
-                        ? 'bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-500/20'
-                        : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-slate-600 border border-slate-200 dark:border-slate-600'
-                    }`}
-                  >
-                    {m.short === 'Todos' ? '🗓️ Todos (12 Meses)' : m.short}
-                  </button>
-                );
-              })}
-            </div>
+          {/* SELECTOR DE TIPO DE GRÁFICO */}
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700">
+            <button
+              onClick={() => setChartType('bars')}
+              className={`p-1.5 rounded-xl transition cursor-pointer ${
+                chartType === 'bars'
+                  ? 'bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-300 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title="Gráfico de Barras"
+            >
+              <BarChart3 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setChartType('lines')}
+              className={`p-1.5 rounded-xl transition cursor-pointer ${
+                chartType === 'lines'
+                  ? 'bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-300 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title="Gráfico de Líneas"
+            >
+              <LineIcon className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setChartType('area')}
+              className={`p-1.5 rounded-xl transition cursor-pointer ${
+                chartType === 'area'
+                  ? 'bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-300 shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title="Gráfico de Áreas"
+            >
+              <PieIcon className="w-4 h-4" />
+            </button>
           </div>
-        )}
 
-        {/* SPOTLIGHT BANNER: RESUMEN EJECUTIVO CUANDO SE ELIGE UN MES ESPECÍFICO (EJ: AGOSTO 2026) */}
-        {selectedMonthSummary && (
-          <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-50 via-indigo-50/70 to-slate-50 dark:from-indigo-950/50 dark:via-indigo-900/30 dark:to-slate-800/60 border border-indigo-200 dark:border-indigo-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex flex-col items-center justify-center font-black text-xs shrink-0 shadow-sm">
-                <span className="text-[10px] uppercase font-bold opacity-80">{selectedMonthSummary.year}</span>
-                <span className="text-sm uppercase tracking-wide">{selectedMonthSummary.monthShort}</span>
-              </div>
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-black text-slate-900 dark:text-white">
-                    📍 Análisis Detallado: {selectedMonthSummary.monthName} {selectedMonthSummary.year}
-                  </span>
-                  <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 font-extrabold">
-                    Vista Semanal & Quincenal Activa
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  La gráfica a continuación desglosa las 4 semanas, corte de anticipo/quincena (Día 15) y cierre fiscal MH F-07.
-                </p>
-              </div>
-            </div>
-
-            {/* Quick Metrics of Selected Month */}
-            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-between md:justify-end">
-              <div className="text-right">
-                <span className="text-[10px] text-slate-400 font-bold uppercase block">Ventas de {selectedMonthSummary.monthShort}</span>
-                <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm">
-                  {formatCurrencyUSD(selectedMonthSummary.ventas)}
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-[10px] text-slate-400 font-bold uppercase block">Utilidad Neta</span>
-                <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 text-sm">
-                  {formatCurrencyUSD(selectedMonthSummary.utilidadNeta)} ({selectedMonthSummary.margenNetoPct}%)
-                </span>
-              </div>
-              <button
-                onClick={() => setSelectedMasterMonth('all')}
-                className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-indigo-700 dark:text-indigo-300 text-xs font-bold border border-indigo-200 dark:border-indigo-700 shadow-xs transition cursor-pointer shrink-0"
-              >
-                ✕ Volver a 12 Meses
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* METRIC TABS: Ventas Totales, Egresos Totales, Utilidad Neta Final, Flujo Neto de Caja, Comparativa */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-          {/* Tab 1: Ventas Totales */}
+          {/* TOGGLE TABLA & EXPORT */}
           <button
-            onClick={() => setActiveMetric('ventas')}
-            className={`p-3 rounded-2xl text-left border transition cursor-pointer flex flex-col justify-between ${
-              activeMetric === 'ventas'
-                ? 'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-500 ring-2 ring-emerald-500/20 shadow-sm'
-                : 'bg-slate-50/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 hover:border-emerald-300'
+            onClick={() => setShowTable(!showTable)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer flex items-center gap-1.5 ${
+              showTable
+                ? 'bg-emerald-50 dark:bg-emerald-950 border-emerald-300 text-emerald-700 dark:text-emerald-300'
+                : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
             }`}
           >
-            <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400">
-              <span>1. Ventas Totales</span>
-              <DollarSign className={`w-3.5 h-3.5 ${activeMetric === 'ventas' ? 'text-emerald-600' : 'text-slate-400'}`} />
-            </div>
-            <div className="mt-2 font-mono font-black text-sm text-slate-900 dark:text-white">
-              {formatCurrencyUSD(currentDataset.reduce((sum, d) => sum + d.ventas, 0))}
-            </div>
-            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">
-              {granularity === 'meses' ? '12 Meses' : 'Multi-Anual'}
-            </span>
+            <Eye className="w-3.5 h-3.5" />
+            <span>{showTable ? 'Ocultar Tabla' : 'Ver Tabla'}</span>
           </button>
 
-          {/* Tab 2: Egresos & Costos Totales */}
           <button
-            onClick={() => setActiveMetric('egresos')}
-            className={`p-3 rounded-2xl text-left border transition cursor-pointer flex flex-col justify-between ${
-              activeMetric === 'egresos'
-                ? 'bg-rose-50/80 dark:bg-rose-950/40 border-rose-500 ring-2 ring-rose-500/20 shadow-sm'
-                : 'bg-slate-50/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 hover:border-rose-300'
-            }`}
+            onClick={handleExportCSV}
+            className="p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 text-slate-600 dark:text-slate-300 transition cursor-pointer"
+            title="Exportar datos a CSV"
           >
-            <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400">
-              <span>2. Egresos Totales</span>
-              <ArrowDownRight className={`w-3.5 h-3.5 ${activeMetric === 'egresos' ? 'text-rose-600' : 'text-slate-400'}`} />
-            </div>
-            <div className="mt-2 font-mono font-black text-sm text-slate-900 dark:text-white">
-              {formatCurrencyUSD(currentDataset.reduce((sum, d) => sum + d.egresosTotales, 0))}
-            </div>
-            <span className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold mt-0.5">
-              Compras + Nómina + MH
-            </span>
-          </button>
-
-          {/* Tab 3: Utilidad Neta Final */}
-          <button
-            onClick={() => setActiveMetric('utilidad_neta')}
-            className={`p-3 rounded-2xl text-left border transition cursor-pointer flex flex-col justify-between ${
-              activeMetric === 'utilidad_neta'
-                ? 'bg-indigo-50/80 dark:bg-indigo-950/40 border-indigo-500 ring-2 ring-indigo-500/20 shadow-sm'
-                : 'bg-slate-50/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 hover:border-indigo-300'
-            }`}
-          >
-            <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400">
-              <span>3. Utilidad Neta Final</span>
-              <Sparkles className={`w-3.5 h-3.5 ${activeMetric === 'utilidad_neta' ? 'text-indigo-600' : 'text-slate-400'}`} />
-            </div>
-            <div className="mt-2 font-mono font-black text-sm text-indigo-600 dark:text-indigo-400">
-              {formatCurrencyUSD(currentDataset.reduce((sum, d) => sum + d.utilidadNeta, 0))}
-            </div>
-            <span className="text-[10px] text-slate-500 font-semibold mt-0.5">
-              Ganancia Post-Todo
-            </span>
-          </button>
-
-          {/* Tab 4: Flujo Neto de Caja */}
-          <button
-            onClick={() => setActiveMetric('flujo_neto')}
-            className={`p-3 rounded-2xl text-left border transition cursor-pointer flex flex-col justify-between ${
-              activeMetric === 'flujo_neto'
-                ? 'bg-cyan-50/80 dark:bg-cyan-950/40 border-cyan-500 ring-2 ring-cyan-500/20 shadow-sm'
-                : 'bg-slate-50/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 hover:border-cyan-300'
-            }`}
-          >
-            <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400">
-              <span>4. Flujo Neto Caja</span>
-              <RefreshCw className={`w-3.5 h-3.5 ${activeMetric === 'flujo_neto' ? 'text-cyan-600' : 'text-slate-400'}`} />
-            </div>
-            <div className="mt-2 font-mono font-black text-sm text-cyan-600 dark:text-cyan-400">
-              {formatCurrencyUSD(currentDataset.reduce((sum, d) => sum + d.flujoNeto, 0))}
-            </div>
-            <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-semibold mt-0.5">
-              Ingresos - Egresos
-            </span>
-          </button>
-
-          {/* Tab 5: Comparativa Global */}
-          <button
-            onClick={() => setActiveMetric('comparativa')}
-            className={`col-span-2 sm:col-span-1 p-3 rounded-2xl text-left border transition cursor-pointer flex flex-col justify-between ${
-              activeMetric === 'comparativa'
-                ? 'bg-purple-50/80 dark:bg-purple-950/40 border-purple-500 ring-2 ring-purple-500/20 shadow-sm'
-                : 'bg-slate-50/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 hover:border-purple-300'
-            }`}
-          >
-            <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400">
-              <span>5. Comparativa Global</span>
-              <Scale className={`w-3.5 h-3.5 ${activeMetric === 'comparativa' ? 'text-purple-600' : 'text-slate-400'}`} />
-            </div>
-            <div className="mt-2 font-mono font-black text-sm text-purple-600 dark:text-purple-400">
-              4 Variables
-            </div>
-            <span className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold mt-0.5">
-              Vista Integrada
-            </span>
+            <Download className="w-4 h-4" />
           </button>
         </div>
+      </div>
 
-        {/* Micro-KPI Highlights for Active Metric */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-xs">
-          <div>
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-              Total en el Período ({granularity === 'meses' ? '12 Meses' : 'Años'})
-            </span>
-            <span className="font-mono font-bold text-slate-900 dark:text-white text-sm">
-              {formatCurrencyUSD(metricStats.total)}
-            </span>
-          </div>
+      {/* METRIC SELECTION PILLS (LAS 4 VARIABLES) */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-bold text-slate-400 mr-1">Variable del Gráfico:</span>
 
-          <div>
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-              Promedio ({granularity === 'meses' ? 'Mensual' : 'Anual'})
-            </span>
-            <span className="font-mono font-bold text-slate-900 dark:text-white text-sm">
-              {formatCurrencyUSD(metricStats.avg)}
-            </span>
-          </div>
+        <button
+          onClick={() => setActiveMetric('comparativa')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+            activeMetric === 'comparativa'
+              ? 'bg-emerald-600 text-white shadow-xs'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>Comparativa Integral (4 Variables)</span>
+        </button>
 
-          <div>
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-              Pico Máximo ({metricStats.maxLabel})
-            </span>
-            <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm">
-              {formatCurrencyUSD(metricStats.maxVal)}
-            </span>
-          </div>
+        <button
+          onClick={() => setActiveMetric('ventas')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+            activeMetric === 'ventas'
+              ? 'bg-emerald-600 text-white shadow-xs'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+          }`}
+        >
+          <DollarSign className="w-3.5 h-3.5" />
+          <span>Solo Ventas</span>
+        </button>
 
-          <div>
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-              Tendencia / Crecimiento
-            </span>
-            <span className={`font-mono font-bold text-sm flex items-center gap-1 ${metricStats.growthPct >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}`}>
-              {metricStats.growthPct >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-              {metricStats.growthPct > 0 ? `+${metricStats.growthPct.toFixed(1)}%` : `${metricStats.growthPct.toFixed(1)}%`}
-            </span>
-          </div>
+        <button
+          onClick={() => setActiveMetric('egresos')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+            activeMetric === 'egresos'
+              ? 'bg-rose-600 text-white shadow-xs'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+          }`}
+        >
+          <Scale className="w-3.5 h-3.5" />
+          <span>Solo Egresos Totales</span>
+        </button>
+
+        <button
+          onClick={() => setActiveMetric('utilidad_neta')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+            activeMetric === 'utilidad_neta'
+              ? 'bg-teal-700 text-white shadow-xs'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+          }`}
+        >
+          <TrendingUp className="w-3.5 h-3.5" />
+          <span>Solo Utilidad Neta</span>
+        </button>
+
+        <button
+          onClick={() => setActiveMetric('flujo_neto')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+            activeMetric === 'flujo_neto'
+              ? 'bg-sky-600 text-white shadow-xs'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+          }`}
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+          <span>Solo Flujo Neto</span>
+        </button>
+      </div>
+
+      {/* STATS SUMMARY BAR */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-2xl bg-emerald-50/50 dark:bg-slate-800/50 border border-emerald-100 dark:border-slate-800 text-xs">
+        <div>
+          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+            Total en el Período ({granularity === 'meses' ? '12 Meses' : 'Años'})
+          </span>
+          <span className="font-mono font-bold text-slate-900 dark:text-white text-sm">
+            {formatCurrencyUSD(metricStats.total)}
+          </span>
         </div>
 
-        {/* MAIN RECHARTS GRAPH */}
-        <div className="h-80 w-full pt-2">
-          <ResponsiveContainer width="100%" height="100%">
-            {activeMetric === 'comparativa' ? (
-              chartType === 'bars' ? (
-                <BarChart 
-                  data={currentDataset} 
-                  margin={{ top: 10, right: 10, left: -10, bottom: granularity === 'meses' && selectedMasterMonth === 'all' ? 10 : 0 }}
-                  onClick={handleChartDrilldown}
-                  className={granularity === 'meses' && selectedMasterMonth === 'all' ? 'cursor-pointer' : ''}
-                >
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                  <XAxis 
-                    dataKey="shortLabel" 
-                    tick={{ fontSize: 10 }} 
-                    interval={0}
-                    angle={granularity === 'meses' && selectedMasterMonth === 'all' ? -25 : 0}
-                    textAnchor={granularity === 'meses' && selectedMasterMonth === 'all' ? 'end' : 'middle'}
-                    height={granularity === 'meses' && selectedMasterMonth === 'all' ? 45 : 30}
-                  />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip 
-                    formatter={(v: any, name: any) => [`$${Number(v).toLocaleString()}`, name || 'Total']} 
-                    labelFormatter={(label: any) => {
-                      if (granularity === 'meses') {
-                        return selectedMasterMonth === 'all'
-                          ? `Par Ordenado • Mes: ${label} (${selectedMasterYear})`
-                          : `Par Ordenado • Desglose: ${label} • ${selectedMonthSummary?.monthName || ''} ${selectedMasterYear}`;
-                      }
-                      return `Par Ordenado • Año: ${label}`;
-                    }}
-                  />
-                  <Legend verticalAlign="top" height={36} />
-                  <Bar dataKey="ventas" name="Ventas Facturadas" fill="#10b981" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="egresosTotales" name="Egresos Totales" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="utilidadNeta" name="Utilidad Neta Final" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="flujoNeto" name="Flujo Neto Caja" fill="#06b6d4" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              ) : chartType === 'lines' ? (
-                <LineChart 
-                  data={currentDataset} 
-                  margin={{ top: 10, right: 10, left: -10, bottom: granularity === 'meses' && selectedMasterMonth === 'all' ? 10 : 0 }}
-                  onClick={handleChartDrilldown}
-                  className={granularity === 'meses' && selectedMasterMonth === 'all' ? 'cursor-pointer' : ''}
-                >
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                  <XAxis 
-                    dataKey="shortLabel" 
-                    tick={{ fontSize: 10 }} 
-                    interval={0}
-                    angle={granularity === 'meses' && selectedMasterMonth === 'all' ? -25 : 0}
-                    textAnchor={granularity === 'meses' && selectedMasterMonth === 'all' ? 'end' : 'middle'}
-                    height={granularity === 'meses' && selectedMasterMonth === 'all' ? 45 : 30}
-                  />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip 
-                    formatter={(v: any, name: any) => [`$${Number(v).toLocaleString()}`, name || 'Total']} 
-                    labelFormatter={(label: any) => {
-                      if (granularity === 'meses') {
-                        return selectedMasterMonth === 'all'
-                          ? `Par Ordenado • Mes: ${label} (${selectedMasterYear})`
-                          : `Par Ordenado • Desglose: ${label} • ${selectedMonthSummary?.monthName || ''} ${selectedMasterYear}`;
-                      }
-                      return `Par Ordenado • Año: ${label}`;
-                    }}
-                  />
-                  <Legend verticalAlign="top" height={36} />
-                  <Line type="monotone" dataKey="ventas" name="Ventas Facturadas" stroke="#10b981" strokeWidth={3} dot={{ r: 4 }} />
-                  <Line type="monotone" dataKey="egresosTotales" name="Egresos Totales" stroke="#ef4444" strokeWidth={3} dot={{ r: 4 }} />
-                  <Line type="monotone" dataKey="utilidadNeta" name="Utilidad Neta Final" stroke="#6366f1" strokeWidth={3} dot={{ r: 4 }} />
-                  <Line type="monotone" dataKey="flujoNeto" name="Flujo Neto Caja" stroke="#06b6d4" strokeWidth={2} strokeDasharray="4 4" dot={{ r: 3 }} />
-                </LineChart>
-              ) : (
-                <AreaChart 
-                  data={currentDataset} 
-                  margin={{ top: 10, right: 10, left: -10, bottom: granularity === 'meses' && selectedMasterMonth === 'all' ? 10 : 0 }}
-                  onClick={handleChartDrilldown}
-                  className={granularity === 'meses' && selectedMasterMonth === 'all' ? 'cursor-pointer' : ''}
-                >
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                  <XAxis 
-                    dataKey="shortLabel" 
-                    tick={{ fontSize: 10 }} 
-                    interval={0}
-                    angle={granularity === 'meses' && selectedMasterMonth === 'all' ? -25 : 0}
-                    textAnchor={granularity === 'meses' && selectedMasterMonth === 'all' ? 'end' : 'middle'}
-                    height={granularity === 'meses' && selectedMasterMonth === 'all' ? 45 : 30}
-                  />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip 
-                    formatter={(v: any, name: any) => [`$${Number(v).toLocaleString()}`, name || 'Total']} 
-                    labelFormatter={(label: any) => {
-                      if (granularity === 'meses') {
-                        return selectedMasterMonth === 'all'
-                          ? `Par Ordenado • Mes: ${label} (${selectedMasterYear})`
-                          : `Par Ordenado • Desglose: ${label} • ${selectedMonthSummary?.monthName || ''} ${selectedMasterYear}`;
-                      }
-                      return `Par Ordenado • Año: ${label}`;
-                    }}
-                  />
-                  <Legend verticalAlign="top" height={36} />
-                  <Area type="monotone" dataKey="ventas" name="Ventas" stroke="#10b981" fill="#10b981" fillOpacity={0.2} />
-                  <Area type="monotone" dataKey="egresosTotales" name="Egresos" stroke="#ef4444" fill="#ef4444" fillOpacity={0.15} />
-                  <Area type="monotone" dataKey="utilidadNeta" name="Utilidad Neta" stroke="#6366f1" fill="#6366f1" fillOpacity={0.25} />
-                  <Area type="monotone" dataKey="flujoNeto" name="Flujo Neto" stroke="#06b6d4" fill="#06b6d4" fillOpacity={0.15} />
-                </AreaChart>
-              )
-            ) : chartType === 'bars' ? (
-              <BarChart 
-                data={currentDataset} 
+        <div>
+          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+            Promedio ({granularity === 'meses' ? 'Mensual' : 'Anual'})
+          </span>
+          <span className="font-mono font-bold text-slate-900 dark:text-white text-sm">
+            {formatCurrencyUSD(metricStats.avg)}
+          </span>
+        </div>
+
+        <div>
+          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+            Pico Máximo ({metricStats.maxLabel})
+          </span>
+          <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm">
+            {formatCurrencyUSD(metricStats.maxVal)}
+          </span>
+        </div>
+
+        <div>
+          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+            Tendencia / Crecimiento
+          </span>
+          <span
+            className={`font-mono font-bold text-sm flex items-center gap-1 ${
+              metricStats.growthPct >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'
+            }`}
+          >
+            {metricStats.growthPct >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+            {metricStats.growthPct > 0 ? `+${metricStats.growthPct.toFixed(1)}%` : `${metricStats.growthPct.toFixed(1)}%`}
+          </span>
+        </div>
+      </div>
+
+      {/* MAIN RECHARTS GRAPH */}
+      <div className="h-80 w-full pt-2">
+        <ResponsiveContainer width="100%" height="100%">
+          {activeMetric === 'comparativa' ? (
+            chartType === 'bars' ? (
+              <BarChart
+                data={currentDataset}
                 margin={{ top: 10, right: 10, left: -10, bottom: granularity === 'meses' && selectedMasterMonth === 'all' ? 10 : 0 }}
                 onClick={handleChartDrilldown}
                 className={granularity === 'meses' && selectedMasterMonth === 'all' ? 'cursor-pointer' : ''}
               >
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis 
-                  dataKey="shortLabel" 
-                  tick={{ fontSize: 10 }} 
+                <XAxis
+                  dataKey="shortLabel"
+                  tick={{ fontSize: 10 }}
                   interval={0}
                   angle={granularity === 'meses' && selectedMasterMonth === 'all' ? -25 : 0}
                   textAnchor={granularity === 'meses' && selectedMasterMonth === 'all' ? 'end' : 'middle'}
                   height={granularity === 'meses' && selectedMasterMonth === 'all' ? 45 : 30}
                 />
                 <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip 
-                  formatter={(v: any) => [`$${Number(v).toLocaleString()}`, metricConfig.name]} 
+                <Tooltip
+                  formatter={(v: any, name: any) => [`$${Number(v).toLocaleString()}`, name || 'Total']}
                   labelFormatter={(label: any) => {
                     if (granularity === 'meses') {
                       return selectedMasterMonth === 'all'
-                        ? `Par Ordenado • Mes: ${label} (${selectedMasterYear})`
-                        : `Par Ordenado • Desglose: ${label} • ${selectedMonthSummary?.monthName || ''} ${selectedMasterYear}`;
+                        ? `Mes: ${label} (${selectedMasterYear})`
+                        : `Desglose: ${label} • ${selectedMonthInfo?.name || ''} ${selectedMasterYear}`;
                     }
-                    return `Par Ordenado • Año: ${label}`;
+                    return `Año: ${label}`;
                   }}
                 />
-                <ReferenceLine y={0} stroke="#94a3b8" />
-                <Bar
-                  dataKey={
-                    activeMetric === 'ventas'
-                      ? 'ventas'
-                      : activeMetric === 'egresos'
-                      ? 'egresosTotales'
-                      : activeMetric === 'utilidad_neta'
-                      ? 'utilidadNeta'
-                      : 'flujoNeto'
-                  }
-                  name={metricConfig.name}
-                  fill={metricConfig.color}
-                  radius={[6, 6, 0, 0]}
-                />
+                <Legend verticalAlign="top" height={36} />
+                <Bar dataKey="ventas" name="1. Ventas Facturadas" fill="#10b981" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="egresosTotales" name="2. Egresos Totales" fill="#f43f5e" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="utilidadNeta" name="3. Utilidad Neta Final" fill="#2f855f" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="flujoNeto" name="4. Flujo Neto de Caja" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
               </BarChart>
             ) : chartType === 'lines' ? (
-              <LineChart 
-                data={currentDataset} 
+              <LineChart
+                data={currentDataset}
                 margin={{ top: 10, right: 10, left: -10, bottom: granularity === 'meses' && selectedMasterMonth === 'all' ? 10 : 0 }}
                 onClick={handleChartDrilldown}
                 className={granularity === 'meses' && selectedMasterMonth === 'all' ? 'cursor-pointer' : ''}
               >
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis 
-                  dataKey="shortLabel" 
-                  tick={{ fontSize: 10 }} 
+                <XAxis
+                  dataKey="shortLabel"
+                  tick={{ fontSize: 10 }}
                   interval={0}
                   angle={granularity === 'meses' && selectedMasterMonth === 'all' ? -25 : 0}
                   textAnchor={granularity === 'meses' && selectedMasterMonth === 'all' ? 'end' : 'middle'}
                   height={granularity === 'meses' && selectedMasterMonth === 'all' ? 45 : 30}
                 />
                 <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip 
-                  formatter={(v: any) => [`$${Number(v).toLocaleString()}`, metricConfig.name]} 
+                <Tooltip
+                  formatter={(v: any, name: any) => [`$${Number(v).toLocaleString()}`, name || 'Total']}
                   labelFormatter={(label: any) => {
                     if (granularity === 'meses') {
                       return selectedMasterMonth === 'all'
-                        ? `Par Ordenado • Mes: ${label} (${selectedMasterYear})`
-                        : `Par Ordenado • Desglose: ${label} • ${selectedMonthSummary?.monthName || ''} ${selectedMasterYear}`;
+                        ? `Mes: ${label} (${selectedMasterYear})`
+                        : `Desglose: ${label} • ${selectedMonthInfo?.name || ''} ${selectedMasterYear}`;
                     }
-                    return `Par Ordenado • Año: ${label}`;
+                    return `Año: ${label}`;
                   }}
                 />
-                <ReferenceLine y={0} stroke="#94a3b8" />
+                <Legend verticalAlign="top" height={36} />
+                <Line type="monotone" dataKey="ventas" name="1. Ventas Facturadas" stroke="#10b981" strokeWidth={3} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="egresosTotales" name="2. Egresos Totales" stroke="#f43f5e" strokeWidth={3} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="utilidadNeta" name="3. Utilidad Neta Final" stroke="#2f855f" strokeWidth={3} dot={{ r: 4 }} />
                 <Line
                   type="monotone"
-                  dataKey={
-                    activeMetric === 'ventas'
-                      ? 'ventas'
-                      : activeMetric === 'egresos'
-                      ? 'egresosTotales'
-                      : activeMetric === 'utilidad_neta'
-                      ? 'utilidadNeta'
-                      : 'flujoNeto'
-                  }
-                  name={metricConfig.name}
-                  stroke={metricConfig.color}
-                  strokeWidth={3}
-                  dot={{ r: 5, fill: metricConfig.color }}
-                  activeDot={{ r: 8 }}
+                  dataKey="flujoNeto"
+                  name="4. Flujo Neto de Caja"
+                  stroke="#0ea5e9"
+                  strokeWidth={2}
+                  strokeDasharray="4 4"
+                  dot={{ r: 3 }}
                 />
               </LineChart>
             ) : (
-              <AreaChart 
-                data={currentDataset} 
+              <AreaChart
+                data={currentDataset}
                 margin={{ top: 10, right: 10, left: -10, bottom: granularity === 'meses' && selectedMasterMonth === 'all' ? 10 : 0 }}
                 onClick={handleChartDrilldown}
                 className={granularity === 'meses' && selectedMasterMonth === 'all' ? 'cursor-pointer' : ''}
               >
-                <defs>
-                  <linearGradient id="metricGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={metricConfig.color} stopOpacity={0.4} />
-                    <stop offset="95%" stopColor={metricConfig.color} stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis 
-                  dataKey="shortLabel" 
-                  tick={{ fontSize: 10 }} 
+                <XAxis
+                  dataKey="shortLabel"
+                  tick={{ fontSize: 10 }}
                   interval={0}
                   angle={granularity === 'meses' && selectedMasterMonth === 'all' ? -25 : 0}
                   textAnchor={granularity === 'meses' && selectedMasterMonth === 'all' ? 'end' : 'middle'}
                   height={granularity === 'meses' && selectedMasterMonth === 'all' ? 45 : 30}
                 />
                 <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip 
-                  formatter={(v: any) => [`$${Number(v).toLocaleString()}`, metricConfig.name]} 
+                <Tooltip
+                  formatter={(v: any, name: any) => [`$${Number(v).toLocaleString()}`, name || 'Total']}
                   labelFormatter={(label: any) => {
                     if (granularity === 'meses') {
                       return selectedMasterMonth === 'all'
-                        ? `Par Ordenado • Mes: ${label} (${selectedMasterYear})`
-                        : `Par Ordenado • Desglose: ${label} • ${selectedMonthSummary?.monthName || ''} ${selectedMasterYear}`;
+                        ? `Mes: ${label} (${selectedMasterYear})`
+                        : `Desglose: ${label} • ${selectedMonthInfo?.name || ''} ${selectedMasterYear}`;
                     }
-                    return `Par Ordenado • Año: ${label}`;
+                    return `Año: ${label}`;
                   }}
                 />
-                <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="3 3" />
-                <Area
-                  type="monotone"
-                  dataKey={
-                    activeMetric === 'ventas'
-                      ? 'ventas'
-                      : activeMetric === 'egresos'
-                      ? 'egresosTotales'
-                      : activeMetric === 'utilidad_neta'
-                      ? 'utilidadNeta'
-                      : 'flujoNeto'
+                <Legend verticalAlign="top" height={36} />
+                <Area type="monotone" dataKey="ventas" name="Ventas" stroke="#10b981" fill="#10b981" fillOpacity={0.2} />
+                <Area type="monotone" dataKey="egresosTotales" name="Egresos" stroke="#f43f5e" fill="#f43f5e" fillOpacity={0.15} />
+                <Area type="monotone" dataKey="utilidadNeta" name="Utilidad Neta" stroke="#2f855f" fill="#2f855f" fillOpacity={0.25} />
+                <Area type="monotone" dataKey="flujoNeto" name="Flujo Neto" stroke="#0ea5e9" fill="#0ea5e9" fillOpacity={0.15} />
+              </AreaChart>
+            )
+          ) : chartType === 'bars' ? (
+            <BarChart
+              data={currentDataset}
+              margin={{ top: 10, right: 10, left: -10, bottom: granularity === 'meses' && selectedMasterMonth === 'all' ? 10 : 0 }}
+              onClick={handleChartDrilldown}
+              className={granularity === 'meses' && selectedMasterMonth === 'all' ? 'cursor-pointer' : ''}
+            >
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+              <XAxis
+                dataKey="shortLabel"
+                tick={{ fontSize: 10 }}
+                interval={0}
+                angle={granularity === 'meses' && selectedMasterMonth === 'all' ? -25 : 0}
+                textAnchor={granularity === 'meses' && selectedMasterMonth === 'all' ? 'end' : 'middle'}
+                height={granularity === 'meses' && selectedMasterMonth === 'all' ? 45 : 30}
+              />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip
+                formatter={(v: any) => [`$${Number(v).toLocaleString()}`, metricConfig.name]}
+                labelFormatter={(label: any) => {
+                  if (granularity === 'meses') {
+                    return selectedMasterMonth === 'all'
+                      ? `Mes: ${label} (${selectedMasterYear})`
+                      : `Desglose: ${label} • ${selectedMonthInfo?.name || ''} ${selectedMasterYear}`;
                   }
-                  name={metricConfig.name}
-                  stroke={metricConfig.color}
-                  strokeWidth={3}
-                  fillOpacity={1}
-                  fill="url(#metricGradient)"
-                />
-              </AreaChart>
-            )}
-          </ResponsiveContainer>
-        </div>
+                  return `Año: ${label}`;
+                }}
+              />
+              <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="3 3" />
+              <Bar
+                dataKey={
+                  activeMetric === 'ventas'
+                    ? 'ventas'
+                    : activeMetric === 'egresos'
+                    ? 'egresosTotales'
+                    : activeMetric === 'utilidad_neta'
+                    ? 'utilidadNeta'
+                    : 'flujoNeto'
+                }
+                name={metricConfig.name}
+                fill={metricConfig.color}
+                radius={[4, 4, 0, 0]}
+              />
+            </BarChart>
+          ) : chartType === 'lines' ? (
+            <LineChart
+              data={currentDataset}
+              margin={{ top: 10, right: 10, left: -10, bottom: granularity === 'meses' && selectedMasterMonth === 'all' ? 10 : 0 }}
+              onClick={handleChartDrilldown}
+              className={granularity === 'meses' && selectedMasterMonth === 'all' ? 'cursor-pointer' : ''}
+            >
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+              <XAxis
+                dataKey="shortLabel"
+                tick={{ fontSize: 10 }}
+                interval={0}
+                angle={granularity === 'meses' && selectedMasterMonth === 'all' ? -25 : 0}
+                textAnchor={granularity === 'meses' && selectedMasterMonth === 'all' ? 'end' : 'middle'}
+                height={granularity === 'meses' && selectedMasterMonth === 'all' ? 45 : 30}
+              />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip
+                formatter={(v: any) => [`$${Number(v).toLocaleString()}`, metricConfig.name]}
+                labelFormatter={(label: any) => {
+                  if (granularity === 'meses') {
+                    return selectedMasterMonth === 'all'
+                      ? `Mes: ${label} (${selectedMasterYear})`
+                      : `Desglose: ${label} • ${selectedMonthInfo?.name || ''} ${selectedMasterYear}`;
+                  }
+                  return `Año: ${label}`;
+                }}
+              />
+              <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="3 3" />
+              <Line
+                type="monotone"
+                dataKey={
+                  activeMetric === 'ventas'
+                    ? 'ventas'
+                    : activeMetric === 'egresos'
+                    ? 'egresosTotales'
+                    : activeMetric === 'utilidad_neta'
+                    ? 'utilidadNeta'
+                    : 'flujoNeto'
+                }
+                name={metricConfig.name}
+                stroke={metricConfig.color}
+                strokeWidth={3}
+                dot={{ r: 5, fill: metricConfig.color }}
+                activeDot={{ r: 8 }}
+              />
+            </LineChart>
+          ) : (
+            <AreaChart
+              data={currentDataset}
+              margin={{ top: 10, right: 10, left: -10, bottom: granularity === 'meses' && selectedMasterMonth === 'all' ? 10 : 0 }}
+              onClick={handleChartDrilldown}
+              className={granularity === 'meses' && selectedMasterMonth === 'all' ? 'cursor-pointer' : ''}
+            >
+              <defs>
+                <linearGradient id="metricGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={metricConfig.color} stopOpacity={0.4} />
+                  <stop offset="95%" stopColor={metricConfig.color} stopOpacity={0.0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+              <XAxis
+                dataKey="shortLabel"
+                tick={{ fontSize: 10 }}
+                interval={0}
+                angle={granularity === 'meses' && selectedMasterMonth === 'all' ? -25 : 0}
+                textAnchor={granularity === 'meses' && selectedMasterMonth === 'all' ? 'end' : 'middle'}
+                height={granularity === 'meses' && selectedMasterMonth === 'all' ? 45 : 30}
+              />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip
+                formatter={(v: any) => [`$${Number(v).toLocaleString()}`, metricConfig.name]}
+                labelFormatter={(label: any) => {
+                  if (granularity === 'meses') {
+                    return selectedMasterMonth === 'all'
+                      ? `Mes: ${label} (${selectedMasterYear})`
+                      : `Desglose: ${label} • ${selectedMonthInfo?.name || ''} ${selectedMasterYear}`;
+                  }
+                  return `Año: ${label}`;
+                }}
+              />
+              <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="3 3" />
+              <Area
+                type="monotone"
+                dataKey={
+                  activeMetric === 'ventas'
+                    ? 'ventas'
+                    : activeMetric === 'egresos'
+                    ? 'egresosTotales'
+                    : activeMetric === 'utilidad_neta'
+                    ? 'utilidadNeta'
+                    : 'flujoNeto'
+                }
+                name={metricConfig.name}
+                stroke={metricConfig.color}
+                strokeWidth={3}
+                fillOpacity={1}
+                fill="url(#metricGradient)"
+              />
+            </AreaChart>
+          )}
+        </ResponsiveContainer>
+      </div>
 
-        {/* Sub-chart navigation helper note */}
-        {granularity === 'meses' && (
-          <div className="flex items-center justify-between text-xs text-slate-500 bg-slate-50 dark:bg-slate-800/60 px-3 py-2 rounded-xl border border-slate-200/60 dark:border-slate-800">
-            {selectedMasterMonth === 'all' ? (
+      {/* Sub-chart navigation helper note */}
+      {granularity === 'meses' && (
+        <div className="flex items-center justify-between text-xs text-slate-500 bg-emerald-50/40 dark:bg-slate-800/60 px-3.5 py-2.5 rounded-xl border border-emerald-100 dark:border-slate-800">
+          {selectedMasterMonth === 'all' ? (
+            <span>
+              💡 <strong>Interactivo:</strong> Haz clic en la barra de cualquier mes para ver su desglose semanal en {selectedMasterYear}.
+            </span>
+          ) : (
+            <span className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               <span>
-                💡 <strong>Navegación Interactiva:</strong> Haz clic en cualquier mes en la gráfica o usa las píldoras superiores para ver el desglose semanal detallado de ese mes específico en {selectedMasterYear}.
+                Visualizando desglose de <strong>{selectedMonthInfo?.name} {selectedMasterYear}</strong> (Semanas 1-4 y cortes quincenales).
               </span>
-            ) : (
-              <span className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>
-                  Visualizando desglose detallado de <strong>{selectedMonthSummary?.monthName} {selectedMasterYear}</strong> (Semana 1 a 4 y cortes quincenales).
-                </span>
-              </span>
-            )}
+            </span>
+          )}
 
-            {selectedMasterMonth !== 'all' && (
-              <button
-                onClick={() => setSelectedMasterMonth('all')}
-                className="text-indigo-600 dark:text-indigo-400 font-bold hover:underline cursor-pointer ml-2 shrink-0"
-              >
-                Volver a los 12 Meses
-              </button>
-            )}
+          {selectedMasterMonth !== 'all' && (
+            <button
+              onClick={() => handleMonthChange('all')}
+              className="text-emerald-700 dark:text-emerald-300 font-bold hover:underline cursor-pointer ml-2 shrink-0"
+            >
+              ⬅ Volver a los 12 Meses
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* DATA TABLE (TOGGLEABLE) */}
+      {showTable && (
+        <div className="pt-4 border-t border-slate-100 dark:border-slate-800 animate-fade-in space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+              Desglose Numérico por {granularity === 'meses' ? 'Mes' : 'Año'} (Dólares USD)
+            </h4>
+            <span className="text-[11px] text-slate-400">Total {currentDataset.length} períodos registrados</span>
           </div>
-        )}
 
-        {/* DATA TABLE (TOGGLEABLE) */}
-        {showTable && (
-          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 animate-fade-in space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                Desglose Detallado por {granularity === 'meses' ? 'Mes' : 'Año'} (Dólares USD)
-              </h4>
-              <span className="text-[11px] text-slate-400">
-                Total {currentDataset.length} períodos registrados
-              </span>
-            </div>
-
-            <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
-                    <th className="p-3">Período</th>
-                    <th className="p-3 text-right">Ventas Totales</th>
-                    <th className="p-3 text-right">Compras</th>
-                    <th className="p-3 text-right">Nómina + Cargas</th>
-                    <th className="p-3 text-right">Impuestos MH</th>
-                    <th className="p-3 text-right">Egresos Totales</th>
-                    <th className="p-3 text-right text-indigo-600 dark:text-indigo-400">Utilidad Neta Final</th>
-                    <th className="p-3 text-right text-cyan-600 dark:text-cyan-400">Flujo Neto</th>
-                    <th className="p-3 text-right">Margen Neto %</th>
+          <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 uppercase text-[10px] font-bold border-b border-slate-200 dark:border-slate-800">
+                <tr>
+                  <th className="p-3">Período</th>
+                  <th className="p-3 text-right">Ventas</th>
+                  <th className="p-3 text-right">Otros Ing.</th>
+                  <th className="p-3 text-right font-bold text-emerald-600">Ingresos Tot.</th>
+                  <th className="p-3 text-right">Compras</th>
+                  <th className="p-3 text-right">Planilla</th>
+                  <th className="p-3 text-right">Gastos Op.</th>
+                  <th className="p-3 text-right">Tributos MH</th>
+                  <th className="p-3 text-right font-bold text-rose-600">Egresos Tot.</th>
+                  <th className="p-3 text-right font-bold text-slate-800 dark:text-white">Utilidad Neta</th>
+                  <th className="p-3 text-right font-bold text-sky-600">Flujo Neto</th>
+                  <th className="p-3 text-right">Margen %</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {currentDataset.map((row) => (
+                  <tr key={row.periodKey} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
+                    <td className="p-3 font-semibold text-slate-900 dark:text-white">{row.label}</td>
+                    <td className="p-3 text-right font-mono">{formatCurrencyUSD(row.ventas)}</td>
+                    <td className="p-3 text-right font-mono text-slate-500">{formatCurrencyUSD(row.otrosIngresos)}</td>
+                    <td className="p-3 text-right font-mono font-bold text-emerald-600">{formatCurrencyUSD(row.ingresosTotales)}</td>
+                    <td className="p-3 text-right font-mono">{formatCurrencyUSD(row.compras)}</td>
+                    <td className="p-3 text-right font-mono">{formatCurrencyUSD(row.nomina)}</td>
+                    <td className="p-3 text-right font-mono">{formatCurrencyUSD(row.gastosOperativos)}</td>
+                    <td className="p-3 text-right font-mono text-slate-500">{formatCurrencyUSD(row.impuestosMH)}</td>
+                    <td className="p-3 text-right font-mono font-bold text-rose-600">{formatCurrencyUSD(row.egresosTotales)}</td>
+                    <td
+                      className={`p-3 text-right font-mono font-bold ${
+                        row.utilidadNeta >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'
+                      }`}
+                    >
+                      {formatCurrencyUSD(row.utilidadNeta)}
+                    </td>
+                    <td
+                      className={`p-3 text-right font-mono font-bold ${
+                        row.flujoNeto >= 0 ? 'text-sky-600 dark:text-sky-400' : 'text-rose-600'
+                      }`}
+                    >
+                      {formatCurrencyUSD(row.flujoNeto)}
+                    </td>
+                    <td className="p-3 text-right font-mono text-slate-500">{row.margenNetoPct.toFixed(1)}%</td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono">
-                  {currentDataset.map((d, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
-                      <td className="p-3 font-sans font-bold text-slate-900 dark:text-white">
-                        {d.label}
-                      </td>
-                      <td className="p-3 text-right font-bold text-emerald-600">
-                        {formatCurrencyUSD(d.ventas)}
-                      </td>
-                      <td className="p-3 text-right text-slate-600 dark:text-slate-300">
-                        {formatCurrencyUSD(d.compras)}
-                      </td>
-                      <td className="p-3 text-right text-slate-600 dark:text-slate-300">
-                        {formatCurrencyUSD(d.nomina)}
-                      </td>
-                      <td className="p-3 text-right text-slate-600 dark:text-slate-300">
-                        {formatCurrencyUSD(d.impuestosMH)}
-                      </td>
-                      <td className="p-3 text-right font-bold text-rose-600">
-                        {formatCurrencyUSD(d.egresosTotales)}
-                      </td>
-                      <td className={`p-3 text-right font-bold ${d.utilidadNeta >= 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-rose-600'}`}>
-                        {formatCurrencyUSD(d.utilidadNeta)}
-                      </td>
-                      <td className={`p-3 text-right font-bold ${d.flujoNeto >= 0 ? 'text-cyan-600 dark:text-cyan-400' : 'text-rose-600'}`}>
-                        {formatCurrencyUSD(d.flujoNeto)}
-                      </td>
-                      <td className="p-3 text-right font-sans font-bold">
-                        <span className={`px-2 py-0.5 rounded ${d.margenNetoPct >= 0 ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' : 'bg-rose-50 text-rose-700'}`}>
-                          {d.margenNetoPct}%
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ---------------------------------------------------- */}
-      {/* 4 MODULAR QUICK-TOGGLE CARDS (VISTAS RÁPIDAS EN CUADRÍCULA) */}
-      {/* ---------------------------------------------------- */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* GRÁFICA 1: VENTAS TOTALES (CON BOTÓN MESES / AÑOS Y SELECTOR DE AÑO) */}
-        <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <DollarSign className="w-4 h-4 text-emerald-600" />
-                <span>1. Ventas Totales Históricas</span>
-              </h3>
-              <p className="text-xs text-slate-500">
-                Evolución de facturación comercial y DTEs emitidos
-              </p>
-            </div>
-
-            {/* BOTÓN CONMUTADOR INDIVIDUAL MESES / AÑOS + AÑO + MES */}
-            <div className="flex flex-wrap items-center gap-1.5 self-start sm:self-auto">
-              {cardGranularityVentas === 'meses' && (
-                <>
-                  <select
-                    value={cardYearVentas}
-                    onChange={(e) => setCardYearVentas(Number(e.target.value))}
-                    className="bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-[11px] font-bold rounded-lg px-2 py-1 cursor-pointer focus:outline-none"
-                    title="Seleccionar Año"
-                  >
-                    {availableYears.map((yr) => (
-                      <option key={yr} value={yr}>
-                        {yr}
-                      </option>
-                    ))}
-                  </select>
-
-                  <select
-                    value={cardMonthVentas}
-                    onChange={(e) => setCardMonthVentas(e.target.value)}
-                    className="bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-[11px] font-bold rounded-lg px-2 py-1 cursor-pointer focus:outline-none"
-                    title="Seleccionar Mes o Año Completo"
-                  >
-                    {MONTHS_CATALOG.map((m) => (
-                      <option key={m.key} value={m.key}>
-                        {m.short === 'Todos' ? '12 Meses' : m.name}
-                      </option>
-                    ))}
-                  </select>
-                </>
-              )}
-
-              <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700">
-                <button
-                  onClick={() => setCardGranularityVentas('meses')}
-                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition cursor-pointer ${
-                    cardGranularityVentas === 'meses'
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  Meses
-                </button>
-                <button
-                  onClick={() => setCardGranularityVentas('anos')}
-                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition cursor-pointer ${
-                    cardGranularityVentas === 'anos'
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  Años
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="h-56 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart
-                data={cardDataVentas}
-                margin={{ top: 5, right: 10, left: -15, bottom: cardGranularityVentas === 'meses' && cardMonthVentas === 'all' ? 10 : 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis 
-                  dataKey="shortLabel" 
-                  tick={{ fontSize: 9 }} 
-                  interval={0}
-                  angle={cardGranularityVentas === 'meses' && cardMonthVentas === 'all' ? -35 : 0}
-                  textAnchor={cardGranularityVentas === 'meses' && cardMonthVentas === 'all' ? 'end' : 'middle'}
-                  height={cardGranularityVentas === 'meses' && cardMonthVentas === 'all' ? 42 : 28}
-                />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip 
-                  formatter={(v: any) => [`$${Number(v).toLocaleString()}`, 'Ventas Facturadas']} 
-                  labelFormatter={(label: any) => `${cardGranularityVentas === 'meses' ? (cardMonthVentas === 'all' ? 'Mes' : 'Corte') : 'Año'}: ${label}`}
-                />
-                <Area type="monotone" dataKey="ventas" stroke="#10b981" fill="#10b981" fillOpacity={0.25} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-800">
-            <span className="text-slate-500 font-medium">
-              Total {cardGranularityVentas === 'meses' 
-                ? (cardMonthVentas === 'all' ? `Año ${cardYearVentas} (12 Meses)` : `${MONTHS_CATALOG.find(m => m.key === cardMonthVentas)?.name} ${cardYearVentas}`) 
-                : 'Multi-Anual (2022-2026)'}:
-            </span>
-            <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm">
-              {formatCurrencyUSD(
-                cardDataVentas.reduce(
-                  (sum, d) => sum + d.ventas,
-                  0
-                )
-              )}
-            </span>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
-
-        {/* GRÁFICA 2: EGRESOS & COSTOS TOTALES (CON BOTÓN MESES / AÑOS Y SELECTOR DE AÑO + MES) */}
-        <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <ArrowDownRight className="w-4 h-4 text-rose-500" />
-                <span>2. Egresos & Costos Totales</span>
-              </h3>
-              <p className="text-xs text-slate-500">
-                Consolidado de compras, nómina, gastos operativos e impuestos
-              </p>
-            </div>
-
-            {/* BOTÓN CONMUTADOR INDIVIDUAL MESES / AÑOS + AÑO + MES */}
-            <div className="flex flex-wrap items-center gap-1.5 self-start sm:self-auto">
-              {cardGranularityEgresos === 'meses' && (
-                <>
-                  <select
-                    value={cardYearEgresos}
-                    onChange={(e) => setCardYearEgresos(Number(e.target.value))}
-                    className="bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-[11px] font-bold rounded-lg px-2 py-1 cursor-pointer focus:outline-none"
-                    title="Seleccionar Año"
-                  >
-                    {availableYears.map((yr) => (
-                      <option key={yr} value={yr}>
-                        {yr}
-                      </option>
-                    ))}
-                  </select>
-
-                  <select
-                    value={cardMonthEgresos}
-                    onChange={(e) => setCardMonthEgresos(e.target.value)}
-                    className="bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-[11px] font-bold rounded-lg px-2 py-1 cursor-pointer focus:outline-none"
-                    title="Seleccionar Mes o Año Completo"
-                  >
-                    {MONTHS_CATALOG.map((m) => (
-                      <option key={m.key} value={m.key}>
-                        {m.short === 'Todos' ? '12 Meses' : m.name}
-                      </option>
-                    ))}
-                  </select>
-                </>
-              )}
-
-              <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700">
-                <button
-                  onClick={() => setCardGranularityEgresos('meses')}
-                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition cursor-pointer ${
-                    cardGranularityEgresos === 'meses'
-                      ? 'bg-rose-600 text-white shadow-xs'
-                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  Meses
-                </button>
-                <button
-                  onClick={() => setCardGranularityEgresos('anos')}
-                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition cursor-pointer ${
-                    cardGranularityEgresos === 'anos'
-                      ? 'bg-rose-600 text-white shadow-xs'
-                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  Años
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="h-56 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={cardDataEgresos}
-                margin={{ top: 5, right: 10, left: -15, bottom: cardGranularityEgresos === 'meses' && cardMonthEgresos === 'all' ? 10 : 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis 
-                  dataKey="shortLabel" 
-                  tick={{ fontSize: 9 }} 
-                  interval={0}
-                  angle={cardGranularityEgresos === 'meses' && cardMonthEgresos === 'all' ? -35 : 0}
-                  textAnchor={cardGranularityEgresos === 'meses' && cardMonthEgresos === 'all' ? 'end' : 'middle'}
-                  height={cardGranularityEgresos === 'meses' && cardMonthEgresos === 'all' ? 42 : 28}
-                />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip 
-                  formatter={(v: any) => [`$${Number(v).toLocaleString()}`, 'Egresos Totales']} 
-                  labelFormatter={(label: any) => `${cardGranularityEgresos === 'meses' ? (cardMonthEgresos === 'all' ? 'Mes' : 'Corte') : 'Año'}: ${label}`}
-                />
-                <Bar dataKey="egresosTotales" fill="#ef4444" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-800">
-            <span className="text-slate-500 font-medium">
-              Egresos {cardGranularityEgresos === 'meses' 
-                ? (cardMonthEgresos === 'all' ? `Año ${cardYearEgresos} (12 Meses)` : `${MONTHS_CATALOG.find(m => m.key === cardMonthEgresos)?.name} ${cardYearEgresos}`) 
-                : 'Multi-Anual (2022-2026)'}:
-            </span>
-            <span className="font-mono font-bold text-rose-600 dark:text-rose-400 text-sm">
-              {formatCurrencyUSD(
-                cardDataEgresos.reduce(
-                  (sum, d) => sum + d.egresosTotales,
-                  0
-                )
-              )}
-            </span>
-          </div>
-        </div>
-
-        {/* GRÁFICA 3: UTILIDAD NETA FINAL (CON BOTÓN MESES / AÑOS Y SELECTOR DE AÑO + MES) */}
-        <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-indigo-600" />
-                <span>3. Utilidad Neta Final (Post-Todo)</span>
-              </h3>
-              <p className="text-xs text-slate-500">
-                Ganancia líquida definitiva ya descontando todos los costos y tributos
-              </p>
-            </div>
-
-            {/* BOTÓN CONMUTADOR INDIVIDUAL MESES / AÑOS + AÑO + MES */}
-            <div className="flex flex-wrap items-center gap-1.5 self-start sm:self-auto">
-              {cardGranularityUtilidad === 'meses' && (
-                <>
-                  <select
-                    value={cardYearUtilidad}
-                    onChange={(e) => setCardYearUtilidad(Number(e.target.value))}
-                    className="bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-300 dark:border-indigo-800 text-indigo-800 dark:text-indigo-300 text-[11px] font-bold rounded-lg px-2 py-1 cursor-pointer focus:outline-none"
-                    title="Seleccionar Año"
-                  >
-                    {availableYears.map((yr) => (
-                      <option key={yr} value={yr}>
-                        {yr}
-                      </option>
-                    ))}
-                  </select>
-
-                  <select
-                    value={cardMonthUtilidad}
-                    onChange={(e) => setCardMonthUtilidad(e.target.value)}
-                    className="bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-300 dark:border-indigo-800 text-indigo-800 dark:text-indigo-300 text-[11px] font-bold rounded-lg px-2 py-1 cursor-pointer focus:outline-none"
-                    title="Seleccionar Mes o Año Completo"
-                  >
-                    {MONTHS_CATALOG.map((m) => (
-                      <option key={m.key} value={m.key}>
-                        {m.short === 'Todos' ? '12 Meses' : m.name}
-                      </option>
-                    ))}
-                  </select>
-                </>
-              )}
-
-              <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700">
-                <button
-                  onClick={() => setCardGranularityUtilidad('meses')}
-                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition cursor-pointer ${
-                    cardGranularityUtilidad === 'meses'
-                      ? 'bg-indigo-600 text-white shadow-xs'
-                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  Meses
-                </button>
-                <button
-                  onClick={() => setCardGranularityUtilidad('anos')}
-                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition cursor-pointer ${
-                    cardGranularityUtilidad === 'anos'
-                      ? 'bg-indigo-600 text-white shadow-xs'
-                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  Años
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="h-56 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart
-                data={cardDataUtilidad}
-                margin={{ top: 5, right: 10, left: -15, bottom: cardGranularityUtilidad === 'meses' && cardMonthUtilidad === 'all' ? 10 : 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis 
-                  dataKey="shortLabel" 
-                  tick={{ fontSize: 9 }} 
-                  interval={0}
-                  angle={cardGranularityUtilidad === 'meses' && cardMonthUtilidad === 'all' ? -35 : 0}
-                  textAnchor={cardGranularityUtilidad === 'meses' && cardMonthUtilidad === 'all' ? 'end' : 'middle'}
-                  height={cardGranularityUtilidad === 'meses' && cardMonthUtilidad === 'all' ? 42 : 28}
-                />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip 
-                  formatter={(v: any) => [`$${Number(v).toLocaleString()}`, 'Utilidad Neta']} 
-                  labelFormatter={(label: any) => `${cardGranularityUtilidad === 'meses' ? (cardMonthUtilidad === 'all' ? 'Mes' : 'Corte') : 'Año'}: ${label}`}
-                />
-                <ReferenceLine y={0} stroke="#94a3b8" />
-                <Area type="monotone" dataKey="utilidadNeta" stroke="#6366f1" fill="#6366f1" fillOpacity={0.25} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-800">
-            <span className="text-slate-500 font-medium">
-              Utilidad Final {cardGranularityUtilidad === 'meses' 
-                ? (cardMonthUtilidad === 'all' ? `Año ${cardYearUtilidad} (12 Meses)` : `${MONTHS_CATALOG.find(m => m.key === cardMonthUtilidad)?.name} ${cardYearUtilidad}`) 
-                : 'Multi-Anual (2022-2026)'}:
-            </span>
-            <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 text-sm">
-              {formatCurrencyUSD(
-                cardDataUtilidad.reduce(
-                  (sum, d) => sum + d.utilidadNeta,
-                  0
-                )
-              )}
-            </span>
-          </div>
-        </div>
-
-        {/* GRÁFICA 4: FLUJO NETO DE CAJA (CON BOTÓN MESES / AÑOS Y SELECTOR DE AÑO + MES) */}
-        <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <RefreshCw className="w-4 h-4 text-cyan-600" />
-                <span>4. Flujo Neto de Caja</span>
-              </h3>
-              <p className="text-xs text-slate-500">
-                Generación neta de efectivo: Ingresos Totales menos Desembolsos
-              </p>
-            </div>
-
-            {/* BOTÓN CONMUTADOR INDIVIDUAL MESES / AÑOS + AÑO + MES */}
-            <div className="flex flex-wrap items-center gap-1.5 self-start sm:self-auto">
-              {cardGranularityFlujo === 'meses' && (
-                <>
-                  <select
-                    value={cardYearFlujo}
-                    onChange={(e) => setCardYearFlujo(Number(e.target.value))}
-                    className="bg-cyan-50 dark:bg-cyan-950/60 border border-cyan-300 dark:border-cyan-800 text-cyan-800 dark:text-cyan-300 text-[11px] font-bold rounded-lg px-2 py-1 cursor-pointer focus:outline-none"
-                    title="Seleccionar Año"
-                  >
-                    {availableYears.map((yr) => (
-                      <option key={yr} value={yr}>
-                        {yr}
-                      </option>
-                    ))}
-                  </select>
-
-                  <select
-                    value={cardMonthFlujo}
-                    onChange={(e) => setCardMonthFlujo(e.target.value)}
-                    className="bg-cyan-50 dark:bg-cyan-950/60 border border-cyan-300 dark:border-cyan-800 text-cyan-800 dark:text-cyan-300 text-[11px] font-bold rounded-lg px-2 py-1 cursor-pointer focus:outline-none"
-                    title="Seleccionar Mes o Año Completo"
-                  >
-                    {MONTHS_CATALOG.map((m) => (
-                      <option key={m.key} value={m.key}>
-                        {m.short === 'Todos' ? '12 Meses' : m.name}
-                      </option>
-                    ))}
-                  </select>
-                </>
-              )}
-
-              <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700">
-                <button
-                  onClick={() => setCardGranularityFlujo('meses')}
-                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition cursor-pointer ${
-                    cardGranularityFlujo === 'meses'
-                      ? 'bg-cyan-600 text-white shadow-xs'
-                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  Meses
-                </button>
-                <button
-                  onClick={() => setCardGranularityFlujo('anos')}
-                  className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition cursor-pointer ${
-                    cardGranularityFlujo === 'anos'
-                      ? 'bg-cyan-600 text-white shadow-xs'
-                      : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  Años
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="h-56 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={cardDataFlujo}
-                margin={{ top: 5, right: 10, left: -15, bottom: cardGranularityFlujo === 'meses' && cardMonthFlujo === 'all' ? 10 : 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis 
-                  dataKey="shortLabel" 
-                  tick={{ fontSize: 9 }} 
-                  interval={0}
-                  angle={cardGranularityFlujo === 'meses' && cardMonthFlujo === 'all' ? -35 : 0}
-                  textAnchor={cardGranularityFlujo === 'meses' && cardMonthFlujo === 'all' ? 'end' : 'middle'}
-                  height={cardGranularityFlujo === 'meses' && cardMonthFlujo === 'all' ? 42 : 28}
-                />
-                <YAxis tick={{ fontSize: 10 }} />
-                <Tooltip 
-                  formatter={(v: any) => [`$${Number(v).toLocaleString()}`, 'Flujo Neto']} 
-                  labelFormatter={(label: any) => `${cardGranularityFlujo === 'meses' ? (cardMonthFlujo === 'all' ? 'Mes' : 'Corte') : 'Año'}: ${label}`}
-                />
-                <ReferenceLine y={0} stroke="#94a3b8" />
-                <Bar dataKey="flujoNeto" fill="#06b6d4" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-800">
-            <span className="text-slate-500 font-medium">
-              Flujo Neto {cardGranularityFlujo === 'meses' 
-                ? (cardMonthFlujo === 'all' ? `Año ${cardYearFlujo} (12 Meses)` : `${MONTHS_CATALOG.find(m => m.key === cardMonthFlujo)?.name} ${cardYearFlujo}`) 
-                : 'Multi-Anual (2022-2026)'}:
-            </span>
-            <span className="font-mono font-bold text-cyan-600 dark:text-cyan-400 text-sm">
-              {formatCurrencyUSD(
-                cardDataFlujo.reduce(
-                  (sum, d) => sum + d.flujoNeto,
-                  0
-                )
-              )}
-            </span>
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 };

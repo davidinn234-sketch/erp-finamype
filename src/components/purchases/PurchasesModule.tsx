@@ -15,6 +15,8 @@ import {
   TrendingDown,
   Warehouse,
   Camera,
+  Edit,
+  Trash2,
 } from 'lucide-react';
 import { Purchase, PurchaseDocType, Supplier, Product, ValuationMethod } from '../../types';
 import { formatCurrencyUSD, calculatePurchaseTaxes } from '../../utils/salvadoranTax';
@@ -24,12 +26,14 @@ interface PurchasesModuleProps {
   isNewPurchaseModalOpen: boolean;
   onCloseNewPurchaseModal: () => void;
   onOpenNewPurchaseModal: () => void;
+  initialTab?: 'purchases' | 'cxp' | 'kardex' | 'suppliers' | 'inventory';
 }
 
 export const PurchasesModule: React.FC<PurchasesModuleProps> = ({
   isNewPurchaseModalOpen,
   onCloseNewPurchaseModal,
   onOpenNewPurchaseModal,
+  initialTab = 'purchases',
 }) => {
   const {
     purchases,
@@ -38,14 +42,24 @@ export const PurchasesModule: React.FC<PurchasesModuleProps> = ({
     kardexMovements,
     currentCompany,
     createPurchase,
+    updatePurchase,
+    deletePurchase,
     registerSupplierPayment,
     createSupplier,
+    updateSupplier,
     deleteSupplier,
     createProduct,
+    updateProduct,
     bankAccounts,
   } = useERP();
 
-  const [activeTab, setActiveTab] = useState<'purchases' | 'cxp' | 'kardex' | 'suppliers' | 'inventory'>('purchases');
+  const [activeTab, setActiveTab] = useState<'purchases' | 'cxp' | 'kardex' | 'suppliers' | 'inventory'>(initialTab);
+
+  React.useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
   const [valuationMethod, setValuationMethod] = useState<ValuationMethod>('promedio_ponderado');
   const [searchTerm, setSearchTerm] = useState('');
   const [listSearch, setListSearch] = useState('');
@@ -58,6 +72,10 @@ export const PurchasesModule: React.FC<PurchasesModuleProps> = ({
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [paymentSourceAccount, setPaymentSourceAccount] = useState<string>(bankAccounts[0]?.id || '');
   const [paymentRefNumber, setPaymentRefNumber] = useState<string>('');
+
+  // Editing Modals State
+  const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
 
   // Supplier Modal State
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
@@ -356,6 +374,17 @@ export const PurchasesModule: React.FC<PurchasesModuleProps> = ({
       {/* Tab 1: Compras */}
       {activeTab === 'purchases' && (
         <div className="space-y-4">
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={listSearch}
+              onChange={(e) => setListSearch(e.target.value)}
+              placeholder="Buscar compra por N° de documento, proveedor, NIT, estado o fecha..."
+              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-200"
+            />
+          </div>
+
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
@@ -373,7 +402,7 @@ export const PurchasesModule: React.FC<PurchasesModuleProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {purchases.map((p) => (
+                  {purchases.filter((p) => matchList(p.documentNumber, p.supplierName, p.supplierNit, p.docType, p.status, p.date)).map((p) => (
                     <tr key={p.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50">
                       <td className="p-3.5 font-bold text-slate-900 dark:text-white">
                         {p.documentNumber}
@@ -415,14 +444,35 @@ export const PurchasesModule: React.FC<PurchasesModuleProps> = ({
                         </span>
                       </td>
                       <td className="p-3.5 text-center">
-                        {p.status !== 'pagada' && (
+                        <div className="flex items-center justify-center gap-1.5">
+                          {p.status !== 'pagada' && (
+                            <button
+                              onClick={() => handleOpenPayment(p)}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] cursor-pointer"
+                              title="Abonar o liquidar compra"
+                            >
+                              Pagar
+                            </button>
+                          )}
                           <button
-                            onClick={() => handleOpenPayment(p)}
-                            className="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] cursor-pointer"
+                            onClick={() => setEditingPurchase(p)}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                            title="Editar número de documento o vencimiento"
                           >
-                            Pagar
+                            <Edit className="w-3.5 h-3.5" />
                           </button>
-                        )}
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`¿Estás seguro de eliminar la compra #${p.documentNumber}? Se revertirá el stock de Kardex y saldo.`)) {
+                                deletePurchase(p.id);
+                              }
+                            }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
+                            title="Eliminar compra"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -450,6 +500,17 @@ export const PurchasesModule: React.FC<PurchasesModuleProps> = ({
             </span>
           </div>
 
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={listSearch}
+              onChange={(e) => setListSearch(e.target.value)}
+              placeholder="Buscar cuenta por pagar por proveedor, N° documento o fecha de vencimiento..."
+              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-200"
+            />
+          </div>
+
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 uppercase text-[10px] font-bold border-b border-slate-200 dark:border-slate-800">
@@ -462,7 +523,7 @@ export const PurchasesModule: React.FC<PurchasesModuleProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {cxpPurchases.map((p) => (
+                {cxpPurchases.filter((p) => matchList(p.documentNumber, p.supplierName, p.dueDate)).map((p) => (
                   <tr key={p.id}>
                     <td className="p-3.5 font-bold text-slate-900 dark:text-white">
                       {p.documentNumber}
@@ -644,8 +705,23 @@ export const PurchasesModule: React.FC<PurchasesModuleProps> = ({
                   </p>
                 </div>
                 <div>
-                  <span className="text-slate-400">Stock Mínimo:</span>
-                  <p className="font-medium text-slate-500">{p.minStock} {p.unit}</p>
+                  <span className="text-slate-400">Stock Mínimo (Editable):</span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <input
+                      type="number"
+                      min="0"
+                      key={`min-${p.id}-${p.minStock}`}
+                      defaultValue={p.minStock}
+                      onBlur={(e) => {
+                        const val = parseInt(e.target.value) || 0;
+                        if (val !== p.minStock) {
+                          updateProduct(p.id, { minStock: val });
+                        }
+                      }}
+                      className="w-16 px-1.5 py-0.5 text-xs font-bold border border-slate-200 dark:border-slate-700 rounded-md bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono focus:ring-1 focus:ring-emerald-500 outline-none"
+                    />
+                    <span className="text-[11px] text-slate-400">{p.unit}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -694,15 +770,26 @@ export const PurchasesModule: React.FC<PurchasesModuleProps> = ({
                 <p><span className="text-slate-400">Plazo Pago:</span> {s.paymentTermDays} Días</p>
                 <p><span className="text-slate-400">Tel:</span> {s.phone}</p>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (window.confirm(`¿Eliminar al proveedor "${s.name}"? Esta acción no se puede deshacer.`)) deleteSupplier(s.id);
-                }}
-                className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 cursor-pointer"
-              >
-                Eliminar proveedor
-              </button>
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingSupplier(s)}
+                  className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 cursor-pointer flex items-center gap-1"
+                >
+                  <Edit className="w-3.5 h-3.5" />
+                  <span>Editar</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(`¿Eliminar al proveedor "${s.name}"? Esta acción no se puede deshacer.`)) deleteSupplier(s.id);
+                  }}
+                  className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 cursor-pointer flex items-center gap-1"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Eliminar</span>
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -941,6 +1028,37 @@ export const PurchasesModule: React.FC<PurchasesModuleProps> = ({
                   className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-mono font-bold"
                   required
                 />
+                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                  <span className="text-[10px] text-slate-400 font-semibold">Abono rápido:</span>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentAmount(Number((paymentModalPurchase.saldoPendiente * 0.25).toFixed(2)))}
+                    className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold cursor-pointer transition"
+                  >
+                    25%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentAmount(Number((paymentModalPurchase.saldoPendiente * 0.50).toFixed(2)))}
+                    className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold cursor-pointer transition"
+                  >
+                    50%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentAmount(Number((paymentModalPurchase.saldoPendiente * 0.75).toFixed(2)))}
+                    className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] font-bold cursor-pointer transition"
+                  >
+                    75%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentAmount(paymentModalPurchase.saldoPendiente)}
+                    className="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/60 hover:bg-emerald-200 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold cursor-pointer transition"
+                  >
+                    100% Saldo Total
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -1188,6 +1306,206 @@ export const PurchasesModule: React.FC<PurchasesModuleProps> = ({
                 </button>
                 <button type="submit" className="px-4 py-1.5 rounded-lg bg-blue-600 text-white font-bold">
                   Guardar Proveedor
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Editar Compra */}
+      {editingPurchase && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-6 space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Edit className="w-4 h-4 text-emerald-600" />
+                <span>Editar Compra / Factura Proveedor</span>
+              </h3>
+              <button onClick={() => setEditingPurchase(null)} className="cursor-pointer">
+                <X className="w-4 h-4 text-slate-400" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                updatePurchase(editingPurchase.id, {
+                  documentNumber: editingPurchase.documentNumber,
+                  dueDate: editingPurchase.dueDate,
+                  status: editingPurchase.status,
+                });
+                setEditingPurchase(null);
+              }}
+              className="space-y-3"
+            >
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                  Proveedor:
+                </label>
+                <input
+                  type="text"
+                  disabled
+                  value={editingPurchase.supplierName}
+                  className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-500 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                  N° Factura / CCF:
+                </label>
+                <input
+                  type="text"
+                  value={editingPurchase.documentNumber}
+                  onChange={(e) => setEditingPurchase({ ...editingPurchase, documentNumber: e.target.value })}
+                  className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-mono font-bold"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                  Fecha de Vencimiento:
+                </label>
+                <input
+                  type="date"
+                  value={editingPurchase.dueDate}
+                  onChange={(e) => setEditingPurchase({ ...editingPurchase, dueDate: e.target.value })}
+                  className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                  Estado:
+                </label>
+                <select
+                  value={editingPurchase.status}
+                  onChange={(e) => setEditingPurchase({ ...editingPurchase, status: e.target.value as any })}
+                  className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200"
+                >
+                  <option value="registrada">Registrada (Pendiente)</option>
+                  <option value="parcial">Parcial</option>
+                  <option value="pagada">Pagada</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setEditingPurchase(null)} className="px-3 py-1.5 rounded-lg border cursor-pointer">
+                  Cancelar
+                </button>
+                <button type="submit" className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer">
+                  Guardar Cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Editar Proveedor */}
+      {editingSupplier && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-6 space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Edit className="w-4 h-4 text-emerald-600" />
+                <span>Editar Ficha de Proveedor</span>
+              </h3>
+              <button onClick={() => setEditingSupplier(null)} className="cursor-pointer">
+                <X className="w-4 h-4 text-slate-400" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                updateSupplier(editingSupplier.id, {
+                  name: editingSupplier.name,
+                  tradeName: editingSupplier.tradeName,
+                  giro: editingSupplier.giro,
+                  nit: editingSupplier.nit,
+                  nrc: editingSupplier.nrc,
+                  phone: editingSupplier.phone,
+                  email: editingSupplier.email,
+                  paymentTermDays: editingSupplier.paymentTermDays,
+                });
+                setEditingSupplier(null);
+              }}
+              className="space-y-3"
+            >
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                  Razón Social:
+                </label>
+                <input
+                  type="text"
+                  value={editingSupplier.name}
+                  onChange={(e) => setEditingSupplier({ ...editingSupplier, name: e.target.value })}
+                  className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                    NIT:
+                  </label>
+                  <input
+                    type="text"
+                    value={editingSupplier.nit}
+                    onChange={(e) => setEditingSupplier({ ...editingSupplier, nit: e.target.value })}
+                    className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                    NRC:
+                  </label>
+                  <input
+                    type="text"
+                    value={editingSupplier.nrc || ''}
+                    onChange={(e) => setEditingSupplier({ ...editingSupplier, nrc: e.target.value })}
+                    className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                    Teléfono:
+                  </label>
+                  <input
+                    type="text"
+                    value={editingSupplier.phone || ''}
+                    onChange={(e) => setEditingSupplier({ ...editingSupplier, phone: e.target.value })}
+                    className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                    Plazo de Pago (Días):
+                  </label>
+                  <input
+                    type="number"
+                    value={editingSupplier.paymentTermDays}
+                    onChange={(e) => setEditingSupplier({ ...editingSupplier, paymentTermDays: parseInt(e.target.value) || 0 })}
+                    className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setEditingSupplier(null)} className="px-3 py-1.5 rounded-lg border cursor-pointer">
+                  Cancelar
+                </button>
+                <button type="submit" className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer">
+                  Actualizar Proveedor
                 </button>
               </div>
             </form>

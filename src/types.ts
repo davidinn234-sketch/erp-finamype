@@ -754,6 +754,7 @@ export interface DynamicChartWidget {
   title: string;
   description: string;
   chartType: 'bar' | 'area' | 'pie' | 'line';
+  metricKey?: string;
   data: Array<{
     name: string;
     value: number;

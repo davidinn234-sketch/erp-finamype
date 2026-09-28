@@ -107,8 +107,26 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // Finanzas Personales
+    // Finanzas Personales & Metas
     match /personal_finances/{docId} {
+      allow read, write: if true;
+    }
+
+    match /personal_finance_meta/{docId} {
+      allow read, write: if true;
+    }
+
+    // Kardex & Otros Ingresos
+    match /kardex_movements/{docId} {
+      allow read, write: if true;
+    }
+
+    match /other_incomes/{docId} {
+      allow read, write: if true;
+    }
+
+    // Comodín global para futuras colecciones operativas
+    match /{document=**} {
       allow read, write: if true;
     }
   }

@@ -11,6 +11,7 @@ import {
   TrendingUp,
   X,
   ArrowRight,
+  Target,
 } from 'lucide-react';
 
 interface CommandPaletteModalProps {
@@ -80,11 +81,21 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
     },
     {
       id: 'nav-dashboard',
-      label: 'Ir a Dashboard Ejecutivo & Analítica BI',
+      label: 'Ir a Dashboard Corporativo (Operativo, Flujo & DTE)',
       category: 'Navegación',
       icon: Landmark,
       action: () => {
         setActiveModule('dashboard');
+        onClose();
+      },
+    },
+    {
+      id: 'nav-marketing',
+      label: 'Ir a Dashboard de Marketing (Análisis Histórico & BI)',
+      category: 'Navegación',
+      icon: Target,
+      action: () => {
+        setActiveModule('marketing');
         onClose();
       },
     },
