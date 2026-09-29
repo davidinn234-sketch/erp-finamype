@@ -1231,7 +1231,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
           </div>
         </div>
 
-        {/* Las 6 Tarjetas en el Orden Estricto Solicitado */}
+        {/* Las 6 Tarjetas en el Orden Estricto Solicitado: 1. Ingresos -> 2. Egresos -> 3. Utilidad Neta -> 4. Flujo de Caja -> 5. Utilidad Bruta -> 6. Utilidad Operativa */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {/* 1. Ingresos Totales */}
           <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
@@ -1246,9 +1246,14 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
             <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono mt-1">
               {formatCurrencyUSD(financialSummary.ingresosTotales)}
             </div>
-            <span className="text-[11px] text-slate-500 mt-1 block">
-              Ventas: {formatCurrencyUSD(financialSummary.ventas)} + Otros: {formatCurrencyUSD(financialSummary.otrosIngresos)}
-            </span>
+            <div className="text-[11px] text-slate-500 mt-1 space-y-0.5">
+              <span>Ventas: {formatCurrencyUSD(financialSummary.ventas)} + Otros: {formatCurrencyUSD(financialSummary.otrosIngresos)}</span>
+              {opFilterDay !== 'all' && monthFinancialSummary && (
+                <span className="block text-[10px] font-bold text-emerald-700 dark:text-emerald-400 pt-0.5 border-t border-slate-100 dark:border-slate-800">
+                  📅 Acumulado Mes ({OP_MONTHS.find((m) => m.key === opFilterMonth)?.short}): {formatCurrencyUSD(monthFinancialSummary.ingresosTotales)}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* 2. Egresos Totales */}
@@ -1264,9 +1269,14 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
             <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono mt-1">
               {formatCurrencyUSD(financialSummary.egresosTotales)}
             </div>
-            <span className="text-[11px] text-slate-500 mt-1 block">
-              Compras + Nómina + Gastos + Impuestos
-            </span>
+            <div className="text-[11px] text-slate-500 mt-1 space-y-0.5">
+              <span>Compras + Nómina + Gastos + Impuestos</span>
+              {opFilterDay !== 'all' && monthFinancialSummary && (
+                <span className="block text-[10px] font-bold text-rose-600 dark:text-rose-400 pt-0.5 border-t border-slate-100 dark:border-slate-800">
+                  📅 Acumulado Mes ({OP_MONTHS.find((m) => m.key === opFilterMonth)?.short}): {formatCurrencyUSD(monthFinancialSummary.egresosTotales)}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* 3. Utilidad Neta (Ganancia Líquida Final) */}
@@ -1298,9 +1308,14 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
             >
               {formatCurrencyUSD(financialSummary.utilidadNeta)}
             </div>
-            <span className="text-[11px] text-slate-500 mt-1 block">
-              Ganancia líquida final: Ingresos - Egresos
-            </span>
+            <div className="text-[11px] text-slate-500 mt-1 space-y-0.5">
+              <span>Ganancia líquida final: Ingresos - Egresos</span>
+              {opFilterDay !== 'all' && monthFinancialSummary && (
+                <span className="block text-[10px] font-bold text-emerald-700 dark:text-emerald-400 pt-0.5 border-t border-emerald-200 dark:border-emerald-900">
+                  📅 Ganancia Líquida Mes: {formatCurrencyUSD(monthFinancialSummary.utilidadNeta)} ({monthFinancialSummary.margenNeto.toFixed(1)}%)
+                </span>
+              )}
+            </div>
           </div>
 
           {/* 4. Flujo de Caja Neto */}
@@ -1320,9 +1335,14 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
             >
               {formatCurrencyUSD(financialSummary.flujoNeto)}
             </div>
-            <span className="text-[11px] text-slate-500 mt-1 block">
-              Cobros y Entradas - Desembolsos Efectivos
-            </span>
+            <div className="text-[11px] text-slate-500 mt-1 space-y-0.5">
+              <span>Cobros y Entradas - Desembolsos Efectivos</span>
+              {opFilterDay !== 'all' && monthFinancialSummary && (
+                <span className="block text-[10px] font-bold text-sky-700 dark:text-sky-400 pt-0.5 border-t border-slate-100 dark:border-slate-800">
+                  📅 Flujo Acumulado Mes: {formatCurrencyUSD(monthFinancialSummary.flujoNeto)}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* 5. Utilidad Bruta */}
@@ -1338,9 +1358,14 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
             <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono mt-1">
               {formatCurrencyUSD(financialSummary.utilidadBruta)}
             </div>
-            <span className="text-[11px] text-slate-500 mt-1 block">
-              Ventas Netas - Costo de Ventas/Mercadería
-            </span>
+            <div className="text-[11px] text-slate-500 mt-1 space-y-0.5">
+              <span>Ventas Netas - Costo de Ventas/Mercadería</span>
+              {opFilterDay !== 'all' && monthFinancialSummary && (
+                <span className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 pt-0.5 border-t border-slate-100 dark:border-slate-800">
+                  📅 Bruta Acumulada Mes: {formatCurrencyUSD(monthFinancialSummary.utilidadBruta)} ({monthFinancialSummary.margenBruto.toFixed(1)}%)
+                </span>
+              )}
+            </div>
           </div>
 
           {/* 6. Utilidad Operativa */}
@@ -1356,9 +1381,14 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
             <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono mt-1">
               {formatCurrencyUSD(financialSummary.utilidadBruta - financialSummary.opExpensesProrated - financialSummary.payrollProrated)}
             </div>
-            <span className="text-[11px] text-slate-500 mt-1 block">
-              Utilidad Bruta - Gastos Operativos - Nómina
-            </span>
+            <div className="text-[11px] text-slate-500 mt-1 space-y-0.5">
+              <span>Utilidad Bruta - Gastos Operativos - Nómina</span>
+              {opFilterDay !== 'all' && monthFinancialSummary && (
+                <span className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 pt-0.5 border-t border-slate-100 dark:border-slate-800">
+                  📅 Operativa Acumulada Mes: {formatCurrencyUSD(monthFinancialSummary.utilidadBruta - monthFinancialSummary.opExpensesProrated - monthFinancialSummary.payrollProrated)} ({monthFinancialSummary.margenOperativo.toFixed(1)}%)
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </section>

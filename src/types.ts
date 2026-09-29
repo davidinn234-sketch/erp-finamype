@@ -1,4 +1,4 @@
-export type UserRole = 'admin_maestro' | 'contador' | 'gerente' | 'cajero';
+export type UserRole = 'admin_maestro' | 'contador' | 'gerente' | 'cajero' | 'vendedor' | 'kiosko_asistencia';
 
 export type SystemArchetype =
   | 'finanzas_personales'
@@ -167,6 +167,17 @@ export interface Company {
   contactPhone?: string;
   notes?: string;
   createdAt?: string;
+  attendanceConfig?: CompanyAttendanceConfig;
+}
+
+export interface CompanyAttendanceConfig {
+  defaultStartTime: string; // "08:00"
+  defaultEndTime: string; // "17:00"
+  defaultLunchStart: string; // "12:00"
+  defaultLunchEnd: string; // "13:00"
+  toleranceMinutes: number; // 10 minutes default (editable por la empresa)
+  discountPerMinuteLate: number; // e.g. 0.05
+  kioskPinRequired: boolean;
 }
 
 // ----------------------------------------------------
@@ -499,6 +510,59 @@ export interface Employee {
   rating?: number; // 1 - 5 overall score
   evaluations?: EmployeeEvaluation[];
   disciplinaryActions?: DisciplinaryAction[];
+
+  // Asistencia & Tablet Kiosk PIN
+  pinCode?: string; // PIN de 4-6 dígitos para marcaje en tablet
+  workSchedule?: WorkSchedule;
+}
+
+export interface WorkSchedule {
+  startTime: string; // "08:00"
+  endTime: string; // "17:00"
+  lunchStartTime?: string; // "12:00"
+  lunchEndTime?: string; // "13:00"
+  toleranceMinutes: number; // 10 min por defecto
+  workDays: number[]; // [1, 2, 3, 4, 5, 6] (1=Lun ... 6=Sab)
+}
+
+export type AttendanceStatus = 'a_tiempo' | 'tardanza' | 'falta' | 'permiso_justificado';
+
+export interface AttendanceRecord {
+  id: string;
+  companyId: string;
+  branchId?: string;
+  employeeId: string;
+  employeeCode: string;
+  employeeName: string;
+  date: string; // YYYY-MM-DD
+  checkInTime?: string; // HH:mm:ss
+  lunchStartTime?: string; // HH:mm:ss
+  lunchEndTime?: string; // HH:mm:ss
+  checkOutTime?: string; // HH:mm:ss
+  status: AttendanceStatus;
+  minutesLate: number;
+  scheduledStartTime: string;
+  scheduledEndTime: string;
+  toleranceApplied: number;
+  notes?: string;
+  method: 'pin_tablet' | 'manual_admin';
+}
+
+export interface EmployeeLeaveRequest {
+  id: string;
+  companyId: string;
+  employeeId: string;
+  employeeName: string;
+  type: 'permiso_con_goce' | 'permiso_sin_goce' | 'incapacidad_isss' | 'vacacion_anual' | 'duelo_calamidad' | 'otro';
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
+  daysCount: number;
+  reason: string;
+  status: 'pendiente' | 'aprobado' | 'rechazado';
+  approvedBy?: string;
+  approvedAt?: string;
+  documentUrlOrNotes?: string;
+  createdAt: string;
 }
 
 export interface PayrollDetail {

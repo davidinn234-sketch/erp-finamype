@@ -17,6 +17,9 @@ import {
   ProfessionalServiceRecord,
   CandidateFolder,
   CandidateApplicant,
+  AttendanceRecord,
+  EmployeeLeaveRequest,
+  CompanyAttendanceConfig,
 } from '../types';
 import { DEFAULT_FISCAL_CONFIG } from './salvadoranTax';
 
@@ -764,6 +767,7 @@ export const SAMPLE_EMPLOYEES: Employee[] = [
     bankName: 'Banco Agrícola',
     bankAccountNumber: '300-192847-2',
     isActive: true,
+    pinCode: '1001',
     rating: 5,
     evaluations: [
       {
@@ -797,6 +801,7 @@ export const SAMPLE_EMPLOYEES: Employee[] = [
     bankName: 'BAC Credomatic',
     bankAccountNumber: '109-283746-1',
     isActive: true,
+    pinCode: '1002',
     rating: 4.8,
     evaluations: [
       {
@@ -830,6 +835,7 @@ export const SAMPLE_EMPLOYEES: Employee[] = [
     bankName: 'Banco Cuscatlán',
     bankAccountNumber: '028-394857-4',
     isActive: true,
+    pinCode: '1003',
     rating: 4.5,
     evaluations: [
       {
@@ -863,6 +869,7 @@ export const SAMPLE_EMPLOYEES: Employee[] = [
     bankName: 'Banco Agrícola',
     bankAccountNumber: '310-928374-5',
     isActive: true,
+    pinCode: '1004',
     rating: 4.9,
     evaluations: [
       {
@@ -2342,5 +2349,109 @@ export const SAMPLE_CANDIDATE_APPLICANTS: CandidateApplicant[] = [
     cvSummaryOrUrl: 'Portafolio web: behance.net/andrea_design_sv. Campañas para restaurantes y marcas de moda.',
     skills: ['Adobe Illustrator', 'Photoshop', 'CapCut / Premiere', 'Copywriting'],
     createdAt: '2026-09-14T14:15:00Z',
+  },
+];
+
+export const DEFAULT_ATTENDANCE_CONFIG: CompanyAttendanceConfig = {
+  defaultStartTime: '08:00',
+  defaultEndTime: '17:00',
+  defaultLunchStart: '12:00',
+  defaultLunchEnd: '13:00',
+  toleranceMinutes: 10,
+  discountPerMinuteLate: 0.05,
+  kioskPinRequired: true,
+};
+
+export const SAMPLE_ATTENDANCE_RECORDS: AttendanceRecord[] = [
+  {
+    id: 'att_1',
+    companyId: 'comp_1',
+    employeeId: 'emp_1',
+    employeeCode: 'EMP-001',
+    employeeName: 'Guillermo Antonio Castillo',
+    date: '2026-09-29',
+    checkInTime: '08:04:12',
+    lunchStartTime: '12:05:00',
+    lunchEndTime: '13:02:10',
+    checkOutTime: '17:05:30',
+    status: 'a_tiempo',
+    minutesLate: 0,
+    scheduledStartTime: '08:00',
+    scheduledEndTime: '17:00',
+    toleranceApplied: 10,
+    method: 'pin_tablet',
+  },
+  {
+    id: 'att_2',
+    companyId: 'comp_1',
+    employeeId: 'emp_2',
+    employeeCode: 'EMP-002',
+    employeeName: 'Claudia Elizabeth Morales',
+    date: '2026-09-29',
+    checkInTime: '08:18:22',
+    lunchStartTime: '12:10:00',
+    lunchEndTime: '13:08:00',
+    checkOutTime: '17:15:00',
+    status: 'tardanza',
+    minutesLate: 8,
+    scheduledStartTime: '08:00',
+    scheduledEndTime: '17:00',
+    toleranceApplied: 10,
+    notes: 'Tráfico pesado en Carretera Panamericana.',
+    method: 'pin_tablet',
+  },
+  {
+    id: 'att_3',
+    companyId: 'comp_1',
+    employeeId: 'emp_3',
+    employeeCode: 'EMP-003',
+    employeeName: 'José Mario López',
+    date: '2026-09-29',
+    checkInTime: '07:55:40',
+    lunchStartTime: '12:00:00',
+    lunchEndTime: '12:55:00',
+    checkOutTime: '17:02:00',
+    status: 'a_tiempo',
+    minutesLate: 0,
+    scheduledStartTime: '08:00',
+    scheduledEndTime: '17:00',
+    toleranceApplied: 10,
+    method: 'pin_tablet',
+  },
+  {
+    id: 'att_4',
+    companyId: 'comp_1',
+    employeeId: 'emp_4',
+    employeeCode: 'EMP-004',
+    employeeName: 'Adriana Marcela Flores',
+    date: '2026-09-29',
+    checkInTime: '08:07:15',
+    lunchStartTime: '12:02:00',
+    lunchEndTime: '13:00:00',
+    checkOutTime: '17:04:10',
+    status: 'a_tiempo',
+    minutesLate: 0,
+    scheduledStartTime: '08:00',
+    scheduledEndTime: '17:00',
+    toleranceApplied: 10,
+    method: 'pin_tablet',
+  },
+];
+
+export const SAMPLE_LEAVE_REQUESTS: EmployeeLeaveRequest[] = [
+  {
+    id: 'leave_1',
+    companyId: 'comp_1',
+    employeeId: 'emp_2',
+    employeeName: 'Claudia Elizabeth Morales',
+    type: 'permiso_con_goce',
+    startDate: '2026-09-25',
+    endDate: '2026-09-25',
+    daysCount: 1,
+    reason: 'Trámite personal bancario y renovación de pasaporte.',
+    status: 'aprobado',
+    approvedBy: 'Lic. Carlos Henríquez',
+    approvedAt: '2026-09-24T15:00:00Z',
+    createdAt: '2026-09-23T10:00:00Z',
   },
 ];

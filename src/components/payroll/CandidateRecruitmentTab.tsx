@@ -35,6 +35,7 @@ export const CandidateRecruitmentTab: React.FC = () => {
     updateCandidateApplicant,
     deleteCandidateApplicant,
     hireCandidateAsEmployee,
+    addNotification,
   } = useERP();
 
   const [selectedFolderId, setSelectedFolderId] = useState<string>('all');
@@ -50,6 +51,97 @@ export const CandidateRecruitmentTab: React.FC = () => {
   const [newFolderName, setNewFolderName] = useState('');
   const [newFolderDept, setNewFolderDept] = useState('Operaciones');
   const [newFolderDesc, setNewFolderDesc] = useState('');
+
+  // Drag and Drop state
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const processUploadedFiles = (files: FileList | File[]) => {
+    if (!files || files.length === 0) return;
+    const filesArray = Array.from(files);
+
+    // Determine target folder
+    let targetFolderId = selectedFolderId;
+    let targetFolderName = 'General';
+
+    if (targetFolderId === 'all') {
+      if (candidateFolders.length > 0) {
+        targetFolderId = candidateFolders[0].id;
+        targetFolderName = candidateFolders[0].name;
+      } else {
+        // Auto-create default folder "Asistente Administrativo" if none exists
+        const newFold = createCandidateFolder({
+          name: 'Asistente Administrativo',
+          department: 'Administración',
+          description: 'Carpeta automática para recepción y clasificación de CVs.',
+        });
+        targetFolderId = newFold.id;
+        targetFolderName = newFold.name;
+        setSelectedFolderId(newFold.id);
+      }
+    } else {
+      const f = candidateFolders.find((x) => x.id === targetFolderId);
+      if (f) targetFolderName = f.name;
+    }
+
+    filesArray.forEach((file, index) => {
+      // Clean candidate name from file name
+      // e.g. "CV_Maria_Lopez_Contadora.pdf" -> "Maria Lopez Contadora"
+      const rawName = file.name
+        .replace(/\.[^/.]+$/, '') // remove extension
+        .replace(/^[Cc][Vv][_\-\s]*/, '') // remove CV prefix
+        .replace(/[_\-]+/g, ' ') // replace dashes and underscores
+        .trim();
+
+      const cleanedName = rawName
+        ? rawName
+            .split(' ')
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+            .join(' ')
+        : `Candidato ${index + 1}`;
+
+      const generatedEmail = `${cleanedName.toLowerCase().replace(/\s+/g, '.')}@email.com`;
+      const generatedPhone = `+503 7${Math.floor(1000000 + Math.random() * 9000000)}`;
+
+      createCandidateApplicant({
+        folderId: targetFolderId,
+        folderName: targetFolderName,
+        fullName: cleanedName,
+        email: generatedEmail,
+        phone: generatedPhone,
+        appliedDate: new Date().toISOString().split('T')[0],
+        expectedSalary: 500.0 + Math.floor(Math.random() * 5) * 50,
+        experienceYears: Math.floor(Math.random() * 6) + 1,
+        educationLevel: 'Técnico o Universitario',
+        status: 'recibido',
+        rating: 5,
+        notes: `CV cargado masivamente mediante arrastre de archivo (${(file.size / 1024).toFixed(1)} KB).`,
+        cvFileName: file.name,
+        cvSummaryOrUrl: URL.createObjectURL(file),
+        skills: ['Atención al Cliente', 'Proactividad', 'Puntualidad'],
+      });
+    });
+
+    addNotification(
+      'success',
+      '¡Currículums Subidos con Éxito!',
+      `Se agregaron ${filesArray.length} aspirantes a la carpeta "${targetFolderName}".`
+    );
+  };
+
+  const handleDropFiles = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      processUploadedFiles(e.dataTransfer.files);
+    }
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      processUploadedFiles(e.target.files);
+    }
+  };
 
   const [applicantForm, setApplicantForm] = useState({
     folderId: candidateFolders[0]?.id || '',
@@ -247,6 +339,63 @@ export const CandidateRecruitmentTab: React.FC = () => {
               </div>
             );
           })}
+
+          <button
+            onClick={() => setIsNewFolderModalOpen(true)}
+            className="px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0 border border-dashed border-purple-400 dark:border-purple-600 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/40 cursor-pointer"
+          >
+            <FolderPlus className="w-4 h-4" />
+            <span>+ Crear Carpeta (ej: Asistente Administrativo)</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Zona Especial de Carga Masiva: Arrastrar y Soltar CVs */}
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setIsDragging(true);
+        }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={handleDropFiles}
+        onClick={() => fileInputRef.current?.click()}
+        className={`p-6 sm:p-8 rounded-3xl border-2 border-dashed transition text-center cursor-pointer relative group ${
+          isDragging
+            ? 'border-purple-500 bg-purple-500/10 ring-4 ring-purple-500/20 shadow-lg'
+            : 'border-slate-300 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-900/40 hover:border-purple-500/70 hover:bg-purple-50/40 dark:hover:bg-purple-950/20'
+        }`}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept=".pdf,.doc,.docx"
+          className="hidden"
+          onChange={handleFileInputChange}
+        />
+
+        <div className="max-w-md mx-auto space-y-3">
+          <div className="w-14 h-14 rounded-2xl bg-purple-100 dark:bg-purple-950 text-purple-600 dark:text-purple-300 flex items-center justify-center mx-auto shadow-sm group-hover:scale-110 transition-transform">
+            <Upload className="w-7 h-7" />
+          </div>
+
+          <div>
+            <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white">
+              📂 Arrastra y Suelta tus CVs aquí (o haz clic para explorar)
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Soporta selección masiva múltiple (<strong>Ctrl + A</strong> en tu carpeta de archivos). Se crearán los perfiles automáticamente dentro de la carpeta activa:{' '}
+              <strong className="text-purple-600 dark:text-purple-400">
+                {selectedFolderId === 'all'
+                  ? candidateFolders[0]?.name || 'Asistente Administrativo'
+                  : candidateFolders.find((f) => f.id === selectedFolderId)?.name || 'General'}
+              </strong>
+            </p>
+          </div>
+
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 text-[11px] font-bold">
+            <span>Formatos aceptados: PDF, Word (.doc, .docx) • Sin límite de archivos</span>
+          </div>
         </div>
       </div>
 

@@ -27,6 +27,7 @@ import {
   Sliders,
   Trash2,
   Search,
+  Tablet,
 } from 'lucide-react';
 import { Employee, Payroll, ContractType, PayrollPeriod, PayrollDetail } from '../../types';
 import {
@@ -38,6 +39,8 @@ import {
 import { PDFReportModal } from '../common/PDFReportModal';
 import { ProfessionalServicesTab } from './ProfessionalServicesTab';
 import { CandidateRecruitmentTab } from './CandidateRecruitmentTab';
+import { AttendanceAndSchedulesTab } from './AttendanceAndSchedulesTab';
+import { TabletAttendanceKioskModal } from './TabletAttendanceKioskModal';
 import { PayrollTableEditorModal } from './PayrollTableEditorModal';
 import { PrintFullPayrollModal } from './PrintFullPayrollModal';
 import { PrintAllSlipsModal } from './PrintAllSlipsModal';
@@ -68,7 +71,8 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
     currentCompany,
   } = useERP();
 
-  const [activeTab, setActiveTab] = useState<'payrolls' | 'services' | 'employees' | 'recruitment' | 'calculator'>('payrolls');
+  const [activeTab, setActiveTab] = useState<'payrolls' | 'services' | 'employees' | 'recruitment' | 'attendance' | 'calculator'>('payrolls');
+  const [isKioskModalOpen, setIsKioskModalOpen] = useState(false);
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [payrollTableViewMode, setPayrollTableViewMode] = useState<'all' | 'employer' | 'employee'>('all');
   const [isNewEmployeeModalOpen, setIsNewEmployeeModalOpen] = useState(false);
@@ -186,7 +190,15 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setIsKioskModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 active:scale-95 text-white text-xs font-black shadow flex items-center gap-1.5 cursor-pointer"
+            title="Abrir terminal checador táctil para tablet con PIN"
+          >
+            <Tablet className="w-4 h-4" />
+            <span>📱 Tablet Kiosko PIN</span>
+          </button>
           <button
             onClick={() => setIsNewEmployeeModalOpen(true)}
             className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
@@ -229,17 +241,6 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
           <span>Servicios Profesionales (10% Renta)</span>
         </button>
         <button
-          onClick={() => setActiveTab('employees')}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-            activeTab === 'employees'
-              ? 'bg-purple-600 text-white'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <Users className="w-3.5 h-3.5" />
-          <span>Base de Empleados ({employees.length})</span>
-        </button>
-        <button
           onClick={() => setActiveTab('recruitment')}
           className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
             activeTab === 'recruitment'
@@ -249,6 +250,28 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
         >
           <FolderOpen className="w-3.5 h-3.5" />
           <span>Bolsa de Empleo & CVs</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('attendance')}
+          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+            activeTab === 'attendance'
+              ? 'bg-cyan-600 text-white'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Clock className="w-3.5 h-3.5" />
+          <span>Asistencia, Tablet PIN & Horarios</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('employees')}
+          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+            activeTab === 'employees'
+              ? 'bg-purple-600 text-white'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Users className="w-3.5 h-3.5" />
+          <span>Base de Empleados ({employees.length})</span>
         </button>
         <button
           onClick={() => setActiveTab('calculator')}
@@ -627,6 +650,17 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Tab: Servicios Profesionales (Art. 156 Código Tributario SV - Retención 10%) */}
+      {activeTab === 'services' && <ProfessionalServicesTab />}
+
+      {/* Tab: Bolsa de Empleo & CVs con Carga Masiva Drag & Drop */}
+      {activeTab === 'recruitment' && <CandidateRecruitmentTab />}
+
+      {/* Tab: Asistencia, Tablet Kiosko PIN & Horarios */}
+      {activeTab === 'attendance' && (
+        <AttendanceAndSchedulesTab onOpenKiosk={() => setIsKioskModalOpen(true)} />
       )}
 
       {/* Tab 2: Colaboradores & Costo Real Empresa */}
@@ -1151,6 +1185,12 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
           company={currentCompany}
         />
       )}
+
+      {/* Terminal Tablet Kiosko de Asistencia con PIN */}
+      <TabletAttendanceKioskModal
+        isOpen={isKioskModalOpen}
+        onClose={() => setIsKioskModalOpen(false)}
+      />
     </div>
   );
 };

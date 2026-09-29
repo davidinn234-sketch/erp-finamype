@@ -33,6 +33,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
     setActiveModule,
     currentCompany,
     userRole,
+    currentUser,
     setIsExhaustiveCustomizationOpen,
     setIsCloudUserManagerOpen,
   } = useERP();
@@ -54,9 +55,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
       badge: 'Histórico',
     },
     {
+      id: 'company_users',
+      label: 'Gestor de Perfiles & Cajeros',
+      subtitle: 'Crear cajeros, roles & accesos',
+      icon: Users,
+      roles: ['admin_maestro', 'gerente'],
+      badge: 'Equipo',
+    },
+    {
       id: 'admin_profiles',
-      label: 'Gestor de Perfiles & Servicios',
-      subtitle: 'Crear cuentas para amigos',
+      label: 'Portal SaaS Global',
+      subtitle: 'Empresas, Planes & Auditoría',
       icon: Cloud,
       roles: ['admin_maestro'],
       badge: 'Admin',
@@ -112,7 +121,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
       label: 'Contabilidad NIIF & IVA',
       subtitle: 'Partida Doble, F-07 & Balances',
       icon: BookOpenCheck,
-      roles: ['admin_maestro', 'contador'],
+      roles: ['admin_maestro', 'contador', 'gerente'],
+      badge: 'NIIF SV',
     },
     {
       id: 'academy',
@@ -124,14 +134,62 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
     },
     {
       id: 'settings',
-      label: 'Configuración & Personalización',
+      label: 'Configuración & Empresa',
       subtitle: 'Catálogo, Tasas Fiscales & JSON',
       icon: Settings,
-      roles: ['admin_maestro', 'contador'],
+      roles: ['admin_maestro', 'contador', 'gerente'],
     },
   ];
 
-  const filteredNavItems = navigationItems.filter((item) => item.roles.includes(userRole));
+  const isCompanyOwnerOrManager =
+    currentUser?.role === 'admin_maestro' ||
+    currentUser?.role === 'gerente' ||
+    currentUser?.id === currentCompany?.primaryAdminUserId;
+
+  const hasPermission = (moduleItemId: string) => {
+    if (!currentUser?.permissions) return false;
+    const p = currentUser.permissions;
+    if (p.includes(moduleItemId)) return true;
+    if (moduleItemId === 'pos_terminal' && (p.includes('pos_sales') || p.includes('pos_terminal'))) return true;
+    if (moduleItemId === 'sales' && (p.includes('sales_crm') || p.includes('sales'))) return true;
+    if (moduleItemId === 'purchases' && (p.includes('purchases_scm') || p.includes('purchases'))) return true;
+    if (moduleItemId === 'payroll' && (p.includes('payroll_access') || p.includes('payroll'))) return true;
+    if (moduleItemId === 'treasury' && (p.includes('treasury_access') || p.includes('treasury'))) return true;
+    if (moduleItemId === 'accounting' && (p.includes('accounting_access') || p.includes('accounting'))) return true;
+    if (moduleItemId === 'company_users' && p.includes('company_users')) return true;
+    return false;
+  };
+
+  const filteredNavItems = navigationItems.filter((item) => {
+    // Portal SaaS Global solo para admin maestro
+    if (item.id === 'admin_profiles') return currentUser?.role === 'admin_maestro';
+
+    // Master admin o Dueño/Gerente de la empresa: acceso completo a todos los módulos de gestión
+    if (isCompanyOwnerOrManager) return true;
+
+    // Contador
+    if (userRole === 'contador') {
+      if (item.id === 'company_users') return hasPermission('company_users');
+      return (
+        ['dashboard', 'accounting', 'treasury', 'payroll', 'purchases', 'sales', 'forecasting', 'academy', 'settings'].includes(item.id) ||
+        hasPermission(item.id)
+      );
+    }
+
+    // Vendedor
+    if (userRole === 'vendedor') {
+      if (['sales', 'pos_terminal', 'dashboard', 'academy'].includes(item.id)) return true;
+      return hasPermission(item.id);
+    }
+
+    // Cajero
+    if (userRole === 'cajero') {
+      if (['pos_terminal', 'dashboard', 'academy'].includes(item.id)) return true;
+      return hasPermission(item.id);
+    }
+
+    return item.roles.includes(userRole) || hasPermission(item.id);
+  });
 
   return (
     <>

@@ -24,7 +24,9 @@ import { AcademyModule } from './components/academy/AcademyModule';
 import { StandalonePersonalFinanceLayout } from './components/personal/StandalonePersonalFinanceLayout';
 import { CloudUserManagerModal } from './components/admin/CloudUserManagerModal';
 import { AdminProfilesManagerModule } from './components/admin/AdminProfilesManagerModule';
+import { CompanyUsersManagerModule } from './components/admin/CompanyUsersManagerModule';
 import { MasterAdminPortal } from './components/admin/MasterAdminPortal';
+import { TabletAttendanceKioskModal } from './components/payroll/TabletAttendanceKioskModal';
 import { Menu } from 'lucide-react';
 
 const MainLayout: React.FC = () => {
@@ -40,6 +42,7 @@ const MainLayout: React.FC = () => {
     setIsExhaustiveCustomizationOpen,
     isCloudUserManagerOpen,
     setIsCloudUserManagerOpen,
+    logout,
   } = useERP();
 
   const [isSidebarOpenMobile, setIsSidebarOpenMobile] = useState(false);
@@ -77,6 +80,19 @@ const MainLayout: React.FC = () => {
         <StandalonePersonalFinanceLayout />
         <ToastContainer />
       </>
+    );
+  }
+
+  // If user account is a Dedicated Tablet Kiosk for Attendance:
+  if (currentUser.role === 'kiosko_asistencia') {
+    return (
+      <div className={`min-h-screen ${isDarkMode ? 'dark' : ''} bg-slate-950 flex flex-col justify-between`}>
+        <TabletAttendanceKioskModal
+          isOpen={true}
+          onClose={logout}
+        />
+        <ToastContainer />
+      </div>
     );
   }
 
@@ -181,6 +197,7 @@ const MainLayout: React.FC = () => {
               {activeModule === 'academy' && <AcademyModule />}
 
               {activeModule === 'settings' && <SettingsModule />}
+              {activeModule === 'company_users' && <CompanyUsersManagerModule />}
               {activeModule === 'admin_profiles' && <AdminProfilesManagerModule />}
             </main>
           </div>

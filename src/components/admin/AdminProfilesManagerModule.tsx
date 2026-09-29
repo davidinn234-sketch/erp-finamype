@@ -62,6 +62,10 @@ export const AdminProfilesManagerModule: React.FC = () => {
     'inventory',
     'sales_crm',
     'purchases',
+    'payroll',
+    'treasury',
+    'accounting',
+    'iva_books',
   ]);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -79,7 +83,7 @@ export const AdminProfilesManagerModule: React.FC = () => {
       setSelectedServices(['personal_finances']);
     } else if (arch === 'emprendedor_control_interno') {
       setSelectedRole('gerente');
-      setSelectedServices(['pos_terminal', 'inventory', 'sales_crm', 'purchases']);
+      setSelectedServices(['pos_terminal', 'inventory', 'sales_crm', 'purchases', 'payroll', 'treasury', 'accounting', 'iva_books']);
     } else if (arch === 'negocio_transicion') {
       setSelectedRole('admin_maestro');
       setSelectedServices(['inventory', 'sales_crm', 'purchases', 'payroll', 'treasury', 'accounting', 'iva_books']);

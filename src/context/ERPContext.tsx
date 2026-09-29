@@ -34,6 +34,9 @@ import {
   ProfessionalServiceRecord,
   CandidateFolder,
   CandidateApplicant,
+  AttendanceRecord,
+  EmployeeLeaveRequest,
+  CompanyAttendanceConfig,
 } from '../types';
 import {
   SAMPLE_COMPANIES,
@@ -54,6 +57,9 @@ import {
   SAMPLE_PROFESSIONAL_SERVICES,
   SAMPLE_CANDIDATE_FOLDERS,
   SAMPLE_CANDIDATE_APPLICANTS,
+  DEFAULT_ATTENDANCE_CONFIG,
+  SAMPLE_ATTENDANCE_RECORDS,
+  SAMPLE_LEAVE_REQUESTS,
 } from '../utils/sampleData';
 import {
   DEFAULT_CHART_OF_ACCOUNTS,
@@ -236,6 +242,21 @@ interface ERPContextType {
   updateCandidateApplicant: (id: string, updates: Partial<CandidateApplicant>) => void;
   deleteCandidateApplicant: (id: string) => void;
   hireCandidateAsEmployee: (applicantId: string, baseSalary?: number, position?: string) => void;
+
+  // Control de Asistencia & Horarios (Tablet Kiosk PIN)
+  attendanceRecords: AttendanceRecord[];
+  leaveRequests: EmployeeLeaveRequest[];
+  attendanceConfig: CompanyAttendanceConfig;
+  recordAttendanceCheck: (
+    employeeId: string,
+    type: 'check_in' | 'lunch_start' | 'lunch_end' | 'check_out',
+    method?: 'pin_tablet' | 'manual_admin',
+    timeStr?: string,
+    dateStr?: string
+  ) => { status: 'success' | 'warning' | 'error'; message: string; record?: AttendanceRecord; timeStr: string };
+  updateAttendanceConfig: (config: Partial<CompanyAttendanceConfig>) => void;
+  createLeaveRequest: (req: Omit<EmployeeLeaveRequest, 'id' | 'companyId' | 'createdAt'>) => EmployeeLeaveRequest;
+  updateLeaveRequestStatus: (id: string, status: 'aprobado' | 'rechazado' | 'pendiente') => void;
   
   // Módulo 4: Tesorería, Bancos & Flujo de Caja Real / Proyectado
   bankAccounts: BankAccount[];
@@ -667,6 +688,40 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return SAMPLE_CANDIDATE_APPLICANTS;
   });
 
+  // Control de Asistencia & Horarios (Tablet Kiosk PIN)
+  const [rawAttendanceConfig, setRawAttendanceConfig] = useState<CompanyAttendanceConfig>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.attendanceConfig) return parsed.attendanceConfig;
+      } catch (e) {}
+    }
+    return DEFAULT_ATTENDANCE_CONFIG;
+  });
+
+  const [rawAttendanceRecords, setRawAttendanceRecords] = useState<AttendanceRecord[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.attendanceRecords && Array.isArray(parsed.attendanceRecords)) return parsed.attendanceRecords;
+      } catch (e) {}
+    }
+    return SAMPLE_ATTENDANCE_RECORDS;
+  });
+
+  const [rawLeaveRequests, setRawLeaveRequests] = useState<EmployeeLeaveRequest[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.leaveRequests && Array.isArray(parsed.leaveRequests)) return parsed.leaveRequests;
+      } catch (e) {}
+    }
+    return SAMPLE_LEAVE_REQUESTS;
+  });
+
   // Módulo 4: Tesorería & Bancos
   const [rawBankAccounts, setRawBankAccounts] = useState<BankAccount[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
@@ -815,6 +870,15 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     () => rawCandidateApplicants.filter((a) => a.companyId === currentCompany.id),
     [rawCandidateApplicants, currentCompany.id]
   );
+  const attendanceRecords = useMemo(
+    () => rawAttendanceRecords.filter((r) => r.companyId === currentCompany.id),
+    [rawAttendanceRecords, currentCompany.id]
+  );
+  const leaveRequests = useMemo(
+    () => rawLeaveRequests.filter((l) => l.companyId === currentCompany.id),
+    [rawLeaveRequests, currentCompany.id]
+  );
+  const attendanceConfig = rawAttendanceConfig;
 
   // Setters forward to raw arrays
   const setProducts = setRawProducts;
@@ -3149,6 +3213,131 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   // ----------------------------------------------------
+  // CONTROL DE ASISTENCIA & HORARIOS (TABLET KIOSK PIN)
+  // ----------------------------------------------------
+  const updateAttendanceConfig = (configUpdates: Partial<CompanyAttendanceConfig>) => {
+    setRawAttendanceConfig((prev) => {
+      const updated = { ...prev, ...configUpdates };
+      try {
+        setDoc(doc(db, 'companies', currentCompany.id), { attendanceConfig: updated }, { merge: true }).catch(reportCloudError);
+      } catch (e) {}
+      return updated;
+    });
+  };
+
+  const recordAttendanceCheck = (
+    employeeId: string,
+    type: 'check_in' | 'lunch_start' | 'lunch_end' | 'check_out',
+    method: 'pin_tablet' | 'manual_admin' = 'pin_tablet',
+    customTimeStr?: string,
+    customDateStr?: string
+  ): { status: 'success' | 'warning' | 'error'; message: string; record?: AttendanceRecord; timeStr: string } => {
+    const emp = rawEmployees.find((e) => e.id === employeeId);
+    if (!emp) {
+      return { status: 'error', message: 'Colaborador no encontrado.', timeStr: '' };
+    }
+
+    const todayDate = customDateStr || new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const timeStr = customTimeStr || now.toLocaleTimeString('es-SV', { hour12: false });
+
+    const existingIndex = rawAttendanceRecords.findIndex(
+      (r) => r.employeeId === employeeId && r.date === todayDate
+    );
+
+    const schedStart = emp.workSchedule?.startTime || attendanceConfig.defaultStartTime || '08:00';
+    const schedEnd = emp.workSchedule?.endTime || attendanceConfig.defaultEndTime || '17:00';
+    const tolerance = emp.workSchedule?.toleranceMinutes || attendanceConfig.toleranceMinutes || 10;
+
+    let targetRecord: AttendanceRecord;
+
+    if (existingIndex >= 0) {
+      targetRecord = { ...rawAttendanceRecords[existingIndex] };
+    } else {
+      targetRecord = {
+        id: `att_${Date.now()}`,
+        companyId: currentCompany.id,
+        employeeId: emp.id,
+        employeeCode: emp.code,
+        employeeName: `${emp.firstName} ${emp.lastName}`,
+        date: todayDate,
+        scheduledStartTime: schedStart,
+        scheduledEndTime: schedEnd,
+        toleranceApplied: tolerance,
+        status: 'a_tiempo',
+        minutesLate: 0,
+        method,
+      };
+    }
+
+    if (type === 'check_in') {
+      targetRecord.checkInTime = timeStr;
+      const [nowHours, nowMins] = timeStr.split(':').map((v) => parseInt(v, 10) || 0);
+      const [schedHours, schedMins] = schedStart.split(':').map((v) => parseInt(v, 10) || 0);
+      const totalNowMins = nowHours * 60 + nowMins;
+      const totalSchedMins = schedHours * 60 + schedMins;
+
+      const diff = totalNowMins - totalSchedMins;
+      if (diff > tolerance) {
+        targetRecord.status = 'tardanza';
+        targetRecord.minutesLate = diff - tolerance;
+      } else {
+        targetRecord.status = 'a_tiempo';
+        targetRecord.minutesLate = 0;
+      }
+    } else if (type === 'lunch_start') {
+      targetRecord.lunchStartTime = timeStr;
+    } else if (type === 'lunch_end') {
+      targetRecord.lunchEndTime = timeStr;
+    } else if (type === 'check_out') {
+      targetRecord.checkOutTime = timeStr;
+    }
+
+    setRawAttendanceRecords((prev) => {
+      if (existingIndex >= 0) {
+        const copy = [...prev];
+        copy[existingIndex] = targetRecord;
+        return copy;
+      }
+      return [targetRecord, ...prev];
+    });
+
+    try {
+      setDoc(doc(db, 'attendance', targetRecord.id), targetRecord).catch(reportCloudError);
+    } catch (e) {}
+
+    return {
+      status: targetRecord.status === 'tardanza' ? 'warning' : 'success',
+      message: 'Marcaje procesado.',
+      record: targetRecord,
+      timeStr,
+    };
+  };
+
+  const createLeaveRequest = (req: Omit<EmployeeLeaveRequest, 'id' | 'companyId' | 'createdAt'>): EmployeeLeaveRequest => {
+    const newLeave: EmployeeLeaveRequest = {
+      ...req,
+      id: `leave_${Date.now()}`,
+      companyId: currentCompany.id,
+      createdAt: new Date().toISOString(),
+    };
+    setRawLeaveRequests((prev) => [newLeave, ...prev]);
+    try {
+      setDoc(doc(db, 'leave_requests', newLeave.id), newLeave).catch(reportCloudError);
+    } catch (e) {}
+    return newLeave;
+  };
+
+  const updateLeaveRequestStatus = (id: string, status: 'aprobado' | 'rechazado' | 'pendiente') => {
+    setRawLeaveRequests((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, status, approvedAt: new Date().toISOString() } : l))
+    );
+    try {
+      setDoc(doc(db, 'leave_requests', id), { status, approvedAt: new Date().toISOString() }, { merge: true }).catch(reportCloudError);
+    } catch (e) {}
+  };
+
+  // ----------------------------------------------------
   // MÓDULO 4: TESORERÍA, BANCOS & FLUJO DE CAJA REAL
   // ----------------------------------------------------
   const createBankAccount = (accountData: Omit<BankAccount, 'id' | 'companyId' | 'currentBalance'>) => {
@@ -3762,6 +3951,13 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         updateCandidateApplicant,
         deleteCandidateApplicant,
         hireCandidateAsEmployee,
+        attendanceRecords,
+        leaveRequests,
+        attendanceConfig,
+        recordAttendanceCheck,
+        updateAttendanceConfig,
+        createLeaveRequest,
+        updateLeaveRequestStatus,
         bankAccounts,
         treasuryMovements,
         otherIncomes,
