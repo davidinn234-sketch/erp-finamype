@@ -28,6 +28,9 @@ import {
   Trash2,
   Search,
   Tablet,
+  Edit3,
+  Lock,
+  Sparkles,
 } from 'lucide-react';
 import { Employee, Payroll, ContractType, PayrollPeriod, PayrollDetail } from '../../types';
 import {
@@ -69,6 +72,7 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
     payPayroll,
     fiscalConfig,
     currentCompany,
+    addNotification,
   } = useERP();
 
   const [activeTab, setActiveTab] = useState<'payrolls' | 'services' | 'employees' | 'recruitment' | 'attendance' | 'calculator'>('payrolls');
@@ -76,7 +80,33 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [payrollTableViewMode, setPayrollTableViewMode] = useState<'all' | 'employer' | 'employee'>('all');
   const [isNewEmployeeModalOpen, setIsNewEmployeeModalOpen] = useState(false);
+  const [isEditEmployeeModalOpen, setIsEditEmployeeModalOpen] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [selectedPayrollId, setSelectedPayrollId] = useState<string | null>(payrolls[0]?.id || null);
+
+  // Helper to generate a collision-free 4-digit PIN
+  const generateUniquePin = (existingList: Employee[], currentEmpId?: string): string => {
+    const usedPins = new Set(
+      existingList
+        .filter((e) => !currentEmpId || e.id !== currentEmpId)
+        .map((e) => e.pinCode?.trim())
+        .filter(Boolean)
+    );
+    for (let i = 0; i < 2000; i++) {
+      const candidate = Math.floor(1000 + Math.random() * 9000).toString();
+      if (!usedPins.has(candidate)) return candidate;
+    }
+    return '9999';
+  };
+
+  // Helper to detect if a PIN is already assigned to another active employee
+  const getDuplicatePinEmployee = (pinToCheck?: string, currentEmpId?: string): Employee | undefined => {
+    if (!pinToCheck || pinToCheck.trim().length < 4) return undefined;
+    const cleanPin = pinToCheck.trim();
+    return employees.find(
+      (e) => (!currentEmpId || e.id !== currentEmpId) && e.pinCode?.trim() === cleanPin
+    );
+  };
 
   // Modals for Editing and Printing
   const [isEditorModalOpen, setIsEditorModalOpen] = useState(false);
@@ -117,7 +147,59 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
     bankName: 'Banco Agrícola',
     bankAccountNumber: '',
     isActive: true,
+    pinCode: '',
   });
+
+  const handleOpenNewEmployee = () => {
+    setNewEmployee({
+      code: `EMP-${(employees.length + 1).toString().padStart(3, '0')}`,
+      firstName: '',
+      lastName: '',
+      dui: '',
+      nit: '',
+      isssNumber: '',
+      afpNumber: '',
+      afpName: 'Crecer',
+      position: '',
+      department: 'Operaciones',
+      baseSalary: 600,
+      contractType: 'permanente',
+      hireDate: new Date().toISOString().split('T')[0],
+      bankName: 'Banco Agrícola',
+      bankAccountNumber: '',
+      isActive: true,
+      pinCode: generateUniquePin(employees),
+    });
+    setIsNewEmployeeModalOpen(true);
+  };
+
+  const handleOpenEditEmployee = (emp: Employee) => {
+    setEditingEmployee({
+      ...emp,
+      pinCode: emp.pinCode || generateUniquePin(employees, emp.id),
+    });
+    setIsEditEmployeeModalOpen(true);
+  };
+
+  const handleSaveEditedEmployee = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingEmployee) return;
+
+    const dup = getDuplicatePinEmployee(editingEmployee.pinCode, editingEmployee.id);
+    if (dup) {
+      addNotification(
+        'error',
+        'PIN Duplicado',
+        `El PIN ${editingEmployee.pinCode} ya pertenece a ${dup.firstName} ${dup.lastName}. Elige un PIN único.`
+      );
+      return;
+    }
+
+    updateEmployee(editingEmployee.id, editingEmployee);
+    setIsEditEmployeeModalOpen(false);
+    setEditingEmployee(null);
+    addNotification('success', 'Colaborador Actualizado', `Datos y PIN de ${editingEmployee.firstName} guardados correctamente.`);
+  };
 
   const calcResult = calculateEmployeePayroll({
     baseSalary: calcSalary,
@@ -130,8 +212,21 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
 
   const handleCreateEmployee = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newEmployee.firstName.trim() || !newEmployee.lastName.trim()) return;
+
+    const dup = getDuplicatePinEmployee(newEmployee.pinCode);
+    if (dup) {
+      addNotification(
+        'error',
+        'PIN Duplicado',
+        `El PIN ${newEmployee.pinCode} ya pertenece a ${dup.firstName} ${dup.lastName}. Genera un PIN único para evitar fraudes en la tablet.`
+      );
+      return;
+    }
+
     createEmployee(newEmployee);
     setIsNewEmployeeModalOpen(false);
+    addNotification('success', 'Colaborador Contratado', `Se registró a ${newEmployee.firstName} ${newEmployee.lastName} con PIN de marcaje ${newEmployee.pinCode || 'asignado'}.`);
     setNewEmployee({
       code: `EMP-${(employees.length + 2).toString().padStart(3, '0')}`,
       firstName: '',
@@ -149,6 +244,7 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
       bankName: 'Banco Agrícola',
       bankAccountNumber: '',
       isActive: true,
+      pinCode: generateUniquePin(employees),
     });
   };
 
@@ -200,7 +296,7 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
             <span>📱 Tablet Kiosko PIN</span>
           </button>
           <button
-            onClick={() => setIsNewEmployeeModalOpen(true)}
+            onClick={handleOpenNewEmployee}
             className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
           >
             <UserPlus className="w-4 h-4 text-purple-500" />
@@ -761,6 +857,25 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
                       </span>
                     </div>
                   </div>
+
+                  {/* Kiosk PIN and Edit Button Footer */}
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-[11px] font-mono">
+                      <Lock className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+                      <span className="text-slate-500 font-sans">PIN Tablet:</span>
+                      <span className="font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
+                        {e.pinCode || 'Sin PIN'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditEmployee(e)}
+                      className="px-3 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-bold text-xs flex items-center gap-1 transition cursor-pointer"
+                    >
+                      <Edit3 className="w-3 h-3" />
+                      <span>Editar & PIN</span>
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -1112,26 +1227,254 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold mb-1">Salario Nominal ($ USD):</label>
+                  <label className="block font-semibold mb-1">Departamento Interno:</label>
                   <input
-                    type="number"
-                    step="50"
-                    value={newEmployee.baseSalary}
-                    onChange={(e) =>
-                      setNewEmployee({ ...newEmployee, baseSalary: parseFloat(e.target.value) || 0 })
-                    }
-                    className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-bold"
+                    type="text"
+                    placeholder="Ej: Operaciones, Ventas, Caja..."
+                    value={newEmployee.department}
+                    onChange={(e) => setNewEmployee({ ...newEmployee, department: e.target.value })}
+                    className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
                     required
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1">Salario Nominal ($ USD):</label>
+                <input
+                  type="number"
+                  step="50"
+                  value={newEmployee.baseSalary}
+                  onChange={(e) =>
+                    setNewEmployee({ ...newEmployee, baseSalary: parseFloat(e.target.value) || 0 })
+                  }
+                  className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-bold"
+                  required
+                />
+              </div>
+
+              {/* PIN Confidencial de Asistencia en Tablet */}
+              <div className="p-3.5 rounded-xl bg-cyan-50/70 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-800/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Lock className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+                    <span className="font-bold text-slate-900 dark:text-white text-xs">
+                      PIN Personal de Marcaje (Tablet Kiosko) *
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setNewEmployee({
+                        ...newEmployee,
+                        pinCode: generateUniquePin(employees),
+                      })
+                    }
+                    className="text-[11px] font-bold text-cyan-600 dark:text-cyan-400 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    Generar PIN Único
+                  </button>
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="text"
+                    maxLength={4}
+                    placeholder="Ej: 1045"
+                    value={newEmployee.pinCode || ''}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                      setNewEmployee({ ...newEmployee, pinCode: val });
+                    }}
+                    className="w-32 p-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-center font-mono font-black text-sm tracking-widest text-cyan-600 dark:text-cyan-400"
+                    required
+                  />
+                  <p className="text-[11px] text-slate-500">
+                    Código secreto de 4 dígitos para que el trabajador fiche su Entrada, Salida y Almuerzo en la tablet.
+                  </p>
+                </div>
+                {newEmployee.pinCode && getDuplicatePinEmployee(newEmployee.pinCode) && (
+                  <div className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-1.5 pt-1">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      ⚠️ Este PIN ya pertenece a{' '}
+                      <strong>{getDuplicatePinEmployee(newEmployee.pinCode)?.firstName} {getDuplicatePinEmployee(newEmployee.pinCode)?.lastName}</strong> ({getDuplicatePinEmployee(newEmployee.pinCode)?.code}). Asigna otro PIN para evitar fraudes.
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-2 pt-3">
                 <button type="button" onClick={() => setIsNewEmployeeModalOpen(false)} className="px-3 py-1.5 rounded-lg border cursor-pointer">
                   Cancelar
                 </button>
-                <button type="submit" className="px-4 py-1.5 rounded-lg bg-purple-600 text-white font-bold cursor-pointer">
-                  Guardar Colaborador
+                <button
+                  type="submit"
+                  disabled={Boolean(newEmployee.pinCode && getDuplicatePinEmployee(newEmployee.pinCode))}
+                  className="px-4 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold cursor-pointer"
+                >
+                  Guardar y Contratar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Editar Colaborador & PIN */}
+      {isEditEmployeeModalOpen && editingEmployee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in">
+          <div className="w-full max-w-lg my-8 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-6 space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Edit3 className="w-4 h-4 text-indigo-600" />
+                  <span>Editar Colaborador & Asignar PIN</span>
+                </h3>
+                <p className="text-[11px] text-slate-500 font-mono">
+                  {editingEmployee.code} • {editingEmployee.firstName} {editingEmployee.lastName}
+                </p>
+              </div>
+              <button onClick={() => setIsEditEmployeeModalOpen(false)} className="cursor-pointer text-slate-400 hover:text-slate-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedEmployee} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Nombres:</label>
+                  <input
+                    type="text"
+                    value={editingEmployee.firstName}
+                    onChange={(e) => setEditingEmployee({ ...editingEmployee, firstName: e.target.value })}
+                    className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Apellidos:</label>
+                  <input
+                    type="text"
+                    value={editingEmployee.lastName}
+                    onChange={(e) => setEditingEmployee({ ...editingEmployee, lastName: e.target.value })}
+                    className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Cargo / Puesto:</label>
+                  <input
+                    type="text"
+                    value={editingEmployee.position}
+                    onChange={(e) => setEditingEmployee({ ...editingEmployee, position: e.target.value })}
+                    className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Departamento:</label>
+                  <input
+                    type="text"
+                    value={editingEmployee.department}
+                    onChange={(e) => setEditingEmployee({ ...editingEmployee, department: e.target.value })}
+                    className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Salario Nominal ($ USD):</label>
+                  <input
+                    type="number"
+                    step="50"
+                    value={editingEmployee.baseSalary}
+                    onChange={(e) =>
+                      setEditingEmployee({ ...editingEmployee, baseSalary: parseFloat(e.target.value) || 0 })
+                    }
+                    className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-bold"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Estado:</label>
+                  <select
+                    value={editingEmployee.isActive ? 'active' : 'inactive'}
+                    onChange={(e) => setEditingEmployee({ ...editingEmployee, isActive: e.target.value === 'active' })}
+                    className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-bold"
+                  >
+                    <option value="active">🟢 Activo</option>
+                    <option value="inactive">🔴 Inactivo</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* PIN Confidencial de Asistencia en Tablet */}
+              <div className="p-3.5 rounded-xl bg-cyan-50/70 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-800/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Lock className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+                    <span className="font-bold text-slate-900 dark:text-white text-xs">
+                      PIN Personal de Marcaje (Tablet Kiosko) *
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditingEmployee({
+                        ...editingEmployee,
+                        pinCode: generateUniquePin(employees, editingEmployee.id),
+                      })
+                    }
+                    className="text-[11px] font-bold text-cyan-600 dark:text-cyan-400 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    Generar PIN Único
+                  </button>
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="text"
+                    maxLength={4}
+                    placeholder="Ej: 1045"
+                    value={editingEmployee.pinCode || ''}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                      setEditingEmployee({ ...editingEmployee, pinCode: val });
+                    }}
+                    className="w-32 p-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-center font-mono font-black text-sm tracking-widest text-cyan-600 dark:text-cyan-400"
+                    required
+                  />
+                  <p className="text-[11px] text-slate-500">
+                    PIN confidencial que el colaborador digitará en la tablet checadora para registrar su entrada o salida.
+                  </p>
+                </div>
+                {editingEmployee.pinCode && getDuplicatePinEmployee(editingEmployee.pinCode, editingEmployee.id) && (
+                  <div className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-1.5 pt-1">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      ⚠️ Este PIN ya pertenece a{' '}
+                      <strong>{getDuplicatePinEmployee(editingEmployee.pinCode, editingEmployee.id)?.firstName} {getDuplicatePinEmployee(editingEmployee.pinCode, editingEmployee.id)?.lastName}</strong> ({getDuplicatePinEmployee(editingEmployee.pinCode, editingEmployee.id)?.code}). Asigna otro PIN exclusivo.
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button type="button" onClick={() => setIsEditEmployeeModalOpen(false)} className="px-3 py-1.5 rounded-lg border cursor-pointer">
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={Boolean(editingEmployee.pinCode && getDuplicatePinEmployee(editingEmployee.pinCode, editingEmployee.id))}
+                  className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold cursor-pointer"
+                >
+                  Guardar Cambios y PIN
                 </button>
               </div>
             </form>

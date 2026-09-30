@@ -33,34 +33,38 @@ export const DeclarativeOnboardingWizard: React.FC<DeclarativeOnboardingWizardPr
 
   // Step 1: Regime
   const [regimeType, setRegimeType] = useState<'emprendedor_control_interno' | 'general_tributario'>(
-    currentCompany.regimeType || (currentCompany.dteActive ? 'general_tributario' : 'emprendedor_control_interno')
+    currentCompany?.regimeType || (currentCompany?.dteActive ? 'general_tributario' : 'emprendedor_control_interno')
   );
 
   // Step 2: DTE Status (One-Click Migration)
-  const [dteActive, setDteActive] = useState<boolean>(currentCompany.dteActive ?? false);
+  const [dteActive, setDteActive] = useState<boolean>(currentCompany?.dteActive ?? false);
+
+  const safeDeptName = typeof currentCompany?.department === 'string'
+    ? currentCompany.department
+    : (currentCompany?.department as any)?.name || 'San Salvador';
 
   // Step 3: Taxes Configuration
   const [declaIva, setDeclaIva] = useState<boolean>(
-    currentCompany.taxesConfig?.declaIva ?? (regimeType === 'general_tributario')
+    currentCompany?.taxesConfig?.declaIva ?? (regimeType === 'general_tributario')
   );
   const [declaPagoCuenta, setDeclaPagoCuenta] = useState<boolean>(
-    currentCompany.taxesConfig?.declaPagoCuenta ?? (regimeType === 'general_tributario')
+    currentCompany?.taxesConfig?.declaPagoCuenta ?? (regimeType === 'general_tributario')
   );
   const [declaImpuestosMunicipales, setDeclaImpuestosMunicipales] = useState<boolean>(
-    currentCompany.taxesConfig?.declaImpuestosMunicipales ?? true
+    currentCompany?.taxesConfig?.declaImpuestosMunicipales ?? true
   );
   const [municipalRateOrFee, setMunicipalRateOrFee] = useState<number>(
-    currentCompany.taxesConfig?.municipalRateOrFee ?? 25.00
+    currentCompany?.taxesConfig?.municipalRateOrFee ?? 25.00
   );
   const [alcaldiaName, setAlcaldiaName] = useState<string>(
-    currentCompany.taxesConfig?.alcaldiaName || `Alcaldía Municipal de ${currentCompany.department || 'San Salvador Centro'}`
+    currentCompany?.taxesConfig?.alcaldiaName || `Alcaldía Municipal de ${safeDeptName}`
   );
 
   // Step 4: Company Profile Details
-  const [tradeName, setTradeName] = useState<string>(currentCompany.tradeName || currentCompany.name);
-  const [giro, setGiro] = useState<string>(currentCompany.giro || 'Venta al por menor y servicios comerciales');
-  const [department, setDepartment] = useState<string>(currentCompany.department || 'San Salvador');
-  const [phone, setPhone] = useState<string>(currentCompany.phone || '+503 ');
+  const [tradeName, setTradeName] = useState<string>(currentCompany?.tradeName || currentCompany?.name || 'Mi Empresa');
+  const [giro, setGiro] = useState<string>(currentCompany?.giro || 'Venta al por menor y servicios comerciales');
+  const [department, setDepartment] = useState<string>(safeDeptName);
+  const [phone, setPhone] = useState<string>(currentCompany?.phone || '+503 ');
 
   const [savedSuccess, setSavedSuccess] = useState(false);
 
@@ -79,12 +83,14 @@ export const DeclarativeOnboardingWizard: React.FC<DeclarativeOnboardingWizardPr
       },
     });
 
-    updateCompany(currentCompany.id, {
-      tradeName,
-      giro,
-      department,
-      phone,
-    });
+    if (currentCompany?.id) {
+      updateCompany(currentCompany.id, {
+        tradeName,
+        giro,
+        department,
+        phone,
+      });
+    }
 
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 4000);
@@ -518,8 +524,8 @@ export const DeclarativeOnboardingWizard: React.FC<DeclarativeOnboardingWizardPr
                 className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold"
               >
                 {SALVADORAN_DEPARTMENTS.map((dept) => (
-                  <option key={dept} value={dept}>
-                    {dept}
+                  <option key={dept.code} value={dept.name}>
+                    {dept.name}
                   </option>
                 ))}
               </select>

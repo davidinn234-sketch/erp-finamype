@@ -38,61 +38,29 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
     setIsCloudUserManagerOpen,
   } = useERP();
 
-  const navigationItems = [
+  const erpOperationalItems = [
     {
       id: 'dashboard',
       label: 'Dashboard Corporativo',
       subtitle: 'Operativo, Flujo, Tesorería & DTE',
       icon: LayoutDashboard,
-      roles: ['admin_maestro', 'contador', 'gerente', 'cajero'],
-    },
-    {
-      id: 'marketing',
-      label: 'Dashboard de Marketing',
-      subtitle: 'Análisis Histórico, Clientes & BI',
-      icon: Target,
-      roles: ['admin_maestro', 'contador', 'gerente'],
-      badge: 'Histórico',
-    },
-    {
-      id: 'company_users',
-      label: 'Gestor de Perfiles & Cajeros',
-      subtitle: 'Crear cajeros, roles & accesos',
-      icon: Users,
-      roles: ['admin_maestro', 'gerente'],
-      badge: 'Equipo',
-    },
-    {
-      id: 'admin_profiles',
-      label: 'Portal SaaS Global',
-      subtitle: 'Empresas, Planes & Auditoría',
-      icon: Cloud,
-      roles: ['admin_maestro'],
-      badge: 'Admin',
-    },
-    {
-      id: 'forecasting',
-      label: 'Pronósticos & Proyecciones',
-      subtitle: 'Ventas, Flujo, Costos & OLS',
-      icon: TrendingUp,
-      roles: ['admin_maestro', 'contador', 'gerente'],
-      badge: 'Predictivo',
-    },
-    {
-      id: 'sales',
-      label: 'Ventas & Clientes (CRM)',
-      subtitle: 'DTE, CCF, Segmentación & CxC',
-      icon: Receipt,
-      roles: ['admin_maestro', 'contador', 'gerente', 'cajero'],
-      badge: 'DTE SV',
+      roles: ['admin_maestro', 'contador', 'gerente', 'cajero', 'vendedor'],
     },
     {
       id: 'pos_terminal',
       label: 'Punto de Venta POS',
       subtitle: 'Lector Código Barras & Caja',
       icon: ScanBarcode,
-      roles: ['admin_maestro', 'contador', 'gerente', 'cajero'],
+      roles: ['admin_maestro', 'contador', 'gerente', 'cajero', 'vendedor'],
       badge: 'Escáner',
+    },
+    {
+      id: 'sales',
+      label: 'Ventas & Clientes (CRM)',
+      subtitle: 'DTE, CCF, Segmentación & CxC',
+      icon: Receipt,
+      roles: ['admin_maestro', 'contador', 'gerente', 'cajero', 'vendedor'],
+      badge: 'DTE SV',
     },
     {
       id: 'purchases',
@@ -104,10 +72,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
     {
       id: 'payroll',
       label: 'RRHH & Planilla SV',
-      subtitle: 'ISSS, AFP, Renta MH & Provisiones',
+      subtitle: 'Asistencia PIN, ISSS, AFP & MH',
       icon: Users,
       roles: ['admin_maestro', 'contador', 'gerente'],
-      badge: 'Legal',
+      badge: 'Asistencia',
     },
     {
       id: 'treasury',
@@ -125,21 +93,58 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
       badge: 'NIIF SV',
     },
     {
+      id: 'forecasting',
+      label: 'Pronósticos & Proyecciones',
+      subtitle: 'Ventas, Flujo, Costos & OLS',
+      icon: TrendingUp,
+      roles: ['admin_maestro', 'contador', 'gerente'],
+      badge: 'Predictivo',
+    },
+    {
+      id: 'marketing',
+      label: 'Dashboard de Marketing',
+      subtitle: 'Análisis Histórico, Clientes & BI',
+      icon: Target,
+      roles: ['admin_maestro', 'contador', 'gerente'],
+      badge: 'Histórico',
+    },
+    {
       id: 'academy',
       label: 'Academia & Manuales',
       subtitle: 'Guías Paso a Paso & Ley SV',
       icon: BookOpen,
-      roles: ['admin_maestro', 'contador', 'gerente', 'cajero'],
+      roles: ['admin_maestro', 'contador', 'gerente', 'cajero', 'vendedor'],
       badge: 'Guías',
+    },
+  ];
+
+  const systemConfigItems = [
+    {
+      id: 'company_users',
+      label: 'Gestor de Perfiles & Cajeros',
+      subtitle: 'Crear colaboradores, roles & accesos',
+      icon: Users,
+      roles: ['admin_maestro', 'gerente'],
+      badge: 'Cuentas',
     },
     {
       id: 'settings',
       label: 'Configuración & Empresa',
-      subtitle: 'Catálogo, Tasas Fiscales & JSON',
+      subtitle: 'Catálogo, Tasas Fiscales & Sucursales',
       icon: Settings,
       roles: ['admin_maestro', 'contador', 'gerente'],
     },
+    {
+      id: 'admin_profiles',
+      label: 'Portal SaaS Global',
+      subtitle: 'Empresas, Planes & Auditoría',
+      icon: Cloud,
+      roles: ['admin_maestro'],
+      badge: 'Admin',
+    },
   ];
+
+  const navigationItems = [...erpOperationalItems, ...systemConfigItems];
 
   const isCompanyOwnerOrManager =
     currentUser?.role === 'admin_maestro' ||
@@ -191,6 +196,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
     return item.roles.includes(userRole) || hasPermission(item.id);
   });
 
+  const filteredErpItems = filteredNavItems.filter((i) =>
+    erpOperationalItems.some((e) => e.id === i.id)
+  );
+
+  const filteredSystemItems = filteredNavItems.filter((i) =>
+    systemConfigItems.some((s) => s.id === i.id)
+  );
+
   return (
     <>
       {/* Mobile Backdrop */}
@@ -208,8 +221,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
         }`}
       >
         {/* Top Logo & App Header */}
-        <div>
-          <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3">
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3 shrink-0">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-blue-600 to-cyan-500 flex items-center justify-center text-white shadow-md">
               <Layers className="w-5 h-5" />
             </div>
@@ -229,12 +242,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
           </div>
 
           {/* Navigation Menu Links */}
-          <nav className="p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-220px)]">
+          <nav className="p-3 space-y-1 overflow-y-auto flex-1 custom-scrollbar">
             <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              Módulos Operativos
+              Módulos Operativos ERP
             </div>
 
-            {filteredNavItems.map((item) => {
+            {filteredErpItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeModule === item.id;
               return (
@@ -282,6 +295,67 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
                 </button>
               );
             })}
+
+            {/* Bottom Config & System Section */}
+            {filteredSystemItems.length > 0 && (
+              <div className="pt-3">
+                <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                  <span>Configuración & Cuentas</span>
+                  <Settings className="w-3 h-3 text-slate-400" />
+                </div>
+
+                <div className="space-y-1 mt-1">
+                  {filteredSystemItems.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = activeModule === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        id={`nav-${item.id}`}
+                        onClick={() => {
+                          setActiveModule(item.id);
+                          onCloseMobile();
+                        }}
+                        className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${
+                          isActive
+                            ? 'bg-indigo-600 text-white font-medium shadow-sm shadow-indigo-200 dark:shadow-none'
+                            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <Icon
+                            className={`w-4 h-4 shrink-0 ${
+                              isActive ? 'text-white' : 'text-slate-500 dark:text-slate-400'
+                            }`}
+                          />
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold truncate leading-tight">{item.label}</p>
+                            <p
+                              className={`text-[10px] truncate ${
+                                isActive ? 'text-indigo-100' : 'text-slate-400 dark:text-slate-500'
+                              }`}
+                            >
+                              {item.subtitle}
+                            </p>
+                          </div>
+                        </div>
+                        {item.badge && (
+                          <span
+                            className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                              isActive
+                                ? 'bg-white/20 text-white'
+                                : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                            }`}
+                          >
+                            {item.badge}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </nav>
         </div>
 
@@ -327,6 +401,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
               <p>NRC: <span className="font-mono">{currentCompany.nrc}</span></p>
               <p>NIT: <span className="font-mono">{currentCompany.nit}</span></p>
               <p>Régimen: <span className="font-medium">{currentCompany.isGranContribuyente ? 'Gran Contribuyente' : 'Mediano / Startup'}</span></p>
+              <div className="pt-1.5 border-t border-slate-200/50 dark:border-slate-700/50 flex items-center justify-between">
+                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-600 dark:text-emerald-400">
+                  <Cloud className="w-3 h-3" />
+                  Nube Conectada (Firestore SV)
+                </span>
+                <span className="text-[9px] text-slate-400 font-mono">En Línea</span>
+              </div>
             </div>
           </div>
         </div>

@@ -141,12 +141,13 @@ export const SettingsModule: React.FC = () => {
 
   const handleOpenEditBranch = (b: Branch) => {
     setEditingBranch(b);
+    const safeDept = typeof b.department === 'string' ? b.department : (b.department as any)?.name || 'San Salvador';
     setBranchForm({
       code: b.code,
       name: b.name,
       address: b.address,
-      department: b.department,
-      municipality: b.municipality || getMunicipalitiesForDepartment(b.department)[0] || '',
+      department: safeDept,
+      municipality: b.municipality || getMunicipalitiesForDepartment(safeDept)[0] || '',
       phone: b.phone,
       managerName: b.managerName || '',
       isMain: b.isMain,
@@ -429,7 +430,7 @@ export const SettingsModule: React.FC = () => {
                           {b.name}
                         </h4>
                         <span className="text-[10px] text-slate-500 font-mono">
-                          {b.department}
+                          {typeof b.department === 'string' ? b.department : (b.department as any)?.name || 'San Salvador'}
                         </span>
                       </div>
                     </div>

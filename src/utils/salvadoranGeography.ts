@@ -138,10 +138,18 @@ export const SALVADORAN_DEPARTMENTS: DepartmentInfo[] = [
   },
 ];
 
-export const getMunicipalitiesForDepartment = (deptName?: string): string[] => {
-  if (!deptName) return SALVADORAN_DEPARTMENTS[0].municipalities;
+export const formatDepartmentName = (dept?: any): string => {
+  if (!dept) return 'San Salvador';
+  if (typeof dept === 'string') return dept;
+  if (typeof dept === 'object' && dept?.name && typeof dept.name === 'string') return dept.name;
+  return 'San Salvador';
+};
+
+export const getMunicipalitiesForDepartment = (deptName?: any): string[] => {
+  const cleanName = formatDepartmentName(deptName);
   const dept = SALVADORAN_DEPARTMENTS.find(
-    (d) => d.name.toLowerCase() === deptName.toLowerCase()
+    (d) => d.name.toLowerCase() === cleanName.toLowerCase() || d.code.toLowerCase() === cleanName.toLowerCase()
   );
   return dept ? dept.municipalities : SALVADORAN_DEPARTMENTS[0].municipalities;
 };
+

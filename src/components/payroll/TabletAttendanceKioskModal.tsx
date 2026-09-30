@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useERP } from '../../context/ERPContext';
-import { Employee, AttendanceRecord } from '../../types';
+import { Employee } from '../../types';
 import {
   Clock,
   ShieldCheck,
@@ -11,13 +11,15 @@ import {
   Minimize2,
   Delete,
   UserCheck,
-  ArrowRight,
-  Coffee,
   Utensils,
+  Coffee,
   LogOut,
   LogIn,
   Building,
   Sparkles,
+  Lock,
+  ArrowRight,
+  RotateCcw,
 } from 'lucide-react';
 
 interface Props {
@@ -37,6 +39,8 @@ export const TabletAttendanceKioskModal: React.FC<Props> = ({ isOpen, onClose })
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
   const [pin, setPin] = useState<string>('');
   const [matchedEmployee, setMatchedEmployee] = useState<Employee | null>(null);
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [isShaking, setIsShaking] = useState(false);
   const [feedback, setFeedback] = useState<{
     type: 'success' | 'warning' | 'error';
     title: string;
@@ -71,7 +75,7 @@ export const TabletAttendanceKioskModal: React.FC<Props> = ({ isOpen, onClose })
   }, [feedback]);
 
   // Audio tone feedback using Web Audio API
-  const playChime = (success: boolean) => {
+  const playChime = useCallback((success: boolean) => {
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
       const osc = audioCtx.createOscillator();
@@ -81,71 +85,114 @@ export const TabletAttendanceKioskModal: React.FC<Props> = ({ isOpen, onClose })
       if (success) {
         osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
         osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.12); // A5
-        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.18, audioCtx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
         osc.start(audioCtx.currentTime);
         osc.stop(audioCtx.currentTime + 0.35);
       } else {
-        osc.frequency.setValueAtTime(320, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.18, audioCtx.currentTime);
+        osc.frequency.setValueAtTime(320, audioCtx.currentTime); // Low E
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
         osc.start(audioCtx.currentTime);
         osc.stop(audioCtx.currentTime + 0.3);
       }
     } catch (e) {
-      // Audio not permitted or supported
+      // Audio not permitted or supported in some iframe contexts
     }
-  };
+  }, []);
 
-  // Check pin matches employee
-  useEffect(() => {
-    if (pin.length >= 4) {
-      const emp = employees.find(
-        (e) =>
-          (e.pinCode && e.pinCode === pin) ||
-          e.code.replace(/\D/g, '') === pin ||
-          e.dui.replace(/\D/g, '').slice(-4) === pin
-      );
-      if (emp) {
-        setMatchedEmployee(emp);
-      } else if (pin.length >= 6) {
-        setFeedback({
-          type: 'error',
-          title: 'PIN No Reconocido',
-          message: 'No existe ningún empleado registrado con este código PIN. Consulta con Recursos Humanos.',
-        });
-        playChime(false);
-      }
+  const resetState = useCallback(() => {
+    setPin('');
+    setMatchedEmployee(null);
+    setPinError(null);
+    setIsShaking(false);
+    setFeedback(null);
+    setCountdown(null);
+  }, []);
+
+  // Check pin matches employee when it reaches 4 digits
+  const checkPinCode = useCallback((inputPin: string) => {
+    if (inputPin.length < 4) {
+      setMatchedEmployee(null);
+      setPinError(null);
+      return;
+    }
+
+    const trimmed = inputPin.trim();
+    // Match against active employees with exact PIN or Employee numeric ID/code
+    const emp = employees.find(
+      (e) =>
+        e.isActive !== false &&
+        ((e.pinCode && String(e.pinCode).trim() === trimmed) ||
+          (e.code && e.code.replace(/\D/g, '') === trimmed) ||
+          (e.dui && e.dui.replace(/\D/g, '').slice(-4) === trimmed))
+    );
+
+    if (emp) {
+      setMatchedEmployee(emp);
+      setPinError(null);
+      playChime(true);
     } else {
       setMatchedEmployee(null);
+      setPinError(`El PIN "${trimmed}" no está asignado a ningún colaborador activo. Verifica con Recursos Humanos.`);
+      setIsShaking(true);
+      playChime(false);
+      setTimeout(() => {
+        setIsShaking(false);
+      }, 800);
+      setTimeout(() => {
+        setPin('');
+        setPinError(null);
+      }, 4000);
     }
-  }, [pin, employees]);
-
-  if (!isOpen) return null;
+  }, [employees, playChime]);
 
   const handleKeyPress = (num: string) => {
-    if (feedback) return;
-    if (pin.length < 8) {
-      setPin((prev) => prev + num);
+    if (feedback || matchedEmployee) return;
+    if (pin.length < 4) {
+      const nextPin = pin + num;
+      setPin(nextPin);
+      if (nextPin.length === 4) {
+        checkPinCode(nextPin);
+      }
     }
   };
 
   const handleBackspace = () => {
-    if (feedback) return;
+    if (feedback || matchedEmployee) return;
     setPin((prev) => prev.slice(0, -1));
+    setPinError(null);
   };
 
   const handleClear = () => {
     setPin('');
     setMatchedEmployee(null);
+    setPinError(null);
   };
 
-  const resetState = () => {
-    setPin('');
-    setMatchedEmployee(null);
-    setFeedback(null);
-    setCountdown(null);
-  };
+  // Keyboard navigation support for physical keyboards / tablet attachments
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key >= '0' && e.key <= '9') {
+        handleKeyPress(e.key);
+      } else if (e.key === 'Backspace') {
+        handleBackspace();
+      } else if (e.key === 'Escape') {
+        if (matchedEmployee) {
+          resetState();
+        } else {
+          onClose();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, matchedEmployee, pin, feedback, onClose, resetState]);
+
+  if (!isOpen) return null;
 
   const handleRecord = (actionType: 'check_in' | 'lunch_start' | 'lunch_end' | 'check_out') => {
     if (!matchedEmployee) return;
@@ -174,7 +221,7 @@ export const TabletAttendanceKioskModal: React.FC<Props> = ({ isOpen, onClose })
         setFeedback({
           type: 'success',
           title: `¡Entrada Registrada a Tiempo!`,
-          message: `¡Bienvenido(a) a ${currentCompany.tradeName || currentCompany.name}, ${matchedEmployee.firstName}! Marcaje completado con 100% de puntualidad.`,
+          message: `¡Bienvenido(a) a ${currentCompany.tradeName || currentCompany.name}, ${matchedEmployee.firstName}! Marcaje completado puntualmente.`,
           details: `Hora marcada: ${result.timeStr} • Tolerancia: ${result.record?.toleranceApplied || 10} min`,
         });
       }
@@ -196,8 +243,8 @@ export const TabletAttendanceKioskModal: React.FC<Props> = ({ isOpen, onClose })
       setFeedback({
         type: 'success',
         title: `¡Salida Laboral Registrada!`,
-        message: `Gracias por tu esfuerzo en esta jornada, ${matchedEmployee.firstName}. ¡Hasta mañana!`,
-        details: `Hora de salida: ${result.timeStr} • Buen descanso`,
+        message: `Gracias por tu esfuerzo en esta jornada, ${matchedEmployee.firstName}. ¡Hasta pronto!`,
+        details: `Hora de salida: ${result.timeStr} • Jornada finalizada`,
       });
     }
   };
@@ -209,17 +256,10 @@ export const TabletAttendanceKioskModal: React.FC<Props> = ({ isOpen, onClose })
     } else {
       if (document.exitFullscreen) {
         document.exitFullscreen().catch(() => {});
+        setIsFullscreen(false);
       }
-      setIsFullscreen(false);
     }
   };
-
-  const formattedDateStr = currentTime.toLocaleDateString('es-SV', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
 
   const formattedTimeStr = currentTime.toLocaleTimeString('es-SV', {
     hour: '2-digit',
@@ -228,26 +268,33 @@ export const TabletAttendanceKioskModal: React.FC<Props> = ({ isOpen, onClose })
     hour12: true,
   });
 
+  const formattedDateStr = currentTime.toLocaleDateString('es-SV', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/95 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="w-full max-w-4xl h-[94vh] max-h-[850px] bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl flex flex-col justify-between overflow-hidden relative">
-        {/* Top Header Bar */}
-        <div className="p-4 sm:p-5 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/95 backdrop-blur-md animate-fade-in select-none">
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-4xl max-h-[96vh] flex flex-col shadow-2xl overflow-hidden">
+        {/* Top Header / Kiosk Navigation */}
+        <div className="px-6 py-4 border-b border-slate-800/80 flex items-center justify-between bg-slate-950/70">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-cyan-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/20">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-cyan-600 to-indigo-600 flex items-center justify-center text-white shadow-md">
               <Clock className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-black text-white text-base tracking-tight">
+                <h2 className="text-base sm:text-lg font-black text-white tracking-tight">
+                  Terminal de Asistencia Kiosko
+                </h2>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-950 text-cyan-400 border border-cyan-800/60">
                   {currentCompany.tradeName || currentCompany.name}
                 </span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                  Terminal Tablet Kiosko
-                </span>
               </div>
-              <p className="text-[11px] text-slate-400">
-                Control de Asistencia Digital & Registro de Horarios con PIN
+              <p className="text-xs text-slate-400 font-medium">
+                Control de Asistencia Digital con PIN Personal Confidencial
               </p>
             </div>
           </div>
@@ -255,14 +302,14 @@ export const TabletAttendanceKioskModal: React.FC<Props> = ({ isOpen, onClose })
           <div className="flex items-center gap-2">
             <button
               onClick={toggleFullscreen}
-              className="p-2 rounded-xl border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+              className="p-2.5 rounded-xl border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
               title="Pantalla Completa para Tablet"
             >
               {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             </button>
             <button
               onClick={onClose}
-              className="px-3 py-1.5 rounded-xl border border-slate-800 hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+              className="px-3.5 py-2 rounded-xl border border-slate-800 hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
               title="Salir del Modo Kiosko"
             >
               <X className="w-4 h-4" />
@@ -271,8 +318,8 @@ export const TabletAttendanceKioskModal: React.FC<Props> = ({ isOpen, onClose })
           </div>
         </div>
 
-        {/* Center Live Display: Clock & Date */}
-        <div className="px-6 py-3 text-center border-b border-slate-800/60 bg-gradient-to-b from-slate-900 to-slate-950/60">
+        {/* Center Live Clock & Date */}
+        <div className="px-6 py-3.5 text-center border-b border-slate-800/60 bg-gradient-to-b from-slate-950/80 to-slate-900">
           <div className="text-4xl sm:text-5xl lg:text-6xl font-black font-mono tracking-tight text-white drop-shadow-md">
             {formattedTimeStr}
           </div>
@@ -282,237 +329,246 @@ export const TabletAttendanceKioskModal: React.FC<Props> = ({ isOpen, onClose })
         </div>
 
         {/* Main Body */}
-        <div className="flex-1 p-4 sm:p-6 overflow-y-auto flex flex-col lg:flex-row items-center justify-center gap-6 lg:gap-10">
-          {/* Left Column: Feedback Card OR Identified Employee Action Card */}
-          <div className="w-full lg:w-1/2 flex flex-col justify-center">
-            {feedback ? (
-              <div
-                className={`p-6 sm:p-8 rounded-3xl border text-center space-y-4 animate-in zoom-in-95 duration-150 ${
-                  feedback.type === 'success'
-                    ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-200'
-                    : feedback.type === 'warning'
-                    ? 'bg-amber-950/40 border-amber-500/50 text-amber-200'
-                    : 'bg-rose-950/40 border-rose-500/50 text-rose-200'
-                }`}
-              >
-                <div className="w-16 h-16 rounded-full mx-auto flex items-center justify-center bg-white/10 shadow-inner">
-                  {feedback.type === 'success' ? (
-                    <CheckCircle2 className="w-10 h-10 text-emerald-400" />
-                  ) : feedback.type === 'warning' ? (
-                    <AlertTriangle className="w-10 h-10 text-amber-400" />
-                  ) : (
-                    <X className="w-10 h-10 text-rose-400" />
-                  )}
-                </div>
-
-                <div className="space-y-1.5">
-                  <h3 className="text-xl sm:text-2xl font-black">{feedback.title}</h3>
-                  <p className="text-sm font-medium opacity-90 max-w-sm mx-auto">
-                    {feedback.message}
-                  </p>
-                  {feedback.details && (
-                    <p className="text-xs font-mono font-bold opacity-80 pt-1">
-                      {feedback.details}
-                    </p>
-                  )}
-                </div>
-
-                {countdown !== null && (
-                  <div className="pt-2">
-                    <span className="text-[11px] font-bold opacity-75 block">
-                      Reiniciando pantalla en {countdown}s para el siguiente colaborador...
-                    </span>
-                    <button
-                      onClick={resetState}
-                      className="mt-3 px-4 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-bold transition cursor-pointer"
-                    >
-                      Listo / Siguiente Marcaje Ahora
-                    </button>
-                  </div>
+        <div className="flex-1 p-5 sm:p-8 overflow-y-auto flex flex-col items-center justify-center">
+          {/* STATE 1: FEEDBACK POPUP / CELEBRATION */}
+          {feedback ? (
+            <div
+              className={`w-full max-w-lg p-8 rounded-3xl border text-center space-y-5 animate-in zoom-in-95 duration-150 ${
+                feedback.type === 'success'
+                  ? 'bg-emerald-950/50 border-emerald-500/60 text-emerald-200'
+                  : feedback.type === 'warning'
+                  ? 'bg-amber-950/50 border-amber-500/60 text-amber-200'
+                  : 'bg-rose-950/50 border-rose-500/60 text-rose-200'
+              }`}
+            >
+              <div className="w-20 h-20 rounded-full mx-auto flex items-center justify-center bg-white/10 shadow-inner">
+                {feedback.type === 'success' ? (
+                  <CheckCircle2 className="w-12 h-12 text-emerald-400 animate-bounce" />
+                ) : feedback.type === 'warning' ? (
+                  <AlertTriangle className="w-12 h-12 text-amber-400" />
+                ) : (
+                  <X className="w-12 h-12 text-rose-400" />
                 )}
               </div>
-            ) : matchedEmployee ? (
-              <div className="bg-slate-800/80 border border-slate-700 rounded-3xl p-6 sm:p-7 space-y-5 shadow-xl animate-in fade-in duration-150">
-                {/* Employee Info Header */}
-                <div className="flex items-center gap-4 border-b border-slate-700/60 pb-4">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-cyan-500 to-indigo-600 text-white font-black text-xl flex items-center justify-center shadow-lg">
-                    {matchedEmployee.firstName.charAt(0)}
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-mono font-bold text-cyan-400 block uppercase tracking-wider">
-                      {matchedEmployee.code} • {matchedEmployee.department}
-                    </span>
-                    <h3 className="text-lg font-black text-white">
-                      {matchedEmployee.firstName} {matchedEmployee.lastName}
-                    </h3>
-                    <p className="text-xs text-slate-300 font-medium">{matchedEmployee.position}</p>
-                  </div>
-                </div>
 
-                {/* Scheduled Times info */}
-                <div className="grid grid-cols-2 gap-2 text-xs bg-slate-900/60 p-3 rounded-2xl border border-slate-700/50">
-                  <div>
-                    <span className="text-[10px] text-slate-400 block font-bold">HORARIO ENTRADA:</span>
-                    <span className="font-mono font-black text-cyan-300">
-                      {matchedEmployee.workSchedule?.startTime || attendanceConfig.defaultStartTime || '08:00 AM'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block font-bold">TOLERANCIA PERMITIDA:</span>
-                    <span className="font-mono font-black text-emerald-400">
-                      {matchedEmployee.workSchedule?.toleranceMinutes || attendanceConfig.toleranceMinutes || 10} min
-                    </span>
-                  </div>
-                </div>
+              <div className="space-y-2">
+                <h3 className="text-2xl sm:text-3xl font-black text-white">{feedback.title}</h3>
+                <p className="text-sm sm:text-base font-medium opacity-90 max-w-md mx-auto leading-relaxed">
+                  {feedback.message}
+                </p>
+                {feedback.details && (
+                  <p className="text-xs font-mono font-bold opacity-80 pt-2 border-t border-white/10 max-w-xs mx-auto">
+                    {feedback.details}
+                  </p>
+                )}
+              </div>
 
-                {/* 4 Action Buttons for Marcaje */}
-                <div className="space-y-2.5">
-                  <span className="text-[11px] font-bold text-slate-400 block uppercase tracking-wider">
-                    Selecciona tu Marcaje de Hoy:
+              {countdown !== null && (
+                <div className="pt-2">
+                  <span className="text-xs font-bold opacity-75 block mb-3">
+                    Reiniciando terminal en <strong className="text-white font-mono text-sm">{countdown}s</strong> para el siguiente colaborador...
                   </span>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <button
-                      onClick={() => handleRecord('check_in')}
-                      className="p-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/40 cursor-pointer transition"
-                    >
-                      <LogIn className="w-4 h-4" />
-                      <span>MARCAR ENTRADA</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleRecord('check_out')}
-                      className="p-3.5 rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-rose-900/40 cursor-pointer transition"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      <span>MARCAR SALIDA</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleRecord('lunch_start')}
-                      className="p-3 rounded-xl bg-amber-600/90 hover:bg-amber-600 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-2 shadow cursor-pointer transition"
-                    >
-                      <Utensils className="w-3.5 h-3.5" />
-                      <span>Salida a Almuerzo</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleRecord('lunch_end')}
-                      className="p-3 rounded-xl bg-indigo-600/90 hover:bg-indigo-600 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-2 shadow cursor-pointer transition"
-                    >
-                      <Coffee className="w-3.5 h-3.5" />
-                      <span>Retorno Almuerzo</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex justify-end pt-1">
                   <button
-                    onClick={handleClear}
-                    className="text-xs text-slate-400 hover:text-white underline cursor-pointer"
+                    onClick={resetState}
+                    className="px-5 py-2.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-bold transition cursor-pointer flex items-center gap-2 mx-auto active:scale-95"
                   >
-                    Cancelar / No soy yo
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Siguiente Marcaje Ahora</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : matchedEmployee ? (
+            /* STATE 2: EMPLOYEE IDENTIFIED - PUNCH ACTION BUTTONS */
+            <div className="w-full max-w-xl bg-slate-800/90 border border-slate-700 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl animate-in fade-in duration-150">
+              {/* Employee Banner */}
+              <div className="flex items-center gap-4 border-b border-slate-700/80 pb-5">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-cyan-500 to-indigo-600 text-white font-black text-2xl flex items-center justify-center shadow-lg">
+                  {matchedEmployee.firstName.charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-cyan-950 text-cyan-300 border border-cyan-800">
+                      {matchedEmployee.code}
+                    </span>
+                    <span className="text-[11px] text-slate-400 font-medium truncate">
+                      {typeof matchedEmployee.department === 'string'
+                        ? matchedEmployee.department
+                        : (matchedEmployee.department as any)?.name || 'General'}
+                    </span>
+                  </div>
+                  <h3 className="text-xl sm:text-2xl font-black text-white truncate">
+                    ¡Hola, {matchedEmployee.firstName} {matchedEmployee.lastName}!
+                  </h3>
+                  <p className="text-xs text-slate-300">{matchedEmployee.position}</p>
+                </div>
+              </div>
+
+              {/* Schedule Info */}
+              <div className="grid grid-cols-2 gap-3 text-xs bg-slate-900/80 p-3.5 rounded-2xl border border-slate-700/60">
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-bold uppercase">Hora Entrada Oficial:</span>
+                  <span className="font-mono font-black text-cyan-300 text-sm">
+                    {matchedEmployee.workSchedule?.startTime || attendanceConfig.defaultStartTime || '08:00 AM'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-bold uppercase">Tolerancia Permitida:</span>
+                  <span className="font-mono font-black text-emerald-400 text-sm">
+                    {matchedEmployee.workSchedule?.toleranceMinutes || attendanceConfig.toleranceMinutes || 10} minutos
+                  </span>
+                </div>
+              </div>
+
+              {/* 4 Touch Action Buttons */}
+              <div className="space-y-3">
+                <span className="text-xs font-bold text-slate-300 block uppercase tracking-wider">
+                  Toca para registrar tu marcaje de hoy:
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    onClick={() => handleRecord('check_in')}
+                    className="p-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-sm flex items-center justify-center gap-2.5 shadow-lg shadow-emerald-950/50 cursor-pointer transition"
+                  >
+                    <LogIn className="w-5 h-5" />
+                    <span>MARCAR ENTRADA</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleRecord('check_out')}
+                    className="p-4 rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-black text-sm flex items-center justify-center gap-2.5 shadow-lg shadow-rose-950/50 cursor-pointer transition"
+                  >
+                    <LogOut className="w-5 h-5" />
+                    <span>MARCAR SALIDA</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleRecord('lunch_start')}
+                    className="p-3.5 rounded-2xl bg-amber-600 hover:bg-amber-500 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-2 shadow cursor-pointer transition"
+                  >
+                    <Utensils className="w-4 h-4" />
+                    <span>Salida a Almuerzo</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleRecord('lunch_end')}
+                    className="p-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-2 shadow cursor-pointer transition"
+                  >
+                    <Coffee className="w-4 h-4" />
+                    <span>Retorno Almuerzo</span>
                   </button>
                 </div>
               </div>
-            ) : (
-              <div className="text-center space-y-3 p-6 bg-slate-800/40 rounded-3xl border border-slate-800">
-                <div className="w-14 h-14 rounded-2xl bg-slate-800 text-cyan-400 mx-auto flex items-center justify-center border border-slate-700 shadow-inner">
-                  <UserCheck className="w-7 h-7" />
-                </div>
-                <div>
-                  <h3 className="text-base font-black text-white">Ingresa tu Código PIN</h3>
-                  <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
-                    Usa el teclado táctil de la derecha para digitar tu PIN personal de 4 dígitos asignado por la empresa.
-                  </p>
-                </div>
 
-                {/* Helpful PIN list hint for demo convenience */}
-                <div className="text-left bg-slate-900/90 p-3.5 rounded-2xl border border-slate-800/90 text-[11px] text-slate-400 space-y-1 font-mono">
-                  <span className="font-bold text-slate-300 font-sans block text-[10px] uppercase">
-                    PINs rápidos de colaboradores:
-                  </span>
-                  <div className="flex flex-wrap gap-2 pt-0.5">
-                    {employees.slice(0, 4).map((e, idx) => (
-                      <button
-                        key={e.id}
-                        type="button"
-                        onClick={() => setPin(e.pinCode || `100${idx + 1}`)}
-                        className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 text-[10px] font-bold border border-slate-700 transition cursor-pointer"
-                      >
-                        {e.firstName}: {e.pinCode || `100${idx + 1}`}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+              <div className="flex justify-between items-center pt-2 border-t border-slate-700/60">
+                <button
+                  onClick={resetState}
+                  className="text-xs text-slate-400 hover:text-white underline cursor-pointer"
+                >
+                  ← No soy yo / Cancelar
+                </button>
+                <span className="text-[11px] text-slate-500 font-mono">
+                  Confirmación táctil de alta seguridad
+                </span>
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            /* STATE 3: CLEAN SECURE NUMERIC KEYPAD (NO PINS DISPLAYED TO PREVENT FRAUD) */
+            <div className="w-full max-w-sm flex flex-col items-center space-y-5 animate-in fade-in">
+              <div className="text-center space-y-1.5">
+                <div className="w-12 h-12 rounded-2xl bg-slate-800 text-cyan-400 mx-auto flex items-center justify-center border border-slate-700 shadow-inner">
+                  <Lock className="w-6 h-6" />
+                </div>
+                <h3 className="text-lg font-black text-white">Ingresa tu PIN Confidencial</h3>
+                <p className="text-xs text-slate-400 max-w-xs">
+                  Digita tus 4 dígitos asignados en el teclado de abajo para registrar tu entrada o salida.
+                </p>
+              </div>
 
-          {/* Right Column: Numeric Touch Keypad */}
-          <div className="w-full lg:w-1/2 max-w-xs space-y-4">
-            {/* PIN Display Field */}
-            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-center flex items-center justify-center gap-3 h-14 shadow-inner">
-              {pin ? (
-                Array.from({ length: Math.max(pin.length, 4) }).map((_, i) => (
+              {/* PIN Indicator Dots */}
+              <div
+                className={`bg-slate-950 p-4 rounded-2xl border text-center flex items-center justify-center gap-4 h-16 w-full shadow-inner transition-all ${
+                  isShaking
+                    ? 'border-rose-500 bg-rose-950/30 animate-pulse'
+                    : 'border-slate-800'
+                }`}
+              >
+                {Array.from({ length: 4 }).map((_, i) => (
                   <span
                     key={i}
-                    className={`w-3.5 h-3.5 rounded-full transition-all ${
+                    className={`w-4 h-4 rounded-full transition-all duration-150 ${
                       i < pin.length
-                        ? 'bg-cyan-400 scale-110 shadow-sm shadow-cyan-400'
+                        ? 'bg-cyan-400 scale-125 shadow-md shadow-cyan-400/50'
                         : 'bg-slate-800 border border-slate-700'
                     }`}
                   />
-                ))
-              ) : (
-                <span className="text-xs text-slate-500 font-medium">Digita tu PIN aquí</span>
+                ))}
+              </div>
+
+              {/* Error message under PIN */}
+              {pinError && (
+                <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-800 text-rose-300 text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <span>{pinError}</span>
+                </div>
               )}
-            </div>
 
-            {/* Keypad Buttons Grid 3x4 */}
-            <div className="grid grid-cols-3 gap-2.5">
-              {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
+              {/* Numeric Touch Keypad Grid 3x4 */}
+              <div className="grid grid-cols-3 gap-3 w-full">
+                {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
+                  <button
+                    key={digit}
+                    type="button"
+                    onClick={() => handleKeyPress(digit)}
+                    className="h-16 rounded-2xl bg-slate-800 hover:bg-slate-750 active:bg-cyan-600 active:text-white border border-slate-700/80 text-white font-mono font-black text-2xl shadow-md transition active:scale-95 flex items-center justify-center cursor-pointer select-none"
+                  >
+                    {digit}
+                  </button>
+                ))}
+
                 <button
-                  key={digit}
                   type="button"
-                  onClick={() => handleKeyPress(digit)}
-                  className="h-16 rounded-2xl bg-slate-800 hover:bg-slate-750 active:bg-cyan-600 active:text-white border border-slate-700/80 text-white font-mono font-bold text-2xl shadow-md transition active:scale-95 flex items-center justify-center cursor-pointer select-none"
+                  onClick={handleClear}
+                  className="h-16 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-400 hover:text-white font-bold text-xs uppercase shadow transition active:scale-95 flex items-center justify-center cursor-pointer select-none"
                 >
-                  {digit}
+                  Borrar
                 </button>
-              ))}
 
-              <button
-                type="button"
-                onClick={handleClear}
-                className="h-16 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-400 hover:text-white font-bold text-xs uppercase shadow transition active:scale-95 flex items-center justify-center cursor-pointer select-none"
-              >
-                Borrar
-              </button>
+                <button
+                  type="button"
+                  onClick={() => handleKeyPress('0')}
+                  className="h-16 rounded-2xl bg-slate-800 hover:bg-slate-750 active:bg-cyan-600 active:text-white border border-slate-700/80 text-white font-mono font-black text-2xl shadow-md transition active:scale-95 flex items-center justify-center cursor-pointer select-none"
+                >
+                  0
+                </button>
 
-              <button
-                type="button"
-                onClick={() => handleKeyPress('0')}
-                className="h-16 rounded-2xl bg-slate-800 hover:bg-slate-750 active:bg-cyan-600 active:text-white border border-slate-700/80 text-white font-mono font-bold text-2xl shadow-md transition active:scale-95 flex items-center justify-center cursor-pointer select-none"
-              >
-                0
-              </button>
+                <button
+                  type="button"
+                  onClick={handleBackspace}
+                  className="h-16 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-400 hover:text-white font-bold shadow transition active:scale-95 flex items-center justify-center cursor-pointer select-none"
+                  title="Borrar último dígito"
+                >
+                  <Delete className="w-6 h-6" />
+                </button>
+              </div>
 
-              <button
-                type="button"
-                onClick={handleBackspace}
-                className="h-16 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-400 hover:text-white font-bold shadow transition active:scale-95 flex items-center justify-center cursor-pointer select-none"
-                title="Borrar último dígito"
-              >
-                <Delete className="w-5 h-5" />
-              </button>
+              {/* Security Guarantee Note */}
+              <p className="text-[11px] text-slate-500 text-center flex items-center gap-1.5 pt-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                <span>Marcaje seguro: cada colaborador debe digitar su propio PIN confidencial.</span>
+              </p>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Footer info */}
-        <div className="p-3 border-t border-slate-800 bg-slate-900/60 text-center text-[11px] text-slate-500">
+        <div className="px-6 py-3 border-t border-slate-800 bg-slate-950/70 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-400 gap-2">
           <span>
-            FinaPyme.SV Kiosk • Tolerancia oficial de la empresa: <strong>{attendanceConfig.toleranceMinutes || 10} minutos</strong> • Registros sincronizados en tiempo real
+            Tolerancia oficial de entrada: <strong className="text-white font-mono">{attendanceConfig.toleranceMinutes || 10} minutos</strong>
+          </span>
+          <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            Kiosko Conectado a la Nube (Sincronización en Tiempo Real)
           </span>
         </div>
       </div>

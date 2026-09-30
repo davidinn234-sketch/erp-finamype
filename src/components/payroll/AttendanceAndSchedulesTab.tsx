@@ -22,6 +22,11 @@ import {
   ShieldCheck,
   TrendingUp,
   Percent,
+  Lock,
+  Edit3,
+  Key,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 interface Props {
@@ -40,6 +45,7 @@ export const AttendanceAndSchedulesTab: React.FC<Props> = ({ onOpenKiosk }) => {
     updateLeaveRequestStatus,
     currentCompany,
     addNotification,
+    updateEmployee,
   } = useERP();
 
   const [selectedDate, setSelectedDate] = useState<string>(
@@ -53,6 +59,87 @@ export const AttendanceAndSchedulesTab: React.FC<Props> = ({ onOpenKiosk }) => {
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [isNewLeaveModalOpen, setIsNewLeaveModalOpen] = useState(false);
   const [isManualMarkModalOpen, setIsManualMarkModalOpen] = useState(false);
+  const [isEditPinModalOpen, setIsEditPinModalOpen] = useState(false);
+  const [editingPinEmp, setEditingPinEmp] = useState<Employee | null>(null);
+  const [revealedPins, setRevealedPins] = useState<Record<string, boolean>>({});
+
+  // Form states for PIN & Schedule editing
+  const [pinFormVal, setPinFormVal] = useState<string>('');
+  const [scheduleStartVal, setScheduleStartVal] = useState<string>('08:00');
+  const [scheduleEndVal, setScheduleEndVal] = useState<string>('17:00');
+  const [scheduleLunchStartVal, setScheduleLunchStartVal] = useState<string>('12:00');
+  const [scheduleLunchEndVal, setScheduleLunchEndVal] = useState<string>('13:00');
+  const [scheduleToleranceVal, setScheduleToleranceVal] = useState<number>(10);
+
+  // Helper to generate a collision-free 4-digit PIN
+  const generateUniquePin = (existingList: Employee[], currentEmpId?: string): string => {
+    const usedPins = new Set(
+      existingList
+        .filter((e) => !currentEmpId || e.id !== currentEmpId)
+        .map((e) => e.pinCode?.trim())
+        .filter(Boolean)
+    );
+    for (let i = 0; i < 2000; i++) {
+      const candidate = Math.floor(1000 + Math.random() * 9000).toString();
+      if (!usedPins.has(candidate)) return candidate;
+    }
+    return '9999';
+  };
+
+  // Helper to detect if a PIN is already assigned to another employee
+  const getDuplicatePinEmployee = (pinToCheck?: string, currentEmpId?: string): Employee | undefined => {
+    if (!pinToCheck || pinToCheck.trim().length < 4) return undefined;
+    const cleanPin = pinToCheck.trim();
+    return employees.find(
+      (e) => (!currentEmpId || e.id !== currentEmpId) && e.pinCode?.trim() === cleanPin
+    );
+  };
+
+  const handleOpenEditPinSchedule = (emp: Employee) => {
+    setEditingPinEmp(emp);
+    setPinFormVal(emp.pinCode || generateUniquePin(employees, emp.id));
+    setScheduleStartVal(emp.workSchedule?.startTime || attendanceConfig.defaultStartTime || '08:00');
+    setScheduleEndVal(emp.workSchedule?.endTime || attendanceConfig.defaultEndTime || '17:00');
+    setScheduleLunchStartVal(emp.workSchedule?.lunchStartTime || attendanceConfig.defaultLunchStart || '12:00');
+    setScheduleLunchEndVal(emp.workSchedule?.lunchEndTime || attendanceConfig.defaultLunchEnd || '13:00');
+    setScheduleToleranceVal(emp.workSchedule?.toleranceMinutes || attendanceConfig.toleranceMinutes || 10);
+    setIsEditPinModalOpen(true);
+  };
+
+  const handleSavePinSchedule = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPinEmp) return;
+
+    const dup = getDuplicatePinEmployee(pinFormVal, editingPinEmp.id);
+    if (dup) {
+      addNotification(
+        'error',
+        'PIN Duplicado',
+        `El PIN ${pinFormVal} ya pertenece a ${dup.firstName} ${dup.lastName}. Elige un PIN único.`
+      );
+      return;
+    }
+
+    updateEmployee(editingPinEmp.id, {
+      pinCode: pinFormVal.trim(),
+      workSchedule: {
+        startTime: scheduleStartVal,
+        endTime: scheduleEndVal,
+        lunchStartTime: scheduleLunchStartVal,
+        lunchEndTime: scheduleLunchEndVal,
+        workingDays: editingPinEmp.workSchedule?.workingDays || [1, 2, 3, 4, 5, 6],
+        toleranceMinutes: scheduleToleranceVal,
+      },
+    });
+
+    setIsEditPinModalOpen(false);
+    setEditingPinEmp(null);
+    addNotification(
+      'success',
+      'Horario y PIN Actualizados',
+      `Se guardó el PIN ${pinFormVal} y horario para ${editingPinEmp.firstName}.`
+    );
+  };
 
   // Leave Form
   const [leaveEmployeeId, setLeaveEmployeeId] = useState(employees[0]?.id || '');
@@ -311,6 +398,18 @@ export const AttendanceAndSchedulesTab: React.FC<Props> = ({ onOpenKiosk }) => {
           <FileText className="w-3.5 h-3.5" />
           <span>Permisos & Licencias Laborales ({leaveRequests.length})</span>
         </button>
+
+        <button
+          onClick={() => setSubSection('schedules')}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+            subSection === 'schedules'
+              ? 'bg-cyan-600 text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Lock className="w-3.5 h-3.5" />
+          <span>Horarios & PINs Kiosko ({employees.length})</span>
+        </button>
       </div>
 
       {/* SECTION 1: ATTENDANCE RECORDS TABLE */}
@@ -387,8 +486,6 @@ export const AttendanceAndSchedulesTab: React.FC<Props> = ({ onOpenKiosk }) => {
                       emp.workSchedule?.startTime || attendanceConfig.defaultStartTime || '08:00 AM';
                     const schedEnd =
                       emp.workSchedule?.endTime || attendanceConfig.defaultEndTime || '05:00 PM';
-                    const pinDisplay = emp.pinCode || `100${idx + 1}`;
-
                     return (
                       <tr key={emp.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50">
                         <td className="p-3 font-sans">
@@ -401,7 +498,7 @@ export const AttendanceAndSchedulesTab: React.FC<Props> = ({ onOpenKiosk }) => {
                                 {emp.firstName} {emp.lastName}
                               </p>
                               <p className="text-[10px] text-slate-400 font-mono">
-                                {emp.position} • PIN Tablet: <strong className="text-cyan-600">{pinDisplay}</strong>
+                                {emp.position} • PIN Kiosko: <span className="text-emerald-600 dark:text-emerald-400 font-bold">✓ Confidencial Asignado</span>
                               </p>
                             </div>
                           </div>
@@ -585,6 +682,295 @@ export const AttendanceAndSchedulesTab: React.FC<Props> = ({ onOpenKiosk }) => {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* SECTION 3: WORK SCHEDULES & CONFIDENTIAL KIOSK PINS */}
+      {subSection === 'schedules' && (
+        <div className="space-y-4">
+          <div className="p-4 rounded-2xl bg-cyan-50/70 dark:bg-cyan-950/30 border border-cyan-200 dark:border-cyan-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-cyan-600 text-white flex items-center justify-center font-bold">
+                <Lock className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                  Asignación Confidencial de PINs & Horarios por Colaborador
+                </h4>
+                <p className="text-[11px] text-slate-500">
+                  Cada colaborador tiene un PIN único e intransferible. La tablet checadora no muestra los PINs públicamente para evitar fraudes entre compañeros.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onOpenKiosk}
+              className="px-3.5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 active:scale-95 text-white font-black text-xs flex items-center gap-1.5 shadow cursor-pointer transition whitespace-nowrap self-start sm:self-auto"
+            >
+              <Tablet className="w-4 h-4" />
+              <span>Abrir Tablet Kiosko</span>
+            </button>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs font-mono">
+                <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 uppercase text-[10px] font-bold border-b border-slate-200 dark:border-slate-800">
+                  <tr>
+                    <th className="p-3.5 font-sans">Colaborador</th>
+                    <th className="p-3.5 font-sans">Cargo / Departamento</th>
+                    <th className="p-3.5 text-center">PIN Confidencial</th>
+                    <th className="p-3.5">Horario Entrada / Salida</th>
+                    <th className="p-3.5">Hora de Almuerzo</th>
+                    <th className="p-3.5 text-center">Tolerancia</th>
+                    <th className="p-3.5 text-center font-sans">Acción</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {employees.map((emp) => {
+                    const sched = emp.workSchedule;
+                    const startTime = sched?.startTime || attendanceConfig.defaultStartTime || '08:00';
+                    const endTime = sched?.endTime || attendanceConfig.defaultEndTime || '17:00';
+                    const lunchStart = sched?.lunchStartTime || attendanceConfig.defaultLunchStart || '12:00';
+                    const lunchEnd = sched?.lunchEndTime || attendanceConfig.defaultLunchEnd || '13:00';
+                    const tolerance = sched?.toleranceMinutes || attendanceConfig.toleranceMinutes || 10;
+
+                    return (
+                      <tr key={emp.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <td className="p-3.5 font-sans">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-cyan-600 to-indigo-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                              {emp.firstName.charAt(0)}
+                            </div>
+                            <div>
+                              <p className="font-bold text-slate-900 dark:text-white leading-tight">
+                                {emp.firstName} {emp.lastName}
+                              </p>
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                {emp.code}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="p-3.5 font-sans text-slate-700 dark:text-slate-300">
+                          <p className="font-semibold">{emp.position}</p>
+                          <span className="text-[10px] text-slate-400">
+                            {typeof emp.department === 'string'
+                              ? emp.department
+                              : (emp.department as any)?.name || 'General'}
+                          </span>
+                        </td>
+
+                        <td className="p-3.5 text-center">
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold border border-slate-300 dark:border-slate-700">
+                            <Lock className="w-3 h-3 text-cyan-600 dark:text-cyan-400" />
+                            <span className="font-mono text-xs tracking-wider">
+                              {revealedPins[emp.id] ? (emp.pinCode || 'Sin PIN') : '••••'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setRevealedPins((prev) => ({
+                                  ...prev,
+                                  [emp.id]: !prev[emp.id],
+                                }))
+                              }
+                              className="ml-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-0.5 rounded cursor-pointer"
+                              title={revealedPins[emp.id] ? 'Ocultar PIN' : 'Ver PIN Confidencial'}
+                            >
+                              {revealedPins[emp.id] ? (
+                                <EyeOff className="w-3 h-3" />
+                              ) : (
+                                <Eye className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+                        </td>
+
+                        <td className="p-3.5 text-slate-700 dark:text-slate-300">
+                          <span className="font-bold text-cyan-600 dark:text-cyan-400">{startTime}</span> a <span className="font-bold text-slate-600 dark:text-slate-400">{endTime}</span>
+                        </td>
+
+                        <td className="p-3.5 text-slate-600 dark:text-slate-400">
+                          {lunchStart} - {lunchEnd}
+                        </td>
+
+                        <td className="p-3.5 text-center font-bold text-emerald-600 dark:text-emerald-400">
+                          +{tolerance} min
+                        </td>
+
+                        <td className="p-3.5 text-center">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditPinSchedule(emp)}
+                            className="px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer mx-auto border border-indigo-200 dark:border-indigo-800"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>Editar PIN</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 0: Editar PIN Personal y Horario de Colaborador */}
+      {isEditPinModalOpen && editingPinEmp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-6 sm:p-7 space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-cyan-600 text-white flex items-center justify-center">
+                  <Lock className="w-4.5 h-4.5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                    Asignar PIN & Horario Individual
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-mono">
+                    {editingPinEmp.code} • {editingPinEmp.firstName} {editingPinEmp.lastName}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsEditPinModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePinSchedule} className="space-y-4">
+              {/* PIN Field */}
+              <div className="p-3.5 rounded-2xl bg-cyan-50/70 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-800 dark:text-slate-200 block text-xs">
+                    PIN Confidencial de 4 Dígitos: *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setPinFormVal(generateUniquePin(employees, editingPinEmp.id))}
+                    className="text-[11px] font-bold text-cyan-600 dark:text-cyan-400 hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    Generar PIN Único
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  maxLength={4}
+                  required
+                  placeholder="Ej: 1045"
+                  value={pinFormVal}
+                  onChange={(e) => setPinFormVal(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono font-black text-lg tracking-widest text-center text-cyan-600 dark:text-cyan-400"
+                />
+                <p className="text-[10px] text-slate-500">
+                  Este código solo lo conocerá el colaborador para marcar en la tablet checadora.
+                </p>
+                {pinFormVal && getDuplicatePinEmployee(pinFormVal, editingPinEmp.id) && (
+                  <div className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-1.5 pt-1">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      ⚠️ Este PIN ya pertenece a {getDuplicatePinEmployee(pinFormVal, editingPinEmp.id)?.firstName}. Elige uno diferente.
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Schedule Hours */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Hora de Entrada:
+                  </label>
+                  <input
+                    type="time"
+                    value={scheduleStartVal}
+                    onChange={(e) => setScheduleStartVal(e.target.value)}
+                    className="w-full p-2 rounded-xl border border-slate-200 dark:border-slate-700 font-mono font-bold text-xs"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Hora de Salida:
+                  </label>
+                  <input
+                    type="time"
+                    value={scheduleEndVal}
+                    onChange={(e) => setScheduleEndVal(e.target.value)}
+                    className="w-full p-2 rounded-xl border border-slate-200 dark:border-slate-700 font-mono font-bold text-xs"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Inicio Almuerzo:
+                  </label>
+                  <input
+                    type="time"
+                    value={scheduleLunchStartVal}
+                    onChange={(e) => setScheduleLunchStartVal(e.target.value)}
+                    className="w-full p-2 rounded-xl border border-slate-200 dark:border-slate-700 font-mono text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Fin Almuerzo:
+                  </label>
+                  <input
+                    type="time"
+                    value={scheduleLunchEndVal}
+                    onChange={(e) => setScheduleLunchEndVal(e.target.value)}
+                    className="w-full p-2 rounded-xl border border-slate-200 dark:border-slate-700 font-mono text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Minutos de Tolerancia para Llegada Tarde:
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    max="60"
+                    value={scheduleToleranceVal}
+                    onChange={(e) => setScheduleToleranceVal(parseInt(e.target.value) || 0)}
+                    className="w-28 p-2 rounded-xl border border-slate-200 dark:border-slate-700 font-mono font-bold text-xs"
+                  />
+                  <span className="text-[11px] text-slate-500 font-medium">minutos</span>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsEditPinModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-semibold cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={Boolean(pinFormVal && getDuplicatePinEmployee(pinFormVal, editingPinEmp.id))}
+                  className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white font-bold cursor-pointer shadow-sm"
+                >
+                  Guardar PIN y Horario
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

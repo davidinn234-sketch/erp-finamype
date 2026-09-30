@@ -382,6 +382,59 @@ const ANCIENT_STORAGE_KEY = 'contatech_sv_erp_state_v1';
 
 const ERPContext = createContext<ERPContextType | undefined>(undefined);
 
+export const cleanDepartmentStr = (val: any): string => {
+  if (!val) return 'San Salvador';
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object' && val.name && typeof val.name === 'string') return val.name;
+  return 'San Salvador';
+};
+
+export const sanitizeCompany = (c: any): Company => ({
+  ...c,
+  department: cleanDepartmentStr(c?.department),
+  municipality: typeof c?.municipality === 'string' ? c.municipality : '',
+});
+
+export const sanitizeBranch = (b: any): Branch => ({
+  ...b,
+  department: cleanDepartmentStr(b?.department),
+  municipality: typeof b?.municipality === 'string' ? b.municipality : '',
+});
+
+export const ensureEmployeesHavePins = (list: Employee[]): Employee[] => {
+  if (!Array.isArray(list)) return [];
+  const usedPins = new Set<string>();
+
+  // Pass 1: gather all pre-assigned valid 4-digit numeric pins
+  list.forEach((e) => {
+    const clean = e.pinCode ? String(e.pinCode).replace(/\D/g, '').slice(0, 4) : '';
+    if (clean.length === 4 && !usedPins.has(clean)) {
+      usedPins.add(clean);
+    }
+  });
+
+  // Pass 2: assign unique pins to any employee without a valid 4-digit PIN
+  return list.map((e, idx) => {
+    let pin = e.pinCode ? String(e.pinCode).replace(/\D/g, '').slice(0, 4) : '';
+    if (pin.length !== 4) {
+      for (let n = 1001; n <= 9999; n++) {
+        const candidate = String(n);
+        if (!usedPins.has(candidate)) {
+          pin = candidate;
+          usedPins.add(pin);
+          break;
+        }
+      }
+    }
+    return {
+      ...e,
+      pinCode: pin || `10${(idx + 1).toString().padStart(2, '0')}`,
+      isActive: e.isActive !== false,
+      department: cleanDepartmentStr(e.department),
+    };
+  });
+};
+
 export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // Multitenancy & Auth State
   const [companies, setCompanies] = useState<Company[]>(() => {
@@ -389,12 +442,14 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.companies && Array.isArray(parsed.companies)) return parsed.companies;
+        if (parsed.companies && Array.isArray(parsed.companies)) {
+          return parsed.companies.map((c: any) => sanitizeCompany(c));
+        }
       } catch (e) {
         console.error('Error restoring companies from storage:', e);
       }
     }
-    return SAMPLE_COMPANIES;
+    return SAMPLE_COMPANIES.map(sanitizeCompany);
   });
 
   const [currentCompanyId, setCurrentCompanyId] = useState<string>(() => companies[0]?.id || 'comp_1');
@@ -404,10 +459,12 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.branches && Array.isArray(parsed.branches)) return parsed.branches;
+        if (parsed.branches && Array.isArray(parsed.branches)) {
+          return parsed.branches.map((b: any) => sanitizeBranch(b));
+        }
       } catch (e) {}
     }
-    return SAMPLE_BRANCHES;
+    return SAMPLE_BRANCHES.map(sanitizeBranch);
   });
 
   const [selectedBranchId, setSelectedBranchId] = useState<string>('all');
@@ -636,10 +693,12 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.employees && Array.isArray(parsed.employees)) return parsed.employees;
+        if (parsed.employees && Array.isArray(parsed.employees)) {
+          return ensureEmployeesHavePins(parsed.employees);
+        }
       } catch (e) {}
     }
-    return SAMPLE_EMPLOYEES;
+    return ensureEmployeesHavePins(SAMPLE_EMPLOYEES);
   });
 
   const [rawPayrolls, setRawPayrolls] = useState<Payroll[]>(() => {
@@ -1122,8 +1181,9 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Company management
   const createCompany = (companyData: Omit<Company, 'id'>) => {
+    const sanitized = sanitizeCompany(companyData as any);
     const newComp: Company = {
-      ...companyData,
+      ...sanitized,
       id: `comp_${Date.now()}`,
       fiscalConfig: { ...DEFAULT_FISCAL_CONFIG },
       regimeType: companyData.regimeType || 'emprendedor_control_interno',
@@ -1138,11 +1198,15 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const updateCompany = (id: string, updates: Partial<Company>) => {
+    const sanitizedUpdates = { ...updates };
+    if (sanitizedUpdates.department !== undefined) {
+      sanitizedUpdates.department = cleanDepartmentStr(sanitizedUpdates.department);
+    }
     setCompanies((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, ...updates } : c))
+      prev.map((c) => (c.id === id ? { ...c, ...sanitizedUpdates } : c))
     );
     try {
-      setDoc(doc(db, 'companies', id), updates, { merge: true }).catch(reportCloudError);
+      setDoc(doc(db, 'companies', id), sanitizedUpdates, { merge: true }).catch(reportCloudError);
     } catch (e) {}
   };
 
@@ -1198,7 +1262,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         // sin datos aún subidos), se respeta el estado local/demo en vez de vaciarlo.
         if (companiesSnap && !companiesSnap.empty) {
           const cloudComps: Company[] = [];
-          companiesSnap.forEach((d) => { const item = d.data() as Company; if (item.id && item.name) cloudComps.push(item); });
+          companiesSnap.forEach((d) => { const item = d.data() as Company; if (item.id && item.name) cloudComps.push(sanitizeCompany(item)); });
           setCompanies(cloudComps);
         }
 
@@ -1291,7 +1355,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         if (branchSnap && !branchSnap.empty) {
           const cloudBranches: Branch[] = [];
-          branchSnap.forEach((d) => { const item = d.data() as Branch; if (item.id) cloudBranches.push(item); });
+          branchSnap.forEach((d) => { const item = d.data() as Branch; if (item.id) cloudBranches.push(sanitizeBranch(item)); });
           if (cloudBranches.length > 0) {
             setRawBranches((prev) => {
               const merged = [...prev];
@@ -1300,7 +1364,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 if (idx >= 0) merged[idx] = { ...merged[idx], ...cb };
                 else merged.push(cb);
               });
-              return merged;
+              return merged.map(sanitizeBranch);
             });
           }
         }
@@ -1364,7 +1428,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 if (idx >= 0) merged[idx] = { ...merged[idx], ...ce };
                 else merged.push(ce);
               });
-              return merged;
+              return ensureEmployeesHavePins(merged);
             });
           }
         }
@@ -1464,7 +1528,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const liveComps: Company[] = [];
         snap.forEach((d) => {
           const data = d.data() as Company;
-          if (data.id && data.name) liveComps.push(data);
+          if (data.id && data.name) liveComps.push(sanitizeCompany(data));
         });
         setCompanies(liveComps);
       },
@@ -1495,11 +1559,28 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           snap.docChanges().forEach((ch) => {
             if (ch.type === 'removed') removed.add(ch.doc.id);
             else {
-              const data = ch.doc.data() as T;
-              if (data && data.id) upserts.push(data);
+              let data = ch.doc.data() as any;
+              if (data && data.id) {
+                if (name === 'branches') data = sanitizeBranch(data);
+                if (name === 'companies') data = sanitizeCompany(data);
+                if (name === 'employees') {
+                  data = {
+                    ...data,
+                    isActive: data.isActive !== false,
+                    department: cleanDepartmentStr(data.department),
+                  };
+                }
+                upserts.push(data);
+              }
             }
           });
-          if (upserts.length || removed.size) setter((prev) => applyDocChanges(prev, upserts, removed));
+          if (upserts.length || removed.size) {
+            setter((prev) => {
+              const res = applyDocChanges(prev, upserts, removed);
+              if (name === 'employees') return ensureEmployeesHavePins(res as any) as any;
+              return res;
+            });
+          }
         },
         (err) => {
           console.warn(`Sync ${name}:`, err);
@@ -1979,8 +2060,9 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Branch management (Multi-sucursales)
   const createBranch = (branchData: Omit<Branch, 'id' | 'companyId'>) => {
+    const sanitized = sanitizeBranch(branchData as any);
     const newBranch: Branch = {
-      ...branchData,
+      ...sanitized,
       id: `branch_${Date.now()}`,
       companyId: currentCompany.id,
     };
@@ -1992,11 +2074,15 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const updateBranch = (id: string, updates: Partial<Branch>) => {
+    const sanitizedUpdates = { ...updates };
+    if (sanitizedUpdates.department !== undefined) {
+      sanitizedUpdates.department = cleanDepartmentStr(sanitizedUpdates.department);
+    }
     setBranches((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, ...updates } : b))
+      prev.map((b) => (b.id === id ? { ...b, ...sanitizedUpdates } : b))
     );
     try {
-      setDoc(doc(db, 'branches', id), updates, { merge: true }).catch(reportCloudError);
+      setDoc(doc(db, 'branches', id), sanitizedUpdates, { merge: true }).catch(reportCloudError);
     } catch (e) {}
     addNotification('info', 'Sucursal Actualizada', 'Datos de la sucursal guardados.');
   };
@@ -2752,8 +2838,23 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       finalBranchName = branches[0].name;
     }
 
+    let assignedPin = employeeData.pinCode ? String(employeeData.pinCode).replace(/\D/g, '').slice(0, 4) : '';
+    if (assignedPin.length !== 4) {
+      const usedPins = new Set(rawEmployees.map((e) => e.pinCode?.trim()).filter(Boolean));
+      for (let n = 1001; n <= 9999; n++) {
+        const candidate = String(n);
+        if (!usedPins.has(candidate)) {
+          assignedPin = candidate;
+          break;
+        }
+      }
+    }
+
     const newEmp: Employee = {
       ...employeeData,
+      pinCode: assignedPin || '1001',
+      isActive: employeeData.isActive !== false,
+      department: cleanDepartmentStr(employeeData.department),
       branchId: finalBranchId,
       branchName: finalBranchName,
       id: `emp_${Date.now()}`,
@@ -2766,15 +2867,22 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       setDoc(doc(db, 'employees', newEmp.id), newEmp).catch(reportCloudError);
     } catch (e) {}
-    addNotification('success', 'Colaborador Registrado', `"${newEmp.firstName} ${newEmp.lastName}" ingresado al sistema de RRHH.`);
+    addNotification('success', 'Colaborador Registrado', `"${newEmp.firstName} ${newEmp.lastName}" ingresado con PIN ${newEmp.pinCode}.`);
   };
 
   const updateEmployee = (id: string, updates: Partial<Employee>) => {
+    const sanitizedUpdates = { ...updates };
+    if (sanitizedUpdates.department !== undefined) {
+      sanitizedUpdates.department = cleanDepartmentStr(sanitizedUpdates.department);
+    }
+    if (sanitizedUpdates.pinCode) {
+      sanitizedUpdates.pinCode = String(sanitizedUpdates.pinCode).replace(/\D/g, '').slice(0, 4);
+    }
     setEmployees((prev) =>
-      prev.map((e) => (e.id === id ? { ...e, ...updates } : e))
+      prev.map((e) => (e.id === id ? { ...e, ...sanitizedUpdates } : e))
     );
     try {
-      setDoc(doc(db, 'employees', id), updates, { merge: true }).catch(reportCloudError);
+      setDoc(doc(db, 'employees', id), sanitizedUpdates, { merge: true }).catch(reportCloudError);
     } catch (e) {}
     addNotification('info', 'Empleado Actualizado', 'Ficha de colaborador modificada con éxito.');
   };
