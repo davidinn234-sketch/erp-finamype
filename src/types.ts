@@ -145,6 +145,7 @@ export interface Company {
   dteEstablishmentCode?: string;
   dtePointOfSaleCode?: string;
   economicActivityCode?: string; // Código CIIU (ej: 47110)
+  economicActivity?: string; // Nombre del giro económico
   hasEmployees?: boolean;
   inventoryMethod?: 'costo_promedio' | 'peps';
   taxesConfig?: {
@@ -784,6 +785,7 @@ export interface AccountNode {
   debitBalance: number;
   creditBalance: number;
   balance: number;
+  normalBalance?: 'deudor' | 'acreedor';
 }
 
 export interface JournalEntryLine {
@@ -832,9 +834,12 @@ export interface DynamicChartWidget {
 
 export interface FinancialDiagnosis {
   healthScore: number;
-  statusLabel: string;
-  summary: string;
-  keyStrengths: string[];
-  criticalAlerts: string[];
+  statusLabel?: string;
+  statusSummary?: string;
+  summary?: string;
+  strengths?: string[];
+  keyStrengths?: string[];
+  weaknesses?: string[];
+  criticalAlerts?: string[];
   recommendations: string[];
 }

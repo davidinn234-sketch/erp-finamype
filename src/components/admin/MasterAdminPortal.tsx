@@ -587,7 +587,9 @@ Ya hemos habilitado la cuenta de tu empresa *${comp.tradeName || comp.name}*:
                           <span className="text-slate-500 block text-[10px] uppercase font-bold">Ubicación</span>
                           <span className="text-slate-300 flex items-center gap-1">
                             <MapPin className="w-3 h-3 text-indigo-400 shrink-0" />
-                            <span className="truncate">{comp.department || 'San Salvador'}</span>
+                            <span className="truncate">
+                              {typeof comp.department === 'string' ? comp.department : (comp.department as any)?.name || 'San Salvador'}
+                            </span>
                           </span>
                         </div>
                         <div>

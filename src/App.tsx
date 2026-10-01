@@ -28,6 +28,7 @@ import { CompanyUsersManagerModule } from './components/admin/CompanyUsersManage
 import { MasterAdminPortal } from './components/admin/MasterAdminPortal';
 import { TabletAttendanceKioskModal } from './components/payroll/TabletAttendanceKioskModal';
 import { Menu } from 'lucide-react';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 const MainLayout: React.FC = () => {
   const {
@@ -150,55 +151,57 @@ const MainLayout: React.FC = () => {
 
             {/* Dynamic Active Module Render */}
             <main className="flex-1 pb-16">
-              {activeModule === 'personal_finances' && <PersonalFinancesModule />}
-              {activeModule === 'pos_terminal' && <POSTerminalModule />}
+              <ErrorBoundary fallbackTitle="Error al cargar módulo de navegación">
+                {activeModule === 'personal_finances' && <PersonalFinancesModule />}
+                {activeModule === 'pos_terminal' && <POSTerminalModule />}
 
-              {activeModule === 'dashboard' && (
-                <ExecutiveDashboard
-                  onOpenNewSale={() => setIsNewSaleModalOpen(true)}
-                  onOpenNewPurchase={() => setIsNewPurchaseModalOpen(true)}
-                  onOpenNewPayroll={() => setIsNewPayrollModalOpen(true)}
-                />
-              )}
+                {activeModule === 'dashboard' && (
+                  <ExecutiveDashboard
+                    onOpenNewSale={() => setIsNewSaleModalOpen(true)}
+                    onOpenNewPurchase={() => setIsNewPurchaseModalOpen(true)}
+                    onOpenNewPayroll={() => setIsNewPayrollModalOpen(true)}
+                  />
+                )}
 
-              {activeModule === 'marketing' && <MarketingDashboard />}
+                {activeModule === 'marketing' && <MarketingDashboard />}
 
-              {activeModule === 'forecasting' && <ForecastingModule />}
+                {activeModule === 'forecasting' && <ForecastingModule />}
 
-              {activeModule === 'sales' && (
-                <SalesModule
-                  isNewSaleModalOpen={isNewSaleModalOpen}
-                  onCloseNewSaleModal={() => setIsNewSaleModalOpen(false)}
-                  onOpenNewSaleModal={() => setIsNewSaleModalOpen(true)}
-                />
-              )}
+                {activeModule === 'sales' && (
+                  <SalesModule
+                    isNewSaleModalOpen={isNewSaleModalOpen}
+                    onCloseNewSaleModal={() => setIsNewSaleModalOpen(false)}
+                    onOpenNewSaleModal={() => setIsNewSaleModalOpen(true)}
+                  />
+                )}
 
-              {(activeModule === 'purchases' || activeModule === 'inventory') && (
-                <PurchasesModule
-                  isNewPurchaseModalOpen={isNewPurchaseModalOpen}
-                  onCloseNewPurchaseModal={() => setIsNewPurchaseModalOpen(false)}
-                  onOpenNewPurchaseModal={() => setIsNewPurchaseModalOpen(true)}
-                  initialTab={activeModule === 'inventory' ? 'inventory' : 'purchases'}
-                />
-              )}
+                {(activeModule === 'purchases' || activeModule === 'inventory') && (
+                  <PurchasesModule
+                    isNewPurchaseModalOpen={isNewPurchaseModalOpen}
+                    onCloseNewPurchaseModal={() => setIsNewPurchaseModalOpen(false)}
+                    onOpenNewPurchaseModal={() => setIsNewPurchaseModalOpen(true)}
+                    initialTab={activeModule === 'inventory' ? 'inventory' : 'purchases'}
+                  />
+                )}
 
-              {activeModule === 'payroll' && (
-                <PayrollModule
-                  isNewPayrollModalOpen={isNewPayrollModalOpen}
-                  onCloseNewPayrollModal={() => setIsNewPayrollModalOpen(false)}
-                  onOpenNewPayrollModal={() => setIsNewPayrollModalOpen(true)}
-                />
-              )}
+                {activeModule === 'payroll' && (
+                  <PayrollModule
+                    isNewPayrollModalOpen={isNewPayrollModalOpen}
+                    onCloseNewPayrollModal={() => setIsNewPayrollModalOpen(false)}
+                    onOpenNewPayrollModal={() => setIsNewPayrollModalOpen(true)}
+                  />
+                )}
 
-              {activeModule === 'treasury' && <TreasuryModule />}
+                {activeModule === 'treasury' && <TreasuryModule />}
 
-              {activeModule === 'accounting' && <AccountingModule />}
+                {activeModule === 'accounting' && <AccountingModule />}
 
-              {activeModule === 'academy' && <AcademyModule />}
+                {activeModule === 'academy' && <AcademyModule />}
 
-              {activeModule === 'settings' && <SettingsModule />}
-              {activeModule === 'company_users' && <CompanyUsersManagerModule />}
-              {activeModule === 'admin_profiles' && <AdminProfilesManagerModule />}
+                {activeModule === 'settings' && <SettingsModule />}
+                {activeModule === 'company_users' && <CompanyUsersManagerModule />}
+                {activeModule === 'admin_profiles' && <AdminProfilesManagerModule />}
+              </ErrorBoundary>
             </main>
           </div>
         </div>

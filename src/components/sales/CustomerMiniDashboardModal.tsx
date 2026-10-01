@@ -78,7 +78,7 @@ export const CustomerMiniDashboardModal: React.FC<CustomerMiniDashboardModalProp
   const lifetimeSalesTotal = useMemo(() => {
     return customerInvoices
       .filter((inv) => inv.status !== 'anulada')
-      .reduce((sum, inv) => sum + (inv.totalPagar || inv.total || 0), 0);
+      .reduce((sum, inv) => sum + (inv.totalPagar || (inv as any).total || 0), 0);
   }, [customerInvoices]);
 
   const lifetimeValidCount = useMemo(() => {
@@ -118,7 +118,7 @@ export const CustomerMiniDashboardModal: React.FC<CustomerMiniDashboardModalProp
   }, [customerInvoices, filterMode, filterYear, filterMonth]);
 
   const filteredSalesTotal = useMemo(() => {
-    return filteredCustomerInvoices.reduce((sum, inv) => sum + (inv.totalPagar || inv.total || 0), 0);
+    return filteredCustomerInvoices.reduce((sum, inv) => sum + (inv.totalPagar || (inv as any).total || 0), 0);
   }, [filteredCustomerInvoices]);
 
   const filteredAvgTicket = useMemo(() => {
@@ -133,7 +133,7 @@ export const CustomerMiniDashboardModal: React.FC<CustomerMiniDashboardModalProp
 
     const pendingBalance = customerInvoices
       .filter((inv) => inv.status === 'emitida' || inv.status === 'parcial')
-      .reduce((sum, inv) => sum + ((inv.totalPagar || inv.total || 0) - (inv.paidAmount || 0)), 0);
+      .reduce((sum, inv) => sum + (inv.saldoPendiente ?? ((inv.totalPagar || (inv as any).total || 0) - ((inv as any).paidAmount || 0))), 0);
 
     // Products frequency map
     const productFrequency: Record<string, { code: string; name: string; quantity: number; total: number }> = {};
@@ -676,7 +676,7 @@ export const CustomerMiniDashboardModal: React.FC<CustomerMiniDashboardModalProp
                     <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60">
                       <span className="text-slate-500">Ubicación Geográfica:</span>
                       <span className="font-bold text-slate-800 dark:text-slate-200 text-right">
-                        {customer.department || 'San Salvador'}
+                        {typeof customer.department === 'string' ? customer.department : (customer.department as any)?.name || 'San Salvador'}
                       </span>
                     </div>
 
@@ -792,7 +792,7 @@ export const CustomerMiniDashboardModal: React.FC<CustomerMiniDashboardModalProp
                         <tr key={inv.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                           <td className="p-3 font-mono text-slate-600 dark:text-slate-300">{inv.date}</td>
                           <td className="p-3 font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                            {inv.dteNumber || inv.invoiceNumber}
+                            {inv.dteCode || inv.correlativeNumber || (inv as any).invoiceNumber}
                           </td>
                           <td className="p-3 capitalize text-slate-700 dark:text-slate-200">
                             {inv.type.replace('_', ' ')}
@@ -801,7 +801,7 @@ export const CustomerMiniDashboardModal: React.FC<CustomerMiniDashboardModalProp
                             {inv.paymentCondition.replace('_', ' ')}
                           </td>
                           <td className="p-3 text-right font-black font-mono text-slate-900 dark:text-white">
-                            {formatCurrencyUSD(inv.total)}
+                            {formatCurrencyUSD(inv.totalPagar || (inv as any).total || 0)}
                           </td>
                           <td className="p-3 text-center">
                             <span

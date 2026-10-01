@@ -698,7 +698,7 @@ export const CandidateRecruitmentTab: React.FC = () => {
                 >
                   {candidateFolders.map((f) => (
                     <option key={f.id} value={f.id}>
-                      📁 {f.name} ({f.department})
+                      📁 {f.name} ({typeof f.department === 'string' ? f.department : (f.department as any)?.name || 'General'})
                     </option>
                   ))}
                 </select>

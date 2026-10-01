@@ -120,19 +120,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
 
   const systemConfigItems = [
     {
+      id: 'settings',
+      label: 'Configuración & Empresa',
+      subtitle: 'Personalización Lean, Tasas & Sucursales',
+      icon: Settings,
+      roles: ['admin_maestro', 'contador', 'gerente'],
+    },
+    {
       id: 'company_users',
       label: 'Gestor de Perfiles & Cajeros',
       subtitle: 'Crear colaboradores, roles & accesos',
       icon: Users,
       roles: ['admin_maestro', 'gerente'],
       badge: 'Cuentas',
-    },
-    {
-      id: 'settings',
-      label: 'Configuración & Empresa',
-      subtitle: 'Catálogo, Tasas Fiscales & Sucursales',
-      icon: Settings,
-      roles: ['admin_maestro', 'contador', 'gerente'],
     },
     {
       id: 'admin_profiles',
@@ -299,9 +299,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
             {/* Bottom Config & System Section */}
             {filteredSystemItems.length > 0 && (
               <div className="pt-3">
-                <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-t-2 border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
                   <span>Configuración & Cuentas</span>
-                  <Settings className="w-3 h-3 text-slate-400" />
+                  <Settings className="w-3.5 h-3.5 text-indigo-500" />
                 </div>
 
                 <div className="space-y-1 mt-1">

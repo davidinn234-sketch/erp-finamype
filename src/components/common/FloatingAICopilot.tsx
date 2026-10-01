@@ -524,7 +524,7 @@ Puedo realizar acciones reales en tu empresa con solo pedírmelo:
                       <div className="text-[11px] text-slate-600 dark:text-slate-400">
                         <div className="font-bold text-slate-900 dark:text-white">{m.customerData.name}</div>
                         <div>NIT: <span className="font-mono">{m.customerData.nit}</span> • Tel: {m.customerData.phone}</div>
-                        <div>Ubicación: {m.customerData.municipality}, {m.customerData.department}</div>
+                        <div>Ubicación: {m.customerData.municipality}, {typeof m.customerData.department === 'string' ? m.customerData.department : (m.customerData.department as any)?.name || 'San Salvador'}</div>
                       </div>
                       <button
                         onClick={() => {

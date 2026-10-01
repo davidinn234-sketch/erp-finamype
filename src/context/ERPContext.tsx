@@ -37,6 +37,7 @@ import {
   AttendanceRecord,
   EmployeeLeaveRequest,
   CompanyAttendanceConfig,
+  PurchaseStatus,
 } from '../types';
 import {
   SAMPLE_COMPANIES,
@@ -2792,7 +2793,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       prev.map((pur) => {
         if (pur.id === p.purchaseId) {
           const restoredSaldo = Number((pur.saldoPendiente + p.amount).toFixed(2));
-          const restoredStatus = restoredSaldo >= pur.totalPagar ? 'emitida' : 'parcial';
+          const restoredStatus: PurchaseStatus = restoredSaldo >= pur.totalPagar ? 'registrada' : 'parcial';
           try {
             setDoc(doc(db, 'purchases', p.purchaseId), { saldoPendiente: restoredSaldo, status: restoredStatus }, { merge: true }).catch(reportCloudError);
           } catch (e) {}

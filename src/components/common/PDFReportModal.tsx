@@ -258,7 +258,7 @@ export const PDFReportModal: React.FC<PDFReportModalProps> = ({
                     <span className="font-semibold">NRC:</span> {currentCompany.nrc} |{' '}
                     <span className="font-semibold">Giro:</span> {currentCompany.giro}
                   </p>
-                  <p>{currentCompany.address}, {currentCompany.department}, El Salvador</p>
+                  <p>{currentCompany.address}, {typeof currentCompany.department === 'string' ? currentCompany.department : (currentCompany.department as any)?.name || 'San Salvador'}, El Salvador</p>
                 </div>
               </div>
 

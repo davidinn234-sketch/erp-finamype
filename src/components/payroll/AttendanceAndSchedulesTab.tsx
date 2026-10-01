@@ -127,7 +127,7 @@ export const AttendanceAndSchedulesTab: React.FC<Props> = ({ onOpenKiosk }) => {
         endTime: scheduleEndVal,
         lunchStartTime: scheduleLunchStartVal,
         lunchEndTime: scheduleLunchEndVal,
-        workingDays: editingPinEmp.workSchedule?.workingDays || [1, 2, 3, 4, 5, 6],
+        workDays: editingPinEmp.workSchedule?.workDays || [1, 2, 3, 4, 5, 6],
         toleranceMinutes: scheduleToleranceVal,
       },
     });

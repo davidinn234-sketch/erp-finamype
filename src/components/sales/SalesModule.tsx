@@ -1258,7 +1258,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({
                           <MapPin className="w-3 h-3 text-slate-400" /> Depto / Municipio:
                         </span>
                         <span className="font-semibold text-slate-700 dark:text-slate-200 text-right truncate max-w-[170px]">
-                          {c.department || 'San Salvador'}
+                          {typeof c.department === 'string' ? c.department : (c.department as any)?.name || 'San Salvador'}
                         </span>
                       </div>
 

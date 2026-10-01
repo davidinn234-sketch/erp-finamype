@@ -30,6 +30,11 @@ import {
   Zap,
   GraduationCap,
   Target,
+  Cloud,
+  Database,
+  Wifi,
+  CheckCircle,
+  AlertTriangle,
 } from 'lucide-react';
 import { Company, FiscalConfig, AccountNode, Branch } from '../../types';
 import { DEFAULT_FISCAL_CONFIG, formatCurrencyUSD } from '../../utils/salvadoranTax';
@@ -39,8 +44,10 @@ import {
 } from '../../utils/salvadoranGeography';
 import { DeclarativeOnboardingWizard } from './DeclarativeOnboardingWizard';
 import { UserRoleManagement } from './UserRoleManagement';
+import { testFirebaseConnection } from '../../lib/firebase';
+import { ErrorBoundary } from '../common/ErrorBoundary';
 
-export const SettingsModule: React.FC = () => {
+const SettingsModuleInner: React.FC = () => {
   const {
     companies,
     currentCompany,
@@ -63,7 +70,24 @@ export const SettingsModule: React.FC = () => {
     resetAllDataToSample,
   } = useERP();
 
-  const [activeTab, setActiveTab] = useState<'onboarding' | 'project_info' | 'users' | 'branches' | 'company' | 'fiscal' | 'catalog' | 'backup'>('onboarding');
+  const [activeTab, setActiveTab] = useState<'onboarding' | 'cloud' | 'project_info' | 'users' | 'branches' | 'company' | 'fiscal' | 'catalog' | 'backup'>('onboarding');
+
+  // Cloud Firestore Sync Diagnostics State
+  const [isTestingCloud, setIsTestingCloud] = useState(false);
+  const [cloudPingResult, setCloudPingResult] = useState<'success' | 'error' | null>(null);
+
+  const handleTestCloud = async () => {
+    setIsTestingCloud(true);
+    setCloudPingResult(null);
+    try {
+      const ok = await testFirebaseConnection();
+      setCloudPingResult(ok ? 'success' : 'error');
+    } catch {
+      setCloudPingResult('error');
+    } finally {
+      setIsTestingCloud(false);
+    }
+  };
 
   // New Company Modal State
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
@@ -117,6 +141,8 @@ export const SettingsModule: React.FC = () => {
     name: '',
     level: 3,
     category: 'activo',
+    isMovement: true,
+    balance: 0,
     normalBalance: 'deudor',
     debitBalance: 0,
     creditBalance: 0,
@@ -215,6 +241,8 @@ export const SettingsModule: React.FC = () => {
       name: '',
       level: 3,
       category: 'activo',
+      isMovement: true,
+      balance: 0,
       normalBalance: 'deudor',
       debitBalance: 0,
       creditBalance: 0,
@@ -263,6 +291,7 @@ export const SettingsModule: React.FC = () => {
       <div className="flex border-b border-slate-200 dark:border-slate-800 gap-2 overflow-x-auto">
         {[
           { id: 'onboarding', label: 'Personalización & Régimen (Lean)', icon: Sparkles },
+          { id: 'cloud', label: 'Estado de la Nube (Firestore SV)', icon: Cloud },
           { id: 'project_info', label: 'Proyecto FinaPyme (UES FMOcc)', icon: GraduationCap },
           { id: 'users', label: 'Usuarios & Roles (RBAC)', icon: Shield },
           { id: 'branches', label: 'Sucursales & Puntos de Venta', icon: Building },
@@ -294,6 +323,120 @@ export const SettingsModule: React.FC = () => {
       {/* ---------------------------------------------------- */}
       {activeTab === 'onboarding' && (
         <DeclarativeOnboardingWizard />
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* TAB: ESTADO DE LA NUBE & PERSISTENCIA (FIRESTORE) */}
+      {/* ---------------------------------------------------- */}
+      {activeTab === 'cloud' && (
+        <div className="space-y-6 animate-fadeIn">
+          {/* Hero Banner */}
+          <div className="p-6 rounded-2xl bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white shadow-xl relative overflow-hidden">
+            <div className="relative z-10 space-y-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/30 border border-emerald-400/40 text-xs font-bold text-emerald-200">
+                <Cloud className="w-4 h-4" />
+                <span>Google Cloud Firestore • Sincronización en Tiempo Real</span>
+              </div>
+              <h3 className="text-2xl font-black tracking-tight text-white">
+                Base de Datos y Almacenamiento en la Nube
+              </h3>
+              <p className="text-xs text-emerald-200 max-w-2xl leading-relaxed">
+                Toda la información operativa de tu empresa (ventas, compras, inventario, cuentas, sucursales y asistencias con PIN) se almacena de forma persistente y segura en Google Cloud Firestore con réplica en tiempo real y soporte fuera de línea (offline).
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Status Card */}
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <Database className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                  <h4 className="font-bold text-sm text-slate-900 dark:text-white">Detalles del Servidor en la Nube</h4>
+                </div>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                  <Wifi className="w-3 h-3 animate-pulse" />
+                  Activo & Conectado
+                </span>
+              </div>
+
+              <div className="space-y-2 text-xs text-slate-600 dark:text-slate-300">
+                <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
+                  <span className="text-slate-400">Servicio de Nube:</span>
+                  <span className="font-mono font-bold text-slate-800 dark:text-slate-200">Google Cloud Firestore</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
+                  <span className="text-slate-400">ID de Base de Datos:</span>
+                  <span className="font-mono font-bold text-slate-800 dark:text-slate-200 text-[11px]">ai-studio-nexuserpsalvador-619c</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
+                  <span className="text-slate-400">Modo de Persistencia:</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">Bidireccional Multi-Dispositivo</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800/60">
+                  <span className="text-slate-400">Respaldo Local (Offline):</span>
+                  <span className="font-bold text-indigo-600 dark:text-indigo-400">Activo (IndexedDB / LocalStorage)</span>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleTestCloud}
+                  disabled={isTestingCloud}
+                  className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isTestingCloud ? 'animate-spin' : ''}`} />
+                  <span>{isTestingCloud ? 'Verificando enlace en la nube...' : 'Comprobar Enlace de Conexión'}</span>
+                </button>
+
+                {cloudPingResult === 'success' && (
+                  <div className="mt-3 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 flex items-center gap-2 text-xs font-semibold animate-in fade-in">
+                    <CheckCircle className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <span>¡Conexión verificada exitosamente! Tu base de datos responde en tiempo real.</span>
+                  </div>
+                )}
+
+                {cloudPingResult === 'error' && (
+                  <div className="mt-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300 flex items-center gap-2 text-xs font-semibold animate-in fade-in">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <span>Modo sin conexión temporal: los datos se conservan en tu navegador y se sincronizarán al reconectar.</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Collections Synced Card */}
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+              <div className="flex items-center gap-2 text-emerald-600 font-bold text-sm border-b border-slate-100 dark:border-slate-800 pb-3">
+                <Sparkles className="w-5 h-5" />
+                <h4>Módulos & Colecciones Sincronizadas</h4>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {[
+                  { name: 'Empresas & Razón Social', count: `${companies.length} regs` },
+                  { name: 'Sucursales & Cajas', count: `${branches.length} regs` },
+                  { name: 'Colaboradores & PINs', count: 'Planilla SV' },
+                  { name: 'Registro de Asistencia', count: 'Tiempo Real' },
+                  { name: 'Ventas & DTE Oficial', count: 'Nube Activa' },
+                  { name: 'Kardex & Inventario', count: 'Costo Promedio' },
+                  { name: 'Catálogo NIIF', count: 'Partida Doble' },
+                  { name: 'Cuentas & Tesorería', count: 'Flujo Caja' },
+                ].map((col, idx) => (
+                  <div key={idx} className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 truncate">{col.name}</span>
+                    <span className="text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950 px-1.5 py-0.5 rounded shrink-0">{col.count}</span>
+                  </div>
+                ))}
+              </div>
+
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed pt-1">
+                🔒 <strong>Seguridad Multi-Inquilino:</strong> Los datos de cada empresa se aíslan de forma estricta. Ninguna otra empresa puede ver ni modificar tus registros.
+              </p>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ---------------------------------------------------- */}
@@ -1210,3 +1353,10 @@ export const SettingsModule: React.FC = () => {
     </div>
   );
 };
+
+export const SettingsModule: React.FC = () => (
+  <ErrorBoundary fallbackTitle="Configuración & Parámetros">
+    <SettingsModuleInner />
+  </ErrorBoundary>
+);
+

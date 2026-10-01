@@ -457,12 +457,12 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
 
     filteredSalesInvoices.forEach((inv) => {
       const typeLabel =
-        inv.docType === 'credito_fiscal'
+        inv.type === 'credito_fiscal'
           ? 'Crédito Fiscal (CCF)'
-          : inv.docType === 'factura_exportacion'
+          : inv.type === 'exportacion'
           ? 'Factura Exportación'
-          : inv.docType === 'nota_remision'
-          ? 'Nota de Remisión'
+          : inv.type === 'nota_credito'
+          ? 'Nota de Crédito'
           : 'Factura Consumidor Final';
 
       const val = (inv.sumasGravadas || 0) + (inv.sumasExentas || 0) + (inv.sumasNoSujetas || 0) || inv.totalPagar || 0;
@@ -1674,7 +1674,9 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                     )}
                     <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">{b.name}</h3>
                   </div>
-                  <span className="text-[11px] text-slate-400 block ml-6">{b.department}</span>
+                  <span className="text-[11px] text-slate-400 block ml-6">
+                    {typeof b.department === 'string' ? b.department : (b.department as any)?.name || 'San Salvador'}
+                  </span>
                 </div>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-200 dark:border-emerald-800">
                   {b.code}
