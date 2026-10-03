@@ -903,21 +903,21 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-3 sm:p-4 lg:p-6 overflow-x-hidden">
       {/* ---------------------------------------------------- */}
-      {/* 2. BARRA DE FILTROS FIJA ARRIBA (STICKY) - SOLO DASHBOARD CORPORATIVO */}
+      {/* 2. BARRA DE FILTROS - DASHBOARD CORPORATIVO */}
       {/* ---------------------------------------------------- */}
-      <div className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl border border-emerald-200/80 dark:border-slate-800 p-3 sm:p-4 shadow-sm space-y-2">
+      <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 sm:p-4 shadow-xs space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             {/* Sucursal */}
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
-              <Building className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span className="font-bold text-slate-500 text-[11px]">Sucursal:</span>
+              <Building className="w-4 h-4 text-slate-500 shrink-0" />
+              <span className="font-semibold text-slate-500 text-[11px]">Sucursal:</span>
               <select
                 value={selectedBranchId}
                 onChange={(e) => setSelectedBranchId(e.target.value)}
-                className="bg-transparent border-none text-xs font-bold outline-none text-slate-800 dark:text-slate-200 cursor-pointer"
+                className="bg-transparent border-none text-xs font-semibold outline-none text-slate-800 dark:text-slate-200 cursor-pointer"
               >
-                <option value="all">🏢 Todas las Sucursales</option>
+                <option value="all">Todas las Sucursales</option>
                 {branches.map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.name}

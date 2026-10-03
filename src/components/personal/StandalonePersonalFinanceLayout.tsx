@@ -21,7 +21,7 @@ export const StandalonePersonalFinanceLayout: React.FC = () => {
     <div className={`min-h-screen ${isDarkMode ? 'dark' : ''}`}>
       <div className="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen flex flex-col font-sans transition-colors">
         {/* Dedicated Independent Personal Finance Header */}
-        <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 sm:px-8 py-3 transition-colors">
+        <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 sm:px-8 py-3 transition-colors">
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
             {/* Logo and Clean Brand */}
             <div className="flex items-center gap-3">
@@ -53,10 +53,10 @@ export const StandalonePersonalFinanceLayout: React.FC = () => {
               {/* User Profile */}
               <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850">
                 <div className="w-5 h-5 rounded-full bg-slate-700 text-white flex items-center justify-center text-[10px] font-bold">
-                  {currentUser.name.charAt(0)}
+                  {(currentUser?.name || 'U').charAt(0)}
                 </div>
                 <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 hidden sm:inline">
-                  {currentUser.name}
+                  {currentUser?.name || 'Usuario'}
                 </span>
               </div>
 

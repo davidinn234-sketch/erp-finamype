@@ -59,7 +59,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   return (
-    <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md px-4 lg:px-6 py-3 transition-colors">
+    <header className="sticky top-0 z-40 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md px-4 lg:px-6 py-3 transition-colors">
       {/* Left side: Company Selector & Quick Search */}
       <div className="flex items-center gap-3">
         {/* Company Dropdown Switcher - Restricted: only Admin Maestro can switch companies */}
@@ -120,32 +120,38 @@ export const Header: React.FC<HeaderProps> = ({
           )}
 
           {showCompanyMenu && currentUser?.role === 'admin_maestro' && (
-            <div className="absolute left-0 mt-2 w-72 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
-              <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                Empresas & Despachos (Multi-Tenant)
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setShowCompanyMenu(false)}
+              />
+              <div className="absolute left-0 mt-2 w-72 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                  Empresas & Despachos (Multi-Tenant)
+                </div>
+                {companies.map((c) => (
+                  <button
+                    key={c.id}
+                    id={`select-company-${c.id}`}
+                    onClick={() => {
+                      setCurrentCompanyId(c.id);
+                      setShowCompanyMenu(false);
+                    }}
+                    className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-slate-100 dark:hover:bg-slate-800 transition ${
+                      c.id === currentCompany.id ? 'bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-medium' : 'text-slate-700 dark:text-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
+                      <span className="truncate text-sm">{c.tradeName || c.name}</span>
+                    </div>
+                    {c.id === currentCompany.id && (
+                      <span className="w-2 h-2 rounded-full bg-indigo-600 dark:bg-indigo-400"></span>
+                    )}
+                  </button>
+                ))}
               </div>
-              {companies.map((c) => (
-                <button
-                  key={c.id}
-                  id={`select-company-${c.id}`}
-                  onClick={() => {
-                    setCurrentCompanyId(c.id);
-                    setShowCompanyMenu(false);
-                  }}
-                  className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-slate-100 dark:hover:bg-slate-800 transition ${
-                    c.id === currentCompany.id ? 'bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 font-medium' : 'text-slate-700 dark:text-slate-200'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
-                    <span className="truncate text-sm">{c.tradeName || c.name}</span>
-                  </div>
-                  {c.id === currentCompany.id && (
-                    <span className="w-2 h-2 rounded-full bg-indigo-600 dark:bg-indigo-400"></span>
-                  )}
-                </button>
-              ))}
-            </div>
+            </>
           )}
         </div>
 
@@ -268,76 +274,99 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           {showUserMenu && (
-            <div className="absolute right-0 mt-2 w-72 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl py-2 z-50">
-              <div className="px-4 py-2.5 border-b border-slate-100 dark:border-slate-800">
-                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{currentUser?.name || 'Usuario'}</p>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{currentUser?.email || ''}</p>
-                <div className="flex items-center gap-1.5 mt-1.5">
-                  <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 capitalize border border-indigo-200 dark:border-indigo-800/40">
-                    {(currentUser?.role || 'admin_maestro').replace('_', ' ')}
-                  </span>
-                  <span className="text-[10px] text-slate-400 truncate">
-                    {currentCompany.tradeName || currentCompany.name}
-                  </span>
+            <>
+              {/* Click-outside backdrop */}
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setShowUserMenu(false)}
+              />
+              <div className="absolute right-0 mt-2 w-72 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-4 py-2.5 border-b border-slate-100 dark:border-slate-800">
+                  <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{currentUser?.name || 'Usuario'}</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{currentUser?.email || ''}</p>
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 capitalize border border-indigo-200 dark:border-indigo-800/40">
+                      {(currentUser?.role || 'admin_maestro').replace('_', ' ')}
+                    </span>
+                    <span className="text-[10px] text-slate-400 truncate">
+                      {currentCompany.tradeName || currentCompany.name}
+                    </span>
+                  </div>
                 </div>
-              </div>
 
-              {currentUser?.role === 'admin_maestro' && (
+                {currentUser?.role === 'admin_maestro' && (
+                  <button
+                    type="button"
+                    id="header-admin-portal-link"
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      setActiveModule('admin_profiles');
+                    }}
+                    className="w-full text-left px-4 py-2 text-xs text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 flex items-center gap-2 cursor-pointer font-semibold transition"
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Panel Maestro Admin (Cuentas)</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
-                  id="header-admin-portal-link"
+                  id="header-master-database-link"
                   onClick={() => {
                     setShowUserMenu(false);
-                    setActiveModule('admin_profiles');
+                    setActiveModule('master_database');
                   }}
-                  className="w-full text-left px-4 py-2.5 text-xs text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 flex items-center gap-2 cursor-pointer font-semibold"
+                  className="w-full text-left px-4 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer font-medium transition"
                 >
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Panel Maestro Admin (Cuentas)</span>
+                  <Database className="w-4 h-4 text-emerald-500" />
+                  <span>Base de Datos General & Ctrl+Z</span>
                 </button>
-              )}
 
-              <button
-                type="button"
-                id="header-master-database-link"
-                onClick={() => {
-                  setShowUserMenu(false);
-                  setActiveModule('master_database');
-                }}
-                className="w-full text-left px-4 py-2.5 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer font-medium"
-              >
-                <Database className="w-4 h-4 text-emerald-500" />
-                <span>Base de Datos General & Ctrl+Z</span>
-              </button>
+                <button
+                  type="button"
+                  id="header-personal-finances-link"
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    setActiveModule('personal_finances');
+                  }}
+                  className="w-full text-left px-4 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer font-medium transition"
+                >
+                  <Wallet className="w-4 h-4 text-indigo-500" />
+                  <span>Finanzas Personales (50/30/20)</span>
+                </button>
 
-              <button
-                type="button"
-                id="header-open-form-from-menu"
-                onClick={() => {
-                  setShowUserMenu(false);
-                  setIsExhaustiveCustomizationOpen(true);
-                }}
-                className="w-full text-left px-4 py-2.5 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer font-medium"
-              >
-                <Sliders className="w-4 h-4 text-blue-500" />
-                <span>Personalizar Sistema (Gran Formulario)</span>
-              </button>
+                <button
+                  type="button"
+                  id="header-open-form-from-menu"
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    setIsExhaustiveCustomizationOpen(true);
+                  }}
+                  className="w-full text-left px-4 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer font-medium transition"
+                >
+                  <Sliders className="w-4 h-4 text-blue-500" />
+                  <span>Personalizar Sistema (Ajustes)</span>
+                </button>
 
-              <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+                <div className="my-1.5 border-t border-slate-100 dark:border-slate-800" />
 
-              <button
-                type="button"
-                id="header-logout-btn"
-                onClick={() => {
-                  setShowUserMenu(false);
-                  logout();
-                }}
-                className="w-full text-left px-4 py-2.5 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 flex items-center gap-2 cursor-pointer font-medium"
-              >
-                <LogOut className="w-4 h-4" />
-                <span>Cerrar Sesión</span>
-              </button>
-            </div>
+                <button
+                  type="button"
+                  id="header-logout-btn"
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    logout();
+                  }}
+                  className="w-full text-left px-4 py-2.5 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center justify-between cursor-pointer font-semibold transition"
+                >
+                  <div className="flex items-center gap-2">
+                    <LogOut className="w-4 h-4 text-rose-500" />
+                    <span>Cerrar Sesión</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-normal">Salir</span>
+                </button>
+              </div>
+            </>
           )}
         </div>
       </div>
