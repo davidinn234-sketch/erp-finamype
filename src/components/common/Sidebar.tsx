@@ -18,6 +18,7 @@ import {
   Cloud,
   FileText,
   Target,
+  Database,
 } from 'lucide-react';
 import { FinaPymeTermsAndProjectModal } from './FinaPymeTermsAndProjectModal';
 
@@ -116,6 +117,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
       roles: ['admin_maestro', 'contador', 'gerente', 'cajero', 'vendedor'],
       badge: 'Guías',
     },
+    {
+      id: 'personal_finances',
+      label: 'Finanzas Personales',
+      subtitle: 'Gastos, Metas & Regla 50/30/20',
+      icon: Wallet,
+      roles: ['admin_maestro', 'contador', 'gerente', 'cajero', 'vendedor'],
+      badge: 'Personal',
+    },
+    {
+      id: 'master_database',
+      label: 'Base de Datos General',
+      subtitle: 'Auditoría, Registros & Ctrl+Z',
+      icon: Database,
+      roles: ['admin_maestro', 'contador', 'gerente'],
+      badge: 'Nube BD',
+    },
   ];
 
   const systemConfigItems = [
@@ -176,7 +193,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
     if (userRole === 'contador') {
       if (item.id === 'company_users') return hasPermission('company_users');
       return (
-        ['dashboard', 'accounting', 'treasury', 'payroll', 'purchases', 'sales', 'forecasting', 'academy', 'settings'].includes(item.id) ||
+        ['dashboard', 'master_database', 'accounting', 'treasury', 'payroll', 'purchases', 'sales', 'forecasting', 'academy', 'settings'].includes(item.id) ||
         hasPermission(item.id)
       );
     }
@@ -258,23 +275,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
                     setActiveModule(item.id);
                     onCloseMobile();
                   }}
-                  className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${
+                  className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition-all cursor-pointer ${
                     isActive
-                      ? 'bg-indigo-600 text-white font-medium shadow-sm shadow-indigo-200 dark:shadow-none'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-semibold shadow-xs'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-850'
                   }`}
                 >
-                  <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex items-center gap-2.5 min-w-0">
                     <Icon
                       className={`w-4 h-4 shrink-0 ${
-                        isActive ? 'text-white' : 'text-slate-500 dark:text-slate-400'
+                        isActive ? 'text-white dark:text-slate-900' : 'text-slate-400 dark:text-slate-400'
                       }`}
                     />
                     <div className="min-w-0">
                       <p className="text-xs font-semibold truncate leading-tight">{item.label}</p>
                       <p
                         className={`text-[10px] truncate ${
-                          isActive ? 'text-indigo-100' : 'text-slate-400 dark:text-slate-500'
+                          isActive ? 'text-slate-300 dark:text-slate-600' : 'text-slate-400 dark:text-slate-500'
                         }`}
                       >
                         {item.subtitle}
@@ -283,10 +300,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
                   </div>
                   {item.badge && (
                     <span
-                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                      className={`text-[10px] font-medium transition-colors ${
                         isActive
-                          ? 'bg-white/20 text-white'
-                          : 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300'
+                          ? 'text-slate-300 dark:text-slate-600'
+                          : 'text-slate-400 dark:text-slate-500'
                       }`}
                     >
                       {item.badge}
@@ -316,23 +333,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
                           setActiveModule(item.id);
                           onCloseMobile();
                         }}
-                        className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-all cursor-pointer ${
+                        className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition-all cursor-pointer ${
                           isActive
-                            ? 'bg-indigo-600 text-white font-medium shadow-sm shadow-indigo-200 dark:shadow-none'
-                            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                            ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-semibold shadow-xs'
+                            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-850'
                         }`}
                       >
-                        <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex items-center gap-2.5 min-w-0">
                           <Icon
                             className={`w-4 h-4 shrink-0 ${
-                              isActive ? 'text-white' : 'text-slate-500 dark:text-slate-400'
+                              isActive ? 'text-white dark:text-slate-900' : 'text-slate-400 dark:text-slate-400'
                             }`}
                           />
                           <div className="min-w-0">
                             <p className="text-xs font-semibold truncate leading-tight">{item.label}</p>
                             <p
                               className={`text-[10px] truncate ${
-                                isActive ? 'text-indigo-100' : 'text-slate-400 dark:text-slate-500'
+                                isActive ? 'text-slate-300 dark:text-slate-600' : 'text-slate-400 dark:text-slate-500'
                               }`}
                             >
                               {item.subtitle}
@@ -341,10 +358,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
                         </div>
                         {item.badge && (
                           <span
-                            className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                            className={`text-[10px] font-medium transition-colors ${
                               isActive
-                                ? 'bg-white/20 text-white'
-                                : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                                ? 'text-slate-300 dark:text-slate-600'
+                                : 'text-slate-400 dark:text-slate-500'
                             }`}
                           >
                             {item.badge}

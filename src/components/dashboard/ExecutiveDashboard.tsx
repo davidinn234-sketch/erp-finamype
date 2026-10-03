@@ -1109,48 +1109,48 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
           </div>
         </div>
 
-        {/* Texto explicativo claro del filtro activo */}
+        {/* Clean status note */}
         <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-          📌 Filtro Activo: {selectedBranchId === 'all' ? 'Todas las Sucursales' : branches.find((b) => b.id === selectedBranchId)?.name || 'Sucursal Seleccionada'} • Período: {opFilterYear}{opFilterMonth !== 'all' ? ` / ${OP_MONTHS.find((m) => m.key === opFilterMonth)?.name}` : ''}{opFilterDay !== 'all' ? ` / Día ${opFilterDay}` : ''}. Afecta Secciones 1 a 4. Las Secciones 5 y 6 (Tesorería, Cartera y Obligaciones) reflejan saldos vivos en tiempo real.
+          Ámbito: {selectedBranchId === 'all' ? 'Todas las Sucursales' : branches.find((b) => b.id === selectedBranchId)?.name || 'Sucursal Seleccionada'} · Período: {opFilterYear}{opFilterMonth !== 'all' ? ` / ${OP_MONTHS.find((m) => m.key === opFilterMonth)?.name}` : ''}{opFilterDay !== 'all' ? ` / Día ${opFilterDay}` : ''}
         </p>
 
-        {/* Barra de Navegación Rápida entre Secciones */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar pt-2 border-t border-slate-100 dark:border-slate-800">
+        {/* Sub-navegación limpia entre Secciones */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-1 text-xs no-scrollbar pt-2 border-t border-slate-100 dark:border-slate-800">
           <a
             href="#sec-contable"
-            className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 transition whitespace-nowrap flex items-center gap-1.5"
+            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-semibold hover:border-slate-400 transition whitespace-nowrap"
           >
-            <span>📊 1. Márgenes & Rentabilidad</span>
+            01. Márgenes & Rentabilidad
           </a>
           <a
             href="#sec-4variables"
-            className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 transition whitespace-nowrap flex items-center gap-1.5"
+            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-semibold hover:border-slate-400 transition whitespace-nowrap"
           >
-            <span>📈 2. Gráfico 4 Variables</span>
+            02. Flujo 4 Variables
           </a>
           <a
             href="#sec-desglose"
-            className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 transition whitespace-nowrap flex items-center gap-1.5"
+            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-semibold hover:border-slate-400 transition whitespace-nowrap"
           >
-            <span>🥧 3. Desglose Operativo</span>
+            03. Desglose Operativo
           </a>
           <a
             href="#sec-sucursales"
-            className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 transition whitespace-nowrap flex items-center gap-1.5"
+            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-semibold hover:border-slate-400 transition whitespace-nowrap"
           >
-            <span>🏢 4. Rendimiento por Sucursal</span>
+            04. Sucursales
           </a>
           <a
             href="#sec-tesoreria"
-            className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 transition whitespace-nowrap flex items-center gap-1.5"
+            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-semibold hover:border-slate-400 transition whitespace-nowrap"
           >
-            <span>💰 5. Tesorería & Cartera</span>
+            05. Tesorería & Cartera
           </a>
           <a
             href="#sec-tributario"
-            className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 transition whitespace-nowrap flex items-center gap-1.5"
+            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-semibold hover:border-slate-400 transition whitespace-nowrap"
           >
-            <span>⚖️ 6. Cumplimiento MH & IA</span>
+            06. Cumplimiento MH
           </a>
         </div>
       </div>
@@ -1207,22 +1207,17 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
       {/* ---------------------------------------------------- */}
       <section id="sec-contable" className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 uppercase tracking-wider">
-              MÁRGENES & RENTABILIDAD
-            </span>
-            <h2 className="text-base font-bold text-slate-900 dark:text-white">
-              Sección 1. Resumen Contable, Márgenes & Rentabilidad
-            </h2>
-          </div>
+          <h2 className="text-base font-bold text-slate-900 dark:text-white">
+            01. Resumen Contable, Márgenes & Rentabilidad
+          </h2>
 
           {/* Banner de confirmación temporal */}
-          <div className="px-3 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-900 dark:text-emerald-200 font-semibold flex items-center gap-1.5">
-            <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+          <div className="px-3 py-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 text-xs text-slate-600 dark:text-slate-300 font-medium flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5 text-slate-400" />
             <span>
               {opFilterDay !== 'all'
                 ? `Métricas del Día ${opFilterDay} de ${OP_MONTHS.find((m) => m.key === opFilterMonth)?.name} ${opFilterYear} ${
-                    isTodaySelected ? '(HOY)' : ''
+                    isTodaySelected ? '(Hoy)' : ''
                   }`
                 : opFilterMonth !== 'all'
                 ? `Métricas del Mes de ${OP_MONTHS.find((m) => m.key === opFilterMonth)?.name} ${opFilterYear}`
@@ -1399,21 +1394,16 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
       {/* ---------------------------------------------------- */}
       <section id="sec-4variables" className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 uppercase tracking-wider">
-              EVOLUCIÓN MULTIVARIABLE
-            </span>
-            <h2 className="text-base font-bold text-slate-900 dark:text-white">
-              Sección 2. Evolución Financiera de las 4 Variables
-            </h2>
-          </div>
+          <h2 className="text-base font-bold text-slate-900 dark:text-white">
+            02. Evolución Financiera de las 4 Variables
+          </h2>
 
           {/* Selector de visualización (Barras / Líneas / Áreas) */}
           <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs">
             <button
               onClick={() => setFlowChartType('bars')}
               className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
-                flowChartType === 'bars' ? 'bg-white dark:bg-slate-700 text-emerald-700 shadow-xs' : 'text-slate-500'
+                flowChartType === 'bars' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500'
               }`}
             >
               Barras
@@ -1494,14 +1484,9 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
       {/* SECCIÓN 3. DESGLOSE OPERATIVO: DE DÓNDE VIENEN Y A DÓNDE VAN */}
       {/* ---------------------------------------------------- */}
       <section id="sec-desglose" className="space-y-4">
-        <div className="flex items-center gap-2">
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 uppercase tracking-wider">
-            DESGLOSE OPERATIVO
-          </span>
-          <h2 className="text-base font-bold text-slate-900 dark:text-white">
-            Sección 3. Desglose Operativo: De Dónde Vienen y A Dónde Van los Fondos
-          </h2>
-        </div>
+        <h2 className="text-base font-bold text-slate-900 dark:text-white">
+          03. Desglose Operativo: Fuentes y Destinos de Fondos
+        </h2>
 
         {/* Gráficos a y b en 2 columnas */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1634,19 +1619,14 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
       {/* ---------------------------------------------------- */}
       <section id="sec-sucursales" className="space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 uppercase tracking-wider">
-              FILTRADO POR PERÍODO
-            </span>
-            <h2 className="text-base font-bold text-slate-900 dark:text-white">
-              Sección 4. Rendimiento por Sucursal (Multisede)
-            </h2>
-          </div>
+          <h2 className="text-base font-bold text-slate-900 dark:text-white">
+            04. Rendimiento por Sucursal
+          </h2>
 
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsQuickBranchOpen(true)}
-              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold flex items-center gap-1 shadow-xs transition cursor-pointer"
+              className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>+ Nueva Sucursal</span>
@@ -1735,15 +1715,10 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
       {/* ---------------------------------------------------- */}
       {/* SECCIÓN 5. TESORERÍA Y CARTERA (TIEMPO REAL) */}
       {/* ---------------------------------------------------- */}
-      <section id="sec-tesoreria" className="space-y-4 pt-4 border-t-2 border-slate-200 dark:border-slate-800">
-        <div className="flex items-center gap-2">
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 uppercase tracking-wider">
-            TIEMPO REAL
-          </span>
-          <h2 className="text-base font-bold text-slate-900 dark:text-white">
-            Sección 5. Tesorería, Liquidez Inmediata & Cartera (CxC / CxP)
-          </h2>
-        </div>
+      <section id="sec-tesoreria" className="space-y-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+        <h2 className="text-base font-bold text-slate-900 dark:text-white">
+          05. Tesorería, Liquidez Inmediata & Cartera (CxC / CxP)
+        </h2>
 
         {/* Efectivo total inmediato, desglose por banco/caja y runway */}
         <TreasuryCashBreakdownCard
@@ -1971,14 +1946,9 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
       {/* SECCIÓN 6. CUMPLIMIENTO TRIBUTARIO Y DIAGNÓSTICO EJECUTIVO (TIEMPO REAL) */}
       {/* ---------------------------------------------------- */}
       <section id="sec-tributario" className="space-y-4">
-        <div className="flex items-center gap-2">
-          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 uppercase tracking-wider">
-            TIEMPO REAL
-          </span>
-          <h2 className="text-base font-bold text-slate-900 dark:text-white">
-            Sección 6. Cumplimiento Tributario F-07 & Diagnóstico Ejecutivo con IA
-          </h2>
-        </div>
+        <h2 className="text-base font-bold text-slate-900 dark:text-white">
+          06. Cumplimiento Tributario F-07 & Diagnóstico Financiero
+        </h2>
 
         {/* Tarjeta de IVA del mes en curso y obligaciones */}
         <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">

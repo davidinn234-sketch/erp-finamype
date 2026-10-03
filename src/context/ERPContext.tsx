@@ -268,6 +268,7 @@ interface ERPContextType {
   createBankAccount: (account: Omit<BankAccount, 'id' | 'companyId' | 'currentBalance'>) => void;
   transferFunds: (fromAccountId: string, toAccountId: string, amount: number, reference: string, description: string) => void;
   reconcileMovement: (movementId: string) => void;
+  deleteTreasuryMovement: (id: string) => void;
   cashFlowProjections: CashFlowProjectionItem[];
   realCashFlowSummary: RealCashFlowPeriod;
   
@@ -855,10 +856,13 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [companies, currentCompanyId]);
 
   const currentUser = useMemo(() => {
-    return users.find((u) => u.id === currentUserId) || users[0];
+    const found = (users || []).find((u) => u && u.id === currentUserId);
+    if (found) return found;
+    if (users && users.length > 0 && users[0]) return users[0];
+    return SAMPLE_USERS[0];
   }, [users, currentUserId]);
 
-  const userRole = currentUser.role;
+  const userRole = currentUser?.role || 'admin_maestro';
 
   // Support Mode & Multi-Tenancy Isolation
   const [isSupportMode, setIsSupportMode] = useState<boolean>(false);
@@ -1270,8 +1274,26 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         // Mismo criterio para users: la nube manda, así un usuario eliminado no vuelve.
         if (usersSnap && !usersSnap.empty) {
           const cloudUsers: UserProfile[] = [];
-          usersSnap.forEach((d) => { const item = d.data() as UserProfile; if (item.id && item.email) cloudUsers.push(item); });
-          setUsers(cloudUsers);
+          usersSnap.forEach((d) => {
+            const item = d.data() as UserProfile;
+            if (item.id && item.email) {
+              cloudUsers.push({
+                ...item,
+                role: item.role || 'admin_maestro',
+              });
+            }
+          });
+          if (cloudUsers.length > 0) {
+            setUsers((prev) => {
+              const merged = [...cloudUsers];
+              prev.forEach((pu) => {
+                if (!merged.some((cu) => cu.id === pu.id || (pu.email && cu.email && cu.email.toLowerCase() === pu.email.toLowerCase()))) {
+                  merged.push(pu);
+                }
+              });
+              return merged;
+            });
+          }
         }
 
         if (prodSnap && !prodSnap.empty) {
@@ -3550,6 +3572,40 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     addNotification('info', 'Movimiento Conciliado', 'El movimiento bancario ha sido verificado con el estado de cuenta.');
   };
 
+  const deleteTreasuryMovement = (movementId: string) => {
+    const mov = treasuryMovements.find((m) => m.id === movementId);
+    if (!mov) return;
+
+    // Revert bank balance
+    const isIncome = ['ingreso_venta', 'abono_cxc', 'otro_ingreso'].includes(mov.type);
+    setBankAccounts((prev) =>
+      prev.map((b) => {
+        if (b.id === mov.bankAccountId) {
+          const newBal = isIncome
+            ? Number((b.currentBalance - mov.amount).toFixed(2))
+            : Number((b.currentBalance + mov.amount).toFixed(2));
+          try {
+            setDoc(doc(db, 'bank_accounts', b.id), { currentBalance: newBal }, { merge: true }).catch(reportCloudError);
+          } catch (e) {}
+          return { ...b, currentBalance: newBal };
+        }
+        return b;
+      })
+    );
+
+    // Remove journal entry if linked
+    if (mov.accountingEntryId) {
+      setJournalEntries((prev) => prev.filter((j) => j.id !== mov.accountingEntryId));
+    }
+
+    setTreasuryMovements((prev) => prev.filter((m) => m.id !== movementId));
+    try {
+      deleteDoc(doc(db, 'treasury_movements', movementId)).catch(reportCloudError);
+    } catch (e) {}
+
+    addNotification('info', 'Movimiento Revertido', `Movimiento #${mov.referenceNumber} eliminado y saldo bancario restaurado.`);
+  };
+
   const createOtherIncome = (incomeData: Omit<OtherIncome, 'id' | 'companyId' | 'createdAt'>): OtherIncome => {
     const incomeId = `inc_oth_${Date.now()}`;
     const newIncome: OtherIncome = {
@@ -4075,6 +4131,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         createBankAccount,
         transferFunds,
         reconcileMovement,
+        deleteTreasuryMovement,
         cashFlowProjections,
         realCashFlowSummary,
         chartOfAccounts,

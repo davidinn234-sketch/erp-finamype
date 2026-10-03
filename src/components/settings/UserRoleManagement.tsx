@@ -180,15 +180,15 @@ export const UserRoleManagement: React.FC = () => {
           </div>
           <div>
             <p className="font-bold text-slate-900 dark:text-white">
-              Sesión Activa: <span className="text-indigo-600 dark:text-indigo-400">{currentUser.name}</span>
+              Sesión Activa: <span className="text-indigo-600 dark:text-indigo-400">{currentUser?.name || 'Usuario'}</span>
             </p>
             <p className="text-slate-500">
-              Estás operando con permisos de <strong>{currentUser.role.replace('_', ' ').toUpperCase()}</strong>.
+              Estás operando con permisos de <strong>{(currentUser?.role || 'admin_maestro').replace('_', ' ').toUpperCase()}</strong>.
             </p>
           </div>
         </div>
         <div className="text-right">
-          {getRoleBadge(currentUser.role)}
+          {getRoleBadge(currentUser?.role || 'admin_maestro')}
         </div>
       </div>
 

@@ -12,6 +12,8 @@ import {
   X,
   ArrowRight,
   Target,
+  Database,
+  Wallet,
 } from 'lucide-react';
 
 interface CommandPaletteModalProps {
@@ -86,6 +88,26 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       icon: Landmark,
       action: () => {
         setActiveModule('dashboard');
+        onClose();
+      },
+    },
+    {
+      id: 'nav-master-database',
+      label: 'Ir a Base de Datos General (Auditoría, Registros & Control-Z)',
+      category: 'Navegación',
+      icon: Database,
+      action: () => {
+        setActiveModule('master_database');
+        onClose();
+      },
+    },
+    {
+      id: 'nav-personal-finances',
+      label: 'Ir a Finanzas Personales (Presupuestos, Metas & Regla 50/30/20)',
+      category: 'Navegación',
+      icon: Wallet,
+      action: () => {
+        setActiveModule('personal_finances');
         onClose();
       },
     },

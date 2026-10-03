@@ -101,7 +101,7 @@ export const CompanyUsersManagerModule: React.FC = () => {
         return u.companyId === currentCompany.id;
       }
       // Si no tiene companyId y no es admin_maestro global, asociarlo a la empresa actual
-      return u.id === currentUser.id || u.role !== 'admin_maestro';
+      return u.id === currentUser?.id || u.role !== 'admin_maestro';
     });
   }, [users, currentCompany, currentUser]);
 

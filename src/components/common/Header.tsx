@@ -21,6 +21,7 @@ import {
   Wallet,
   ScanBarcode,
   Cloud,
+  Database,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -63,7 +64,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center gap-3">
         {/* Company Dropdown Switcher - Restricted: only Admin Maestro can switch companies */}
         <div className="relative">
-          {currentUser.role === 'admin_maestro' ? (
+          {currentUser?.role === 'admin_maestro' ? (
             <button
               id="company-selector-btn"
               onClick={() => {
@@ -81,8 +82,8 @@ export const Header: React.FC<HeaderProps> = ({
                     {currentCompany.tradeName || currentCompany.name}
                   </span>
                   {currentCompany.isGranContribuyente && (
-                    <span className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 rounded border border-amber-300 dark:border-amber-700">
-                      Gran Contribuyente
+                    <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+                      · Gran Contribuyente
                     </span>
                   )}
                 </div>
@@ -106,8 +107,8 @@ export const Header: React.FC<HeaderProps> = ({
                     {currentCompany.tradeName || currentCompany.name}
                   </span>
                   {currentCompany.isGranContribuyente && (
-                    <span className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300 rounded border border-amber-300 dark:border-amber-700">
-                      Gran Contribuyente
+                    <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+                      · Gran Contribuyente
                     </span>
                   )}
                 </div>
@@ -118,7 +119,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           )}
 
-          {showCompanyMenu && currentUser.role === 'admin_maestro' && (
+          {showCompanyMenu && currentUser?.role === 'admin_maestro' && (
             <div className="absolute left-0 mt-2 w-72 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
               <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                 Empresas & Despachos (Multi-Tenant)
@@ -164,79 +165,71 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Right side: Quick Action Buttons, Role Switcher, Dark Mode */}
       <div className="flex items-center gap-2 sm:gap-3">
-        {/* Fixed Preconfigured Account Archetype Badge (Locked per user requirement) */}
+        {/* Account Archetype Indicator - Clean & Subtle */}
         <div
           id="header-fixed-archetype-badge"
-          title="Modalidad predeterminada del negocio (Fijada para garantizar consistencia contable y fiscal)"
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold ${
-            currentCompany.dteActive
-              ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300'
-              : 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300'
-          }`}
+          title="Modalidad predeterminada del negocio"
+          className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 text-xs text-slate-600 dark:text-slate-300"
         >
-          <Building2 className="w-3.5 h-3.5 shrink-0" />
-          <span className="hidden xl:inline">Empresa:</span>
-          <span className="font-bold">
-            {currentCompany.dteActive ? 'Consolidada (DTE MH)' : 'Emprendedor (Control Interno)'}
-          </span>
-          <span className="text-[10px] px-1 py-0.5 rounded bg-white/70 dark:bg-black/40 font-mono text-slate-500 font-normal">
-            Fijo
+          <span className={`w-2 h-2 rounded-full ${currentCompany.dteActive ? 'bg-indigo-500' : 'bg-emerald-500'}`} />
+          <span className="font-semibold text-slate-800 dark:text-slate-200">
+            {currentCompany.dteActive ? 'DTE Hacienda' : 'Control Interno & POS'}
           </span>
         </div>
 
         {/* Master Admin Portal Access & Return Button */}
-        {currentUser.role === 'admin_maestro' && (
+        {currentUser?.role === 'admin_maestro' && (
           <button
             id="header-cloud-accounts-btn"
             type="button"
             onClick={exitSupportMode}
-            title="Volver al Portal de Administración Maestro FINAMIPE SV"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-sm cursor-pointer"
+            title="Volver al Portal de Administración Maestro"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition shadow-xs cursor-pointer"
           >
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Panel Maestro Admin</span>
+            <span className="hidden sm:inline">Panel Maestro</span>
             <span className="sm:hidden">Maestro</span>
           </button>
         )}
 
-        {/* Quick Transaction Action buttons */}
-        <div className="hidden lg:flex items-center gap-1.5">
-          <button
-            id="header-open-pos-terminal-btn"
-            type="button"
-            onClick={() => setActiveModule('pos_terminal')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-semibold shadow-sm transition cursor-pointer"
-            title="Abrir Terminal de Ventas POS (Lector de Código de Barras)"
-          >
-            <ScanBarcode className="w-3.5 h-3.5" />
-            <span>Caja POS</span>
-          </button>
-
+        {/* Quick Transaction Action buttons - Clean Hierarchy */}
+        <div className="hidden lg:flex items-center gap-2">
           <button
             id="quick-new-sale-btn"
             onClick={onOpenNewSaleModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-semibold shadow-sm transition cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-white dark:text-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-xs transition cursor-pointer"
           >
             <Receipt className="w-3.5 h-3.5" />
             <span>{currentCompany.dteActive ? 'Emitir DTE' : 'Nueva Venta'}</span>
           </button>
 
           <button
+            id="header-open-pos-terminal-btn"
+            type="button"
+            onClick={() => setActiveModule('pos_terminal')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 text-xs font-medium transition cursor-pointer"
+            title="Abrir Terminal de Ventas POS"
+          >
+            <ScanBarcode className="w-3.5 h-3.5 text-slate-500" />
+            <span>Caja POS</span>
+          </button>
+
+          <button
             id="quick-new-purchase-btn"
             onClick={onOpenNewPurchaseModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-semibold shadow-sm transition cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 text-xs font-medium transition cursor-pointer"
           >
-            <ShoppingBag className="w-3.5 h-3.5" />
-            <span>Reg. Compra</span>
+            <ShoppingBag className="w-3.5 h-3.5 text-slate-500" />
+            <span>Compra</span>
           </button>
 
           <button
             id="quick-new-payroll-btn"
             onClick={onOpenNewPayrollModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 active:scale-95 text-white text-xs font-semibold shadow-sm transition cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 text-xs font-medium transition cursor-pointer"
           >
-            <Users className="w-3.5 h-3.5" />
-            <span>Planilla SV</span>
+            <Users className="w-3.5 h-3.5 text-slate-500" />
+            <span>Planilla</span>
           </button>
         </div>
 
@@ -261,14 +254,14 @@ export const Header: React.FC<HeaderProps> = ({
             className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 transition cursor-pointer"
           >
             <div className="w-7 h-7 rounded-full bg-slate-700 text-white flex items-center justify-center text-xs font-bold">
-              {currentUser.name.charAt(0)}
+              {(currentUser?.name || 'U').charAt(0)}
             </div>
             <div className="hidden sm:block text-left">
               <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[130px]">
-                {currentUser.name}
+                {currentUser?.name || 'Usuario'}
               </p>
               <p className="text-[10px] text-slate-500 dark:text-slate-400 capitalize">
-                {currentUser.role.replace('_', ' ')}
+                {(currentUser?.role || 'admin_maestro').replace('_', ' ')}
               </p>
             </div>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
@@ -277,11 +270,11 @@ export const Header: React.FC<HeaderProps> = ({
           {showUserMenu && (
             <div className="absolute right-0 mt-2 w-72 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl py-2 z-50">
               <div className="px-4 py-2.5 border-b border-slate-100 dark:border-slate-800">
-                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{currentUser.name}</p>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{currentUser.email}</p>
+                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{currentUser?.name || 'Usuario'}</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{currentUser?.email || ''}</p>
                 <div className="flex items-center gap-1.5 mt-1.5">
                   <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 capitalize border border-indigo-200 dark:border-indigo-800/40">
-                    {currentUser.role.replace('_', ' ')}
+                    {(currentUser?.role || 'admin_maestro').replace('_', ' ')}
                   </span>
                   <span className="text-[10px] text-slate-400 truncate">
                     {currentCompany.tradeName || currentCompany.name}
@@ -289,7 +282,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
               </div>
 
-              {currentUser.role === 'admin_maestro' && (
+              {currentUser?.role === 'admin_maestro' && (
                 <button
                   type="button"
                   id="header-admin-portal-link"
@@ -303,6 +296,19 @@ export const Header: React.FC<HeaderProps> = ({
                   <span>Panel Maestro Admin (Cuentas)</span>
                 </button>
               )}
+
+              <button
+                type="button"
+                id="header-master-database-link"
+                onClick={() => {
+                  setShowUserMenu(false);
+                  setActiveModule('master_database');
+                }}
+                className="w-full text-left px-4 py-2.5 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2 cursor-pointer font-medium"
+              >
+                <Database className="w-4 h-4 text-emerald-500" />
+                <span>Base de Datos General & Ctrl+Z</span>
+              </button>
 
               <button
                 type="button"

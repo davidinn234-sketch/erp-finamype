@@ -10,9 +10,11 @@ export const firebaseConfig = {
   projectId: "mi-erp-nube",
   storageBucket: "mi-erp-nube.firebasestorage.app",
   messagingSenderId: "96182387469",
-  appId: "1:96182387469:web:e57132b342aeb9a9cf6644",
-  measurementId: "G-JMC7ZD3T8E"
+  appId: "1:96182387469:web:938520455ea1f073cf6644",
+  measurementId: ""
 };
+
+export const firestoreDatabaseId = "ai-studio-nexuserpsalvador-619c5a84-1f5d-4833-aee7-65b2a99f4a3b";
 
 // Initialize Firebase
 export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
@@ -32,12 +34,16 @@ if (typeof window !== "undefined") {
     });
 }
 
-// Initialize Cloud Firestore database
+// Initialize Cloud Firestore database bound to the provisioned database ID
 // ignoreUndefinedProperties: true prevents writes from silently throwing
 // (and being swallowed by .catch()) whenever an optional field is empty
 // and ends up as `undefined` (e.g. phone, notes, etc.). Without this,
 // Firestore rejects the entire document write.
-export const db = initializeFirestore(app, { ignoreUndefinedProperties: true });
+export const db = initializeFirestore(
+  app,
+  { ignoreUndefinedProperties: true },
+  firestoreDatabaseId
+);
 
 // Connection test helper mandated by Firebase skill
 export async function testFirebaseConnection(): Promise<boolean> {

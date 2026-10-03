@@ -21,6 +21,7 @@ import { TreasuryModule } from './components/treasury/TreasuryModule';
 import { AccountingModule } from './components/accounting/AccountingModule';
 import { SettingsModule } from './components/settings/SettingsModule';
 import { AcademyModule } from './components/academy/AcademyModule';
+import { MasterDatabaseModule } from './components/database/MasterDatabaseModule';
 import { StandalonePersonalFinanceLayout } from './components/personal/StandalonePersonalFinanceLayout';
 import { CloudUserManagerModal } from './components/admin/CloudUserManagerModal';
 import { AdminProfilesManagerModule } from './components/admin/AdminProfilesManagerModule';
@@ -65,7 +66,7 @@ const MainLayout: React.FC = () => {
   }
 
   // If user is Master Admin and not currently inspecting a company in support mode:
-  if (currentUser.role === 'admin_maestro' && !isSupportMode) {
+  if (currentUser?.role === 'admin_maestro' && !isSupportMode) {
     return (
       <>
         <MasterAdminPortal />
@@ -75,7 +76,7 @@ const MainLayout: React.FC = () => {
   }
 
   // If user account is strictly Finanzas Personales, render completely isolated standalone portal!
-  if (currentUser.systemArchetype === 'finanzas_personales') {
+  if (currentUser?.systemArchetype === 'finanzas_personales') {
     return (
       <>
         <StandalonePersonalFinanceLayout />
@@ -85,7 +86,7 @@ const MainLayout: React.FC = () => {
   }
 
   // If user account is a Dedicated Tablet Kiosk for Attendance:
-  if (currentUser.role === 'kiosko_asistencia') {
+  if (currentUser?.role === 'kiosko_asistencia') {
     return (
       <div className={`min-h-screen ${isDarkMode ? 'dark' : ''} bg-slate-950 flex flex-col justify-between`}>
         <TabletAttendanceKioskModal
@@ -197,6 +198,8 @@ const MainLayout: React.FC = () => {
                 {activeModule === 'accounting' && <AccountingModule />}
 
                 {activeModule === 'academy' && <AcademyModule />}
+
+                {activeModule === 'master_database' && <MasterDatabaseModule />}
 
                 {activeModule === 'settings' && <SettingsModule />}
                 {activeModule === 'company_users' && <CompanyUsersManagerModule />}

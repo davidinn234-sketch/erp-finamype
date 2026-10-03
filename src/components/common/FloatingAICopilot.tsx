@@ -346,25 +346,21 @@ Puedo realizar acciones reales en tu empresa con solo pedírmelo:
   return (
     <>
       {/* ---------------------------------------------------- */}
-      {/* FLOATING TRIGGER BUTTON (Always visible at bottom right) */}
+      {/* FLOATING TRIGGER BUTTON (Clean & Minimalist - HubSpot Style) */}
       {/* ---------------------------------------------------- */}
       {!isOpen && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3">
           <button
             onClick={() => setIsOpen(true)}
-            className="group relative flex items-center gap-2.5 px-4 py-3 bg-gradient-to-r from-indigo-600 via-indigo-700 to-cyan-600 text-white rounded-full shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer border border-white/20"
-            title="Abrir Copiloto IA (Ctrl + J)"
+            className="flex items-center gap-2 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all cursor-pointer border border-slate-700/80"
+            title="Abrir Asistente Financiero (Ctrl + J)"
           >
-            <div className="relative">
-              <Sparkles className="w-5 h-5 text-amber-300 animate-pulse" />
-              <span className="absolute -top-1 -right-1 flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-300"></span>
-              </span>
-            </div>
-            <span className="font-bold text-sm tracking-wide flex items-center gap-1.5">
-              <span>SivarAI</span>
-              <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded font-mono font-normal">Ctrl+J</span>
+            <Bot className="w-4 h-4 text-slate-300" />
+            <span className="font-semibold text-xs tracking-tight">
+              Asistente ERP
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono font-normal">
+              Ctrl+J
             </span>
           </button>
         </div>
@@ -378,24 +374,21 @@ Puedo realizar acciones reales en tu empresa con solo pedírmelo:
           className={`fixed z-50 transition-all duration-200 flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden ${
             isExpanded
               ? 'inset-4 sm:inset-10 rounded-2xl'
-              : 'bottom-4 right-4 sm:bottom-6 sm:right-6 w-[calc(100vw-2rem)] sm:w-[460px] h-[640px] max-h-[90vh] rounded-3xl'
+              : 'bottom-4 right-4 sm:bottom-6 sm:right-6 w-[calc(100vw-2rem)] sm:w-[460px] h-[640px] max-h-[90vh] rounded-2xl'
           }`}
         >
           {/* Header */}
-          <div className="p-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between border-b border-white/10 shrink-0">
+          <div className="p-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-cyan-400 flex items-center justify-center shadow-md">
-                <Bot className="w-5 h-5 text-white" />
+              <div className="w-9 h-9 rounded-xl bg-slate-800 text-indigo-400 flex items-center justify-center font-bold">
+                <Bot className="w-5 h-5 text-indigo-400" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="font-bold text-sm text-white">FinaPyme Copilot</h3>
-                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.2 rounded-full font-semibold">
-                    En Vivo
-                  </span>
+                  <h3 className="font-bold text-sm text-white">Asistente Financiero & Operativo</h3>
                 </div>
-                <p className="text-[11px] text-slate-300">
-                  {currentCompany?.tradeName || currentCompany?.name || 'FINAMIPE SV'} • Liquidez: <strong className="text-cyan-300 font-mono">${totalLiquid.toLocaleString()}</strong> ({runwayMonths}m)
+                <p className="text-[11px] text-slate-400">
+                  {currentCompany?.tradeName || currentCompany?.name || 'FinaPyme SV'} · Saldo Líquido: <strong className="text-slate-200 font-mono">${totalLiquid.toLocaleString()}</strong>
                 </p>
               </div>
             </div>
@@ -699,8 +692,8 @@ Puedo realizar acciones reales en tu empresa con solo pedírmelo:
               </button>
             </form>
             <div className="flex items-center justify-between mt-2 text-[10px] text-slate-400 px-1">
-              <span>FinaPyme Copilot v3.5 • Motor Gemini con IA</span>
-              <span>Presiona <strong>Enter</strong> para enviar</span>
+              <span>Asistente Operativo FinaPyme</span>
+              <span>Enter para enviar</span>
             </div>
           </div>
         </div>
