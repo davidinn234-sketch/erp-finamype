@@ -537,38 +537,8 @@ export const ExhaustiveCustomizationModal: React.FC<Props> = ({
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* 1. Finanzas Personales */}
-                <div
-                  onClick={() => handleArchetypeChange('finanzas_personales')}
-                  className={`p-5 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
-                    chosenArchetype === 'finanzas_personales'
-                      ? 'border-emerald-500 bg-emerald-500/5 shadow-md shadow-emerald-500/10'
-                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
-                  }`}
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="w-10 h-10 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
-                        <Wallet className="w-5 h-5" />
-                      </div>
-                      {chosenArchetype === 'finanzas_personales' && (
-                        <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                      )}
-                    </div>
-                    <h3 className="font-bold text-slate-900 dark:text-white text-base">
-                      Finanzas Personales
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                      Especial para control individual de ingresos, gastos diarios, metas de ahorro y presupuestos familiares en El Salvador. Sin obligaciones tributarias ni IVA.
-                    </p>
-                  </div>
-                  <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
-                    ✓ Ingresos/Egresos • Metas de Ahorro • Presupuesto
-                  </div>
-                </div>
-
-                {/* 2. Emprendedor / Control Interno */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* 1. Emprendedor / Control Interno */}
                 <div
                   onClick={() => handleArchetypeChange('emprendedor_control_interno')}
                   className={`p-5 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
@@ -598,7 +568,7 @@ export const ExhaustiveCustomizationModal: React.FC<Props> = ({
                   </div>
                 </div>
 
-                {/* 3. Negocio en Transición */}
+                {/* 2. Negocio en Transición */}
                 <div
                   onClick={() => handleArchetypeChange('negocio_transicion')}
                   className={`p-5 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
@@ -628,7 +598,7 @@ export const ExhaustiveCustomizationModal: React.FC<Props> = ({
                   </div>
                 </div>
 
-                {/* 4. Empresa Consolidada DTE MH */}
+                {/* 3. Empresa Consolidada DTE MH */}
                 <div
                   onClick={() => handleArchetypeChange('empresa_consolidada_dte')}
                   className={`p-5 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${

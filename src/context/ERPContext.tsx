@@ -61,6 +61,7 @@ import {
   DEFAULT_ATTENDANCE_CONFIG,
   SAMPLE_ATTENDANCE_RECORDS,
   SAMPLE_LEAVE_REQUESTS,
+  getSamplePersonalFinancesData,
 } from '../utils/sampleData';
 import {
   DEFAULT_CHART_OF_ACCOUNTS,
@@ -138,6 +139,7 @@ interface ERPContextType {
   updatePersonalBudget: (id: string, newAmount: number) => void;
   depositToSavingGoal: (id: string, amount: number) => void;
   addPersonalSavingGoal: (goal: Omit<PersonalSavingGoal, 'id'>) => void;
+  resetPersonalFinancesToSampleData: () => void;
 
   // Exhaustive Customization & Setup
   isExhaustiveCustomizationOpen: boolean;
@@ -516,17 +518,19 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   });
 
   // Personal Finances State
+  const defaultPersonalData = useMemo(() => getSamplePersonalFinancesData(), []);
+
   const [personalTransactions, setPersonalTransactions] = useState<PersonalTransaction[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.personalTransactions && Array.isArray(parsed.personalTransactions)) {
+        if (parsed.personalTransactions && Array.isArray(parsed.personalTransactions) && parsed.personalTransactions.length > 0) {
           return parsed.personalTransactions;
         }
       } catch (e) {}
     }
-    return [];
+    return getSamplePersonalFinancesData().transactions;
   });
 
   const [personalBudgets, setPersonalBudgets] = useState<PersonalBudgetCategory[]>(() => {
@@ -534,12 +538,12 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.personalBudgets && Array.isArray(parsed.personalBudgets)) {
+        if (parsed.personalBudgets && Array.isArray(parsed.personalBudgets) && parsed.personalBudgets.length > 0) {
           return parsed.personalBudgets;
         }
       } catch (e) {}
     }
-    return [];
+    return getSamplePersonalFinancesData().budgets;
   });
 
   const [personalSavingGoals, setPersonalSavingGoals] = useState<PersonalSavingGoal[]>(() => {
@@ -547,12 +551,12 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.personalSavingGoals && Array.isArray(parsed.personalSavingGoals)) {
+        if (parsed.personalSavingGoals && Array.isArray(parsed.personalSavingGoals) && parsed.personalSavingGoals.length > 0) {
           return parsed.personalSavingGoals;
         }
       } catch (e) {}
     }
-    return [];
+    return getSamplePersonalFinancesData().goals;
   });
 
   const [isExhaustiveCustomizationOpen, setIsExhaustiveCustomizationOpen] = useState<boolean>(false);
@@ -1970,6 +1974,18 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     setPersonalSavingGoals((prev) => [...prev, newGoal]);
     addNotification('success', 'Nueva Meta de Ahorro', `"${newGoal.title}" creada con objetivo de $${newGoal.targetAmount.toFixed(2)}.`);
+  };
+
+  const resetPersonalFinancesToSampleData = () => {
+    const fresh = getSamplePersonalFinancesData();
+    setPersonalTransactions(fresh.transactions);
+    setPersonalBudgets(fresh.budgets);
+    setPersonalSavingGoals(fresh.goals);
+    addNotification(
+      'info',
+      'Datos de Demostración Cargados',
+      'Se han generado registros del mes actual, mes anterior y arrastre patrimonial.'
+    );
   };
 
   // Exhaustive Customization & Full Setup
@@ -4050,6 +4066,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         updatePersonalBudget,
         depositToSavingGoal,
         addPersonalSavingGoal,
+        resetPersonalFinancesToSampleData,
         isExhaustiveCustomizationOpen,
         setIsExhaustiveCustomizationOpen,
         isCloudUserManagerOpen,

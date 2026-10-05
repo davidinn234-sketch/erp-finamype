@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ERPProvider, useERP } from './context/ERPContext';
 import { Header } from './components/common/Header';
 import { Sidebar } from './components/common/Sidebar';
@@ -28,7 +28,7 @@ import { AdminProfilesManagerModule } from './components/admin/AdminProfilesMana
 import { CompanyUsersManagerModule } from './components/admin/CompanyUsersManagerModule';
 import { MasterAdminPortal } from './components/admin/MasterAdminPortal';
 import { TabletAttendanceKioskModal } from './components/payroll/TabletAttendanceKioskModal';
-import { Menu } from 'lucide-react';
+import { Menu, Layers } from 'lucide-react';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 const MainLayout: React.FC = () => {
@@ -49,6 +49,18 @@ const MainLayout: React.FC = () => {
 
   const [isSidebarOpenMobile, setIsSidebarOpenMobile] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+
+  // Prevent background scrolling on mobile when sidebar is open without disabling touch gestures
+  useEffect(() => {
+    if (isSidebarOpenMobile) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isSidebarOpenMobile]);
 
   // Quick Action Modal States
   const [isNewSaleModalOpen, setIsNewSaleModalOpen] = useState(false);
@@ -118,7 +130,7 @@ const MainLayout: React.FC = () => {
           </button>
         </div>
       )}
-      <div className="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen flex flex-col font-sans transition-colors">
+      <div className="bg-[#F6F8F7] dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen flex flex-col font-sans transition-colors">
         <div className="flex flex-1 relative">
           {/* Main Navigation Sidebar */}
           <Sidebar
@@ -128,22 +140,9 @@ const MainLayout: React.FC = () => {
 
           {/* Main Content Area */}
           <div className="flex-1 flex flex-col min-w-0">
-            {/* Mobile Header Bar with Hamburger */}
-            <div className="lg:hidden flex items-center justify-between p-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-              <button
-                onClick={() => setIsSidebarOpenMobile(true)}
-                className="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                <Menu className="w-5 h-5" />
-              </button>
-              <span className="font-bold text-sm text-slate-900 dark:text-white">
-                FinaPyme<span className="text-indigo-600">.SV</span>
-              </span>
-              <div className="w-8" />
-            </div>
-
             {/* Sticky Header with Tenant Switcher & Quick Search */}
             <Header
+              onOpenMobileMenu={() => setIsSidebarOpenMobile(true)}
               onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
               onOpenNewSaleModal={() => setIsNewSaleModalOpen(true)}
               onOpenNewPurchaseModal={() => setIsNewPurchaseModalOpen(true)}

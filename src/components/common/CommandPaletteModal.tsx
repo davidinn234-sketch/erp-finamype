@@ -102,16 +102,6 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       },
     },
     {
-      id: 'nav-personal-finances',
-      label: 'Ir a Finanzas Personales (Presupuestos, Metas & Regla 50/30/20)',
-      category: 'Navegación',
-      icon: Wallet,
-      action: () => {
-        setActiveModule('personal_finances');
-        onClose();
-      },
-    },
-    {
       id: 'nav-marketing',
       label: 'Ir a Dashboard de Marketing (Análisis Histórico & BI)',
       category: 'Navegación',

@@ -19,6 +19,7 @@ import {
   FileText,
   Target,
   Database,
+  X,
 } from 'lucide-react';
 import { FinaPymeTermsAndProjectModal } from './FinaPymeTermsAndProjectModal';
 
@@ -46,6 +47,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
       subtitle: 'Operativo, Flujo, Tesorería & DTE',
       icon: LayoutDashboard,
       roles: ['admin_maestro', 'contador', 'gerente', 'cajero', 'vendedor'],
+    },
+    {
+      id: 'marketing',
+      label: 'Dashboard de Marketing',
+      subtitle: 'Análisis Histórico, Clientes & BI',
+      icon: Target,
+      roles: ['admin_maestro', 'contador', 'gerente', 'cajero', 'vendedor'],
+      badge: 'Histórico',
     },
     {
       id: 'pos_terminal',
@@ -102,28 +111,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
       badge: 'Predictivo',
     },
     {
-      id: 'marketing',
-      label: 'Dashboard de Marketing',
-      subtitle: 'Análisis Histórico, Clientes & BI',
-      icon: Target,
-      roles: ['admin_maestro', 'contador', 'gerente'],
-      badge: 'Histórico',
-    },
-    {
       id: 'academy',
       label: 'Academia & Manuales',
       subtitle: 'Guías Paso a Paso & Ley SV',
       icon: BookOpen,
       roles: ['admin_maestro', 'contador', 'gerente', 'cajero', 'vendedor'],
       badge: 'Guías',
-    },
-    {
-      id: 'personal_finances',
-      label: 'Finanzas Personales',
-      subtitle: 'Gastos, Metas & Regla 50/30/20',
-      icon: Wallet,
-      roles: ['admin_maestro', 'contador', 'gerente', 'cajero', 'vendedor'],
-      badge: 'Personal',
     },
     {
       id: 'master_database',
@@ -165,46 +158,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
 
   const isCompanyOwnerOrManager =
     currentUser?.role === 'admin_maestro' ||
-    currentUser?.role === 'gerente' ||
-    currentUser?.id === currentCompany?.primaryAdminUserId;
+    currentUser?.role === 'gerente';
 
-  const hasPermission = (moduleItemId: string) => {
-    if (!currentUser?.permissions) return false;
-    const p = currentUser.permissions;
-    if (p.includes(moduleItemId)) return true;
-    if (moduleItemId === 'pos_terminal' && (p.includes('pos_sales') || p.includes('pos_terminal'))) return true;
-    if (moduleItemId === 'sales' && (p.includes('sales_crm') || p.includes('sales'))) return true;
-    if (moduleItemId === 'purchases' && (p.includes('purchases_scm') || p.includes('purchases'))) return true;
-    if (moduleItemId === 'payroll' && (p.includes('payroll_access') || p.includes('payroll'))) return true;
-    if (moduleItemId === 'treasury' && (p.includes('treasury_access') || p.includes('treasury'))) return true;
-    if (moduleItemId === 'accounting' && (p.includes('accounting_access') || p.includes('accounting'))) return true;
-    if (moduleItemId === 'company_users' && p.includes('company_users')) return true;
-    return false;
+  const hasPermission = (permissionKey: string): boolean => {
+    if (isCompanyOwnerOrManager) return true;
+    if (!currentUser?.permissions || currentUser.permissions.length === 0) return false;
+    return currentUser.permissions.includes(permissionKey);
   };
 
   const filteredNavItems = navigationItems.filter((item) => {
-    // Portal SaaS Global solo para admin maestro
-    if (item.id === 'admin_profiles') return currentUser?.role === 'admin_maestro';
+    if (userRole === 'admin_maestro') return true;
 
-    // Master admin o Dueño/Gerente de la empresa: acceso completo a todos los módulos de gestión
-    if (isCompanyOwnerOrManager) return true;
-
-    // Contador
-    if (userRole === 'contador') {
-      if (item.id === 'company_users') return hasPermission('company_users');
-      return (
-        ['dashboard', 'master_database', 'accounting', 'treasury', 'payroll', 'purchases', 'sales', 'forecasting', 'academy', 'settings'].includes(item.id) ||
-        hasPermission(item.id)
-      );
-    }
-
-    // Vendedor
     if (userRole === 'vendedor') {
-      if (['sales', 'pos_terminal', 'dashboard', 'academy'].includes(item.id)) return true;
+      if (['sales', 'dashboard', 'academy'].includes(item.id)) return true;
       return hasPermission(item.id);
     }
 
-    // Cajero
     if (userRole === 'cajero') {
       if (['pos_terminal', 'dashboard', 'academy'].includes(item.id)) return true;
       return hasPermission(item.id);
@@ -233,35 +202,43 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
 
       {/* Main Sidebar */}
       <aside
-        className={`fixed lg:sticky top-0 left-0 z-50 h-screen w-64 lg:w-68 flex flex-col justify-between border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 transition-transform duration-200 ease-in-out ${
-          isOpenMobile ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] lg:w-68 lg:sticky lg:top-0 lg:h-screen flex flex-col justify-between border-r border-[#0b3b36] bg-[#0F4C45] text-white transition-transform duration-200 ease-in-out ${
+          isOpenMobile ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'
         }`}
       >
-        {/* Top Logo & App Header */}
-        <div className="flex-1 overflow-hidden flex flex-col">
-          <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3 shrink-0">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-blue-600 to-cyan-500 flex items-center justify-center text-white shadow-md">
-              <Layers className="w-5 h-5" />
+        {/* Top Header & Navigation Links */}
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="p-4 border-b border-[#0b3b36] flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-teal-300"></span>
+              <span className="font-semibold text-xs text-teal-100 uppercase tracking-wider">
+                Módulos del Sistema
+              </span>
             </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-black tracking-tight text-slate-900 dark:text-white text-base">
-                  FinaPyme<span className="text-indigo-600 dark:text-indigo-400">.SV</span>
-                </span>
-                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">
-                  ERP
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
-                Gestión Financiera para MYPES
-              </p>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-teal-200 font-medium px-1.5 py-0.5 rounded bg-teal-900/60 border border-teal-700/50">
+                ERP SV
+              </span>
+              {/* Mobile Close Button */}
+              <button
+                type="button"
+                onClick={onCloseMobile}
+                className="lg:hidden p-1 rounded-[6px] text-teal-200 hover:text-white hover:bg-white/10 transition cursor-pointer"
+                title="Cerrar menú"
+                aria-label="Cerrar menú"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
           {/* Navigation Menu Links */}
-          <nav className="p-3 space-y-1 overflow-y-auto flex-1 custom-scrollbar">
-            <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              Módulos Operativos ERP
+          <nav
+            className="p-3 space-y-1 overflow-y-auto flex-1 min-h-0 select-none"
+            style={{ WebkitOverflowScrolling: 'touch' }}
+          >
+            <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-teal-300/80">
+              Módulos Operativos
             </div>
 
             {filteredErpItems.map((item) => {
@@ -275,23 +252,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
                     setActiveModule(item.id);
                     onCloseMobile();
                   }}
-                  className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition-all cursor-pointer ${
+                  className={`w-full flex items-center justify-between p-2 rounded-[6px] text-left transition-colors cursor-pointer select-none ${
                     isActive
-                      ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-semibold shadow-xs'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-850'
+                      ? 'bg-white/15 text-white font-semibold border-l-2 border-white'
+                      : 'text-teal-100/80 hover:text-white hover:bg-white/10'
                   }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <Icon
                       className={`w-4 h-4 shrink-0 ${
-                        isActive ? 'text-white dark:text-slate-900' : 'text-slate-400 dark:text-slate-400'
+                        isActive ? 'text-white' : 'text-teal-300'
                       }`}
                     />
                     <div className="min-w-0">
                       <p className="text-xs font-semibold truncate leading-tight">{item.label}</p>
                       <p
                         className={`text-[10px] truncate ${
-                          isActive ? 'text-slate-300 dark:text-slate-600' : 'text-slate-400 dark:text-slate-500'
+                          isActive ? 'text-teal-100' : 'text-teal-200/60'
                         }`}
                       >
                         {item.subtitle}
@@ -300,10 +277,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
                   </div>
                   {item.badge && (
                     <span
-                      className={`text-[10px] font-medium transition-colors ${
+                      className={`text-[9px] font-medium px-1.5 py-0.5 rounded transition-colors ${
                         isActive
-                          ? 'text-slate-300 dark:text-slate-600'
-                          : 'text-slate-400 dark:text-slate-500'
+                          ? 'bg-[#0F766E] text-white'
+                          : 'bg-teal-900/70 text-teal-200 border border-teal-700/40'
                       }`}
                     >
                       {item.badge}
@@ -316,9 +293,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
             {/* Bottom Config & System Section */}
             {filteredSystemItems.length > 0 && (
               <div className="pt-3">
-                <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-t-2 border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+                <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-teal-300/80 border-t border-[#0b3b36] flex items-center justify-between">
                   <span>Configuración & Cuentas</span>
-                  <Settings className="w-3.5 h-3.5 text-indigo-500" />
+                  <Settings className="w-3.5 h-3.5 text-teal-300" />
                 </div>
 
                 <div className="space-y-1 mt-1">
@@ -333,23 +310,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
                           setActiveModule(item.id);
                           onCloseMobile();
                         }}
-                        className={`w-full flex items-center justify-between p-2 rounded-xl text-left transition-all cursor-pointer ${
+                        className={`w-full flex items-center justify-between p-2 rounded-[6px] text-left transition-colors cursor-pointer select-none ${
                           isActive
-                            ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-semibold shadow-xs'
-                            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-850'
+                            ? 'bg-white/15 text-white font-semibold border-l-2 border-white'
+                            : 'text-teal-100/80 hover:text-white hover:bg-white/10'
                         }`}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <Icon
                             className={`w-4 h-4 shrink-0 ${
-                              isActive ? 'text-white dark:text-slate-900' : 'text-slate-400 dark:text-slate-400'
+                              isActive ? 'text-white' : 'text-teal-300'
                             }`}
                           />
                           <div className="min-w-0">
                             <p className="text-xs font-semibold truncate leading-tight">{item.label}</p>
                             <p
                               className={`text-[10px] truncate ${
-                                isActive ? 'text-slate-300 dark:text-slate-600' : 'text-slate-400 dark:text-slate-500'
+                                isActive ? 'text-teal-100' : 'text-teal-200/60'
                               }`}
                             >
                               {item.subtitle}
@@ -358,10 +335,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
                         </div>
                         {item.badge && (
                           <span
-                            className={`text-[10px] font-medium transition-colors ${
+                            className={`text-[9px] font-medium px-1.5 py-0.5 rounded transition-colors ${
                               isActive
-                                ? 'text-slate-300 dark:text-slate-600'
-                                : 'text-slate-400 dark:text-slate-500'
+                                ? 'bg-[#0F766E] text-white'
+                                : 'bg-teal-900/70 text-teal-200 border border-teal-700/40'
                             }`}
                           >
                             {item.badge}
@@ -377,7 +354,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
         </div>
 
         {/* Bottom Customization & Tenant Info Card */}
-        <div className="p-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+        <div className="p-3 border-t border-[#0b3b36] space-y-2 shrink-0">
           <div className="grid grid-cols-2 gap-1.5">
             <button
               type="button"
@@ -386,9 +363,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
                 setIsExhaustiveCustomizationOpen(true);
                 onCloseMobile();
               }}
-              className="flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-all text-[11px] font-semibold cursor-pointer"
+              className="flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-[6px] bg-teal-900/60 border border-teal-700/60 text-white hover:bg-teal-900 transition-all text-[11px] font-semibold cursor-pointer"
             >
-              <Sliders className="w-3.5 h-3.5" />
+              <Sliders className="w-3.5 h-3.5 text-teal-300" />
               <span>Ajustes</span>
             </button>
 
@@ -396,17 +373,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
               type="button"
               id="sidebar-open-terms-btn"
               onClick={() => setIsTermsModalOpen(true)}
-              className="flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-all text-[11px] font-semibold cursor-pointer"
+              className="flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-[6px] bg-teal-900/60 border border-teal-700/60 text-white hover:bg-teal-900 transition-all text-[11px] font-semibold cursor-pointer"
               title="Ver Objetivos de Proyecto, Lean Startup y Términos FinaPyme"
             >
-              <FileText className="w-3.5 h-3.5" />
+              <FileText className="w-3.5 h-3.5 text-teal-300" />
               <span>Proyecto UES</span>
             </button>
           </div>
 
-          <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80">
+          <div className="p-2.5 rounded-[6px] bg-[#0b3b36] border border-teal-900/80 text-white">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200 truncate">
+              <span className="text-[11px] font-bold text-white truncate">
                 {currentCompany.tradeName || currentCompany.name}
               </span>
               <span className="flex h-2 w-2 relative">
@@ -414,16 +391,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
             </div>
-            <div className="text-[10px] text-slate-500 dark:text-slate-400 space-y-0.5">
-              <p>NRC: <span className="font-mono">{currentCompany.nrc}</span></p>
-              <p>NIT: <span className="font-mono">{currentCompany.nit}</span></p>
-              <p>Régimen: <span className="font-medium">{currentCompany.isGranContribuyente ? 'Gran Contribuyente' : 'Mediano / Startup'}</span></p>
-              <div className="pt-1.5 border-t border-slate-200/50 dark:border-slate-700/50 flex items-center justify-between">
-                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-600 dark:text-emerald-400">
+            <div className="text-[10px] text-teal-200/90 space-y-0.5">
+              <p>NRC: <span className="font-mono text-white">{currentCompany.nrc || '-'}</span></p>
+              <p>NIT: <span className="font-mono text-white">{currentCompany.nit || '-'}</span></p>
+              <p>Régimen: <span className="font-medium text-white">{currentCompany.isGranContribuyente ? 'Gran Contribuyente' : 'Mediano / Startup'}</span></p>
+              <div className="pt-1.5 border-t border-teal-900/80 flex items-center justify-between">
+                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-400">
                   <Cloud className="w-3 h-3" />
                   Nube Conectada (Firestore SV)
                 </span>
-                <span className="text-[9px] text-slate-400 font-mono">En Línea</span>
+                <span className="text-[9px] text-teal-200 font-mono">En Línea</span>
               </div>
             </div>
           </div>

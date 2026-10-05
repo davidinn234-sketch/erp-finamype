@@ -62,25 +62,23 @@ export const QuickBranchModal: React.FC<QuickBranchModalProps> = ({ isOpen, onCl
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-fade-in">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-5">
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
+      <div className="bg-white dark:bg-slate-900 rounded-[8px] max-w-lg w-full p-6 border border-[#E5E7EB] dark:border-slate-800 shadow-none space-y-5">
+        <div className="flex items-center justify-between border-b border-[#E5E7EB] dark:border-slate-800 pb-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-              <Building className="w-5 h-5" />
-            </div>
+            <Building className="w-5 h-5 text-[#6B7280]" />
             <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                Agregar Nueva Sucursal
+              <h2 className="text-[16px] font-semibold text-[#111827] dark:text-white">
+                Agregar nueva sucursal
               </h2>
-              <p className="text-xs text-slate-500">
-                Se sincronizará automáticamente en todo el Dashboard y módulos
+              <p className="text-[12px] text-[#6B7280] dark:text-slate-400">
+                Se sincronizará automáticamente en el resumen y filtros.
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            className="p-1 rounded-[6px] text-[#6B7280] hover:text-[#111827] dark:hover:text-white hover:bg-[#F9FAFB] transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -89,8 +87,8 @@ export const QuickBranchModal: React.FC<QuickBranchModalProps> = ({ isOpen, onCl
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Nombre de la Sucursal *
+              <label className="block text-[12px] font-medium text-[#111827] dark:text-slate-300 mb-1">
+                Nombre de la sucursal *
               </label>
               <input
                 type="text"
@@ -98,13 +96,13 @@ export const QuickBranchModal: React.FC<QuickBranchModalProps> = ({ isOpen, onCl
                 placeholder="Ej. Santa Ana Centro, Soyapango..."
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
+                className="w-full px-3 py-2 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 text-[#111827] dark:text-white text-[14px] outline-none focus:border-[#0F766E]"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Código de Sucursal *
+              <label className="block text-[12px] font-medium text-[#111827] dark:text-slate-300 mb-1">
+                Código de sucursal *
               </label>
               <input
                 type="text"
@@ -112,20 +110,20 @@ export const QuickBranchModal: React.FC<QuickBranchModalProps> = ({ isOpen, onCl
                 placeholder="Ej. SUC-04"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-mono font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
+                className="w-full px-3 py-2 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 text-[#111827] dark:text-white text-[14px] font-mono outline-none focus:border-[#0F766E]"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              <label className="block text-[12px] font-medium text-[#111827] dark:text-slate-300 mb-1">
                 Departamento (El Salvador)
               </label>
               <select
                 value={department}
                 onChange={(e) => setDepartment(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
+                className="w-full px-3 py-2 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 text-[#111827] dark:text-white text-[14px] outline-none focus:border-[#0F766E]"
               >
                 {DEPARTAMENTOS_SV.map((dep) => (
                   <option key={dep} value={dep}>
@@ -136,66 +134,64 @@ export const QuickBranchModal: React.FC<QuickBranchModalProps> = ({ isOpen, onCl
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Teléfono de Contacto
+              <label className="block text-[12px] font-medium text-[#111827] dark:text-slate-300 mb-1">
+                Teléfono de contacto
               </label>
               <input
                 type="text"
                 placeholder="2200-0000"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
+                className="w-full px-3 py-2 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 text-[#111827] dark:text-white text-[14px] outline-none focus:border-[#0F766E]"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              Dirección Exacta
+            <label className="block text-[12px] font-medium text-[#111827] dark:text-slate-300 mb-1">
+              Dirección exacta
             </label>
             <input
               type="text"
               placeholder="Ej. Centro Comercial Galerías, Nivel 2, Local 45"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
+              className="w-full px-3 py-2 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 text-[#111827] dark:text-white text-[14px] outline-none focus:border-[#0F766E]"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              Encargado / Administrador de Sede
+            <label className="block text-[12px] font-medium text-[#111827] dark:text-slate-300 mb-1">
+              Encargado / Administrador de sede
             </label>
             <input
               type="text"
               placeholder="Nombre del gerente de sucursal"
               value={managerName}
               onChange={(e) => setManagerName(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
+              className="w-full px-3 py-2 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 text-[#111827] dark:text-white text-[14px] outline-none focus:border-[#0F766E]"
             />
           </div>
 
-          <div className="p-3 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50 flex items-start gap-2.5">
-            <CheckCircle2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
-            <p className="text-[11px] text-indigo-900 dark:text-indigo-200">
-              <strong>Automatización Total:</strong> Al registrar esta sucursal, aparecerá inmediatamente en el filtro de sucursales del tablero gerencial, en la gráfica operativa y en los selectores de facturación DTE, compras y nómina.
-            </p>
+          <div className="flex items-center gap-2 text-[12px] text-[#6B7280]">
+            <CheckCircle2 className="w-4 h-4 text-[#059669] shrink-0" />
+            <span>Al registrar esta sucursal, estará disponible de inmediato en filtros y facturación DTE.</span>
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-2">
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E3E8E6] dark:border-slate-800">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              className="px-3.5 py-1.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-[#F9FAFB] text-[#111827] dark:text-slate-200 text-[14px] font-medium transition cursor-pointer"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-indigo-600/30 transition cursor-pointer"
+              className="px-4 py-1.5 rounded-[6px] bg-[#0F766E] hover:bg-[#115E59] text-white text-[14px] font-medium flex items-center gap-1.5 transition cursor-pointer shadow-none"
             >
               <Plus className="w-4 h-4" />
-              <span>Guardar Sucursal</span>
+              <span>Guardar sucursal</span>
             </button>
           </div>
         </form>

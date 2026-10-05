@@ -68,108 +68,84 @@ export const TreasuryCashBreakdownCard: React.FC<TreasuryCashBreakdownCardProps>
   };
 
   return (
-    <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-5">
+    <div className="bg-white dark:bg-slate-900 p-6 rounded-[8px] border border-[#E5E7EB] dark:border-slate-800 shadow-none space-y-6">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E5E7EB] dark:border-slate-800">
         <div>
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-cyan-50 dark:bg-cyan-950/80 text-cyan-600 dark:text-cyan-400">
-              <Wallet className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <span>{title}</span>
-                <span className="text-xs bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
-                  <ShieldCheck className="w-3 h-3" /> Conciliado
-                </span>
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">{subtitle}</p>
-            </div>
-          </div>
+          <h3 className="text-[16px] font-semibold text-[#111827] dark:text-white">
+            {title}
+          </h3>
+          <p className="text-[14px] text-[#6B7280] dark:text-slate-400 mt-0.5">{subtitle}</p>
+          <p className="text-[12px] text-[#6B7280] dark:text-slate-400 mt-2 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-[#059669]"></span>
+            <span>Capacidad de cobertura estimada: <strong>{runwayMonths} meses</strong> de operación ({bankAccounts.length} cuentas y cajas registradas).</span>
+          </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4 self-start sm:self-auto">
           <div className="text-right">
-            <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-medium">
-              Efectivo Total Inmediato
+            <span className="text-[12px] text-[#6B7280] dark:text-slate-400 block font-medium">
+              Efectivo total disponible
             </span>
-            <span className="text-2xl sm:text-3xl font-black font-mono text-cyan-600 dark:text-cyan-400 tracking-tight">
+            <span className="text-[24px] font-semibold font-mono text-[#111827] dark:text-white">
               {formatCurrencyUSD(totalLiquid)}
             </span>
           </div>
           <button
+            type="button"
             onClick={handleNavigate}
-            className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0"
+            className="px-3 py-1.5 rounded-[6px] border border-[#E5E7EB] dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-[#F9FAFB] dark:hover:bg-slate-800 text-[#111827] dark:text-slate-200 text-[14px] font-medium transition flex items-center gap-1.5 cursor-pointer shrink-0"
           >
-            <span>Ver Tesorería</span>
-            <ArrowUpRight className="w-3.5 h-3.5" />
+            <span>Ver tesorería</span>
+            <ArrowUpRight className="w-4 h-4 text-[#6B7280]" />
           </button>
         </div>
       </div>
 
-      {/* Runway Banner */}
-      <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span className="text-slate-600 dark:text-slate-300">
-            Capacidad de Cobertura (Runway): <strong>{runwayMonths} meses</strong> de operación con egresos fijos mensuales de $4,800.
-          </span>
-        </div>
-        <span className="text-[11px] text-slate-400">
-          {bankAccounts.length} cuentas bancarias y cajas activas
-        </span>
-      </div>
-
-      {/* Individual Bank Accounts with Detailed Progress Bars */}
-      <div className="space-y-4 pt-1">
-        {bankAccounts.map((account, idx) => {
+      {/* Individual Bank Accounts (Clean Table / Rows, No Nested Cards) */}
+      <div className="divide-y divide-[#E5E7EB] dark:divide-slate-800">
+        {bankAccounts.map((account) => {
           const balance = account.currentBalance || 0;
           const percentage = totalLiquid > 0 ? (balance / totalLiquid) * 100 : 0;
-          const styling = getBankColor(account.bankName || account.accountName, idx);
 
           return (
             <div
               key={account.id}
-              className="p-4 rounded-xl border border-slate-100 dark:border-slate-800/80 bg-slate-50/40 dark:bg-slate-800/30 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition space-y-2.5"
+              className="py-3.5 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
             >
-              {/* Account Title & Balance Row */}
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center shrink-0">
-                    <Landmark className={`w-4 h-4 ${styling.text}`} />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                        {account.accountName}
-                      </h4>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold border ${styling.badge}`}>
-                        {account.bankName}
-                      </span>
-                    </div>
-                    <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 block">
-                      N° {account.accountNumber} • Contable: {account.accountingCode}
+              <div className="min-w-0 flex items-center gap-3">
+                <Landmark className="w-4 h-4 text-[#6B7280] shrink-0" />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[14px] font-medium text-[#111827] dark:text-white truncate">
+                      {account.accountName}
+                    </p>
+                    <span className="text-[12px] text-[#6B7280] dark:text-slate-400">
+                      · {account.bankName}
                     </span>
                   </div>
-                </div>
-
-                <div className="text-right shrink-0">
-                  <div className="text-sm sm:text-base font-black font-mono text-slate-900 dark:text-white">
-                    {formatCurrencyUSD(balance)}
-                  </div>
-                  <span className="text-[11px] font-bold text-slate-500 font-mono">
-                    {percentage.toFixed(1)}% del efectivo
-                  </span>
+                  <p className="text-[12px] text-[#6B7280] dark:text-slate-400 font-mono">
+                    N° {account.accountNumber} · Código {account.accountingCode}
+                  </p>
                 </div>
               </div>
 
-              {/* Progress Bar */}
-              <div className="space-y-1">
-                <div className="w-full h-2.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full ${styling.bg} transition-all duration-500 rounded-full`}
-                    style={{ width: `${Math.min(100, Math.max(0, percentage))}%` }}
-                  />
+              <div className="flex items-center gap-4 sm:justify-end shrink-0">
+                <div className="w-32 hidden md:block">
+                  <div className="w-full h-1.5 bg-[#E5E7EB] dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[#0F766E] rounded-full"
+                      style={{ width: `${Math.min(100, Math.max(0, percentage))}%` }}
+                    />
+                  </div>
+                </div>
+                <div className="text-right min-w-[100px]">
+                  <p className="text-[14px] font-semibold font-mono text-[#111827] dark:text-white">
+                    {formatCurrencyUSD(balance)}
+                  </p>
+                  <p className="text-[12px] text-[#6B7280] font-mono">
+                    {percentage.toFixed(1)}% del total
+                  </p>
                 </div>
               </div>
             </div>

@@ -350,27 +350,32 @@ export const LoginScreen: React.FC = () => {
                 <label className="block text-xs font-medium text-slate-300 mb-1.5">
                   Modalidad de Cuenta
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {[
-                    { id: 'emprendedor', label: 'Emprendedor', desc: 'POS & Stock' },
-                    { id: 'empresa_dte', label: 'Empresa DTE', desc: 'Hacienda SV' },
-                    { id: 'finanzas_personales', label: 'Personal', desc: 'Gastos & Metas' },
+                    { id: 'emprendedor', label: 'Negocio Emprendedor', desc: 'Control Interno & POS' },
+                    { id: 'empresa_dte', label: 'Negocio Empresa DTE', desc: 'Facturación Hacienda' },
+                    { id: 'finanzas_personales', label: 'Finanzas Personales', desc: 'Solo Gastos Individuales' },
                   ].map((mode) => (
                     <button
                       key={mode.id}
                       type="button"
                       onClick={() => setRegAccountType(mode.id as any)}
-                      className={`p-2 rounded-xl text-left border transition-all cursor-pointer ${
+                      className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer ${
                         regAccountType === mode.id
-                          ? 'border-indigo-500 bg-indigo-500/10 text-white'
+                          ? 'border-indigo-500 bg-indigo-500/10 text-white shadow-xs'
                           : 'border-slate-800 bg-slate-950/60 text-slate-400 hover:text-slate-200'
                       }`}
                     >
                       <p className="text-xs font-bold leading-tight">{mode.label}</p>
-                      <p className="text-[10px] text-slate-500 truncate">{mode.desc}</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">{mode.desc}</p>
                     </button>
                   ))}
                 </div>
+                <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+                  {regAccountType === 'finanzas_personales'
+                    ? '★ Modo individual: Control exclusivo de gastos, presupuesto mensual y metas de ahorro personales (sin módulos de empresa).'
+                    : '★ Modo empresarial: Gestión comercial con inventario, ventas y facturación (las finanzas personales no se mezclarán con tu empresa).'}
+                </p>
               </div>
 
               {regAccountType !== 'finanzas_personales' && (

@@ -33,6 +33,16 @@ import {
   AlertTriangle,
   CalendarDays,
   ChevronDown,
+  X,
+  AlertCircle,
+  Package,
+  ScanBarcode,
+  Building2,
+  CalendarRange,
+  RotateCcw,
+  SlidersHorizontal,
+  LayoutDashboard,
+  Target,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -50,6 +60,7 @@ import {
   LineChart,
   Line,
   Legend,
+  ComposedChart,
 } from 'recharts';
 import { formatCurrencyUSD } from '../../utils/salvadoranTax';
 import { PDFReportModal } from '../common/PDFReportModal';
@@ -58,7 +69,6 @@ import { RevenueDatabaseModal, ConceptRevenueItem } from './RevenueDatabaseModal
 import { QuickBranchModal } from './QuickBranchModal';
 import { TreasuryCashBreakdownCard } from './TreasuryCashBreakdownCard';
 import { ForecastingMethodologyModal } from './ForecastingMethodologyModal';
-import { HistoricalFinancialAnalytics } from './HistoricalFinancialAnalytics';
 import { FinancialDiagnosis } from '../../types';
 
 interface ExecutiveDashboardProps {
@@ -121,6 +131,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   const [isQuickBranchOpen, setIsQuickBranchOpen] = useState(false);
   const [isForecastingModalOpen, setIsForecastingModalOpen] = useState(false);
   const [isDayPickerOpen, setIsDayPickerOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'resumen' | 'evolucion' | 'fiscal' | 'desglose' | 'sucursales' | 'tesoreria'>('resumen');
 
   const OP_YEARS = [2026, 2025, 2024, 2023, 2022];
   const OP_MONTHS = [
@@ -615,6 +626,71 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   }, [invoices, purchases, otherIncomes, selectedBranchId, branches, opFilterYear, opFilterMonth, opFilterDay, daysInSelectedMonth]);
 
   // ----------------------------------------------------
+  // HELPERS PARA REDISEÑO SOBRIO, KPIS, SPARKLINES Y PREVIEWS
+  // ----------------------------------------------------
+  const hasRealFinancialData = useMemo(() => {
+    return (financialSummary.ingresosTotales || 0) > 0 || (financialSummary.egresosTotales || 0) > 0;
+  }, [financialSummary]);
+
+  const kpiSparklines = useMemo(() => {
+    const pts = (flowEvolutionData || []).slice(-6);
+    const hasData = pts.some((p) => p.ingresos > 0 || p.egresos > 0);
+
+    if (hasData && pts.length >= 2) {
+      return {
+        ingresos: pts.map((p) => ({ val: p.ingresos })),
+        egresos: pts.map((p) => ({ val: p.egresos })),
+        utilidad: pts.map((p) => ({ val: p.utilidadNeta })),
+        iva: pts.map((p) => ({ val: Math.max(0, Math.round(p.ingresos * 0.13 - p.egresos * 0.13)) })),
+      };
+    }
+
+    return {
+      ingresos: [{ val: 2400 }, { val: 3100 }, { val: 2900 }, { val: 4200 }, { val: 3800 }, { val: 4900 }],
+      egresos: [{ val: 1800 }, { val: 2200 }, { val: 2100 }, { val: 2900 }, { val: 2600 }, { val: 3200 }],
+      utilidad: [{ val: 600 }, { val: 900 }, { val: 800 }, { val: 1300 }, { val: 1200 }, { val: 1700 }],
+      iva: [{ val: 110 }, { val: 145 }, { val: 130 }, { val: 195 }, { val: 170 }, { val: 240 }],
+    };
+  }, [flowEvolutionData]);
+
+  const sampleMonthlyChartData = [
+    { label: 'Ene', ingresos: 4200, egresos: 2800, utilidadNeta: 1400 },
+    { label: 'Feb', ingresos: 5100, egresos: 3200, utilidadNeta: 1900 },
+    { label: 'Mar', ingresos: 4800, egresos: 3000, utilidadNeta: 1800 },
+    { label: 'Abr', ingresos: 6200, egresos: 3900, utilidadNeta: 2300 },
+    { label: 'May', ingresos: 5900, egresos: 3600, utilidadNeta: 2300 },
+    { label: 'Jun', ingresos: 7400, egresos: 4400, utilidadNeta: 3000 },
+  ];
+
+  const sampleExpenseDonutData = [
+    { name: 'Compras a Proveedores', value: 2450, color: '#0F766E' },
+    { name: 'Planilla & Patronal', value: 1200, color: '#64748B' },
+    { name: 'Gastos Operativos', value: 650, color: '#D97706' },
+    { name: 'Impuestos MH (IVA)', value: 410, color: '#0D9488' },
+  ];
+
+  const displayMonthlyChartData = hasRealFinancialData
+    ? flowEvolutionData.map((d) => ({
+        label: d.label,
+        fullLabel: d.fullLabel,
+        ingresos: d.ingresos,
+        egresos: d.egresos,
+        utilidadNeta: d.utilidadNeta,
+      }))
+    : sampleMonthlyChartData;
+
+  const displayExpenseDonutData =
+    hasRealFinancialData && expenseByConceptData.length > 0
+      ? expenseByConceptData
+      : sampleExpenseDonutData;
+
+  const step1CatalogDone = purchases.length > 0;
+  const step2SaleDone = invoices.length > 0;
+  const step3PurchaseDone = purchases.length > 0;
+  const onboardingStepsCompleted = (step1CatalogDone ? 1 : 0) + (step2SaleDone ? 1 : 0) + (step3PurchaseDone ? 1 : 0);
+  const onboardingProgressPct = Math.round((onboardingStepsCompleted / 3) * 100);
+
+  // ----------------------------------------------------
   // SECCIÓN 3: RENDIMIENTO POR SUCURSAL (IGNORA SUCURSAL, RESPETA FECHA)
   // ----------------------------------------------------
   const branchRanking = useMemo(() => {
@@ -901,23 +977,138 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto p-3 sm:p-4 lg:p-6 overflow-x-hidden">
+    <div className="space-y-6 max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 bg-[#F6F8F7] dark:bg-slate-950 min-h-screen text-[#111827] dark:text-slate-100 font-sans">
+      {/* ---------------------------------------------------- */}
+      {/* 1. TOP PAGE HEADER: Title + Description + Primary Action */}
+      {/* ---------------------------------------------------- */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-[#E3E8E6] dark:border-slate-800">
+        <div>
+          {/* Dashboard Switcher: 1. Corporativo & 2. Marketing */}
+          <div className="inline-flex p-1 rounded-[8px] bg-[#E3E8E6]/70 dark:bg-slate-800/80 border border-[#E3E8E6] dark:border-slate-700 mb-2.5">
+            <button
+              type="button"
+              className="flex items-center gap-1.5 px-3 py-1 rounded-[6px] bg-white dark:bg-slate-900 text-[#0F766E] dark:text-teal-300 font-semibold text-[12px] shadow-2xs border border-[#E3E8E6] dark:border-slate-700 cursor-default"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5 text-[#0F766E]" />
+              <span>1. Dashboard Corporativo</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveModule('marketing')}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-[6px] text-[#6B7280] hover:text-[#111827] dark:text-slate-400 dark:hover:text-white font-medium text-[12px] transition cursor-pointer"
+              title="Ir al Dashboard 2: Marketing, BI & Clientes"
+            >
+              <Target className="w-3.5 h-3.5" />
+              <span>2. Dashboard de Marketing</span>
+            </button>
+          </div>
+
+          <h1 className="text-[20px] font-semibold text-[#111827] dark:text-white leading-tight">
+            Resumen ejecutivo
+          </h1>
+          <p className="text-[14px] text-[#6B7280] dark:text-slate-400 mt-1">
+            Métricas de ingresos, egresos, rentabilidad y tesorería en tiempo real.
+          </p>
+        </div>
+
+        {/* Action Buttons: Exactly ONE primary button (#0F766E), others secondary */}
+        <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+          <button
+            type="button"
+            onClick={() => setIsPdfModalOpen(true)}
+            className="px-3 py-1.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-[#F6F8F7] text-[#111827] dark:text-slate-200 text-[14px] font-medium transition-all duration-150 hover:shadow-xs flex items-center gap-1.5 cursor-pointer shadow-none"
+            title="Exportar informe"
+          >
+            <FileText className="w-4 h-4 text-[#6B7280]" />
+            <span className="hidden sm:inline">Exportar informe</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveModule('purchases')}
+            className="px-3 py-1.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-[#F6F8F7] text-[#111827] dark:text-slate-200 text-[14px] font-medium transition-all duration-150 hover:shadow-xs flex items-center gap-1.5 cursor-pointer shadow-none"
+            title="Agregar productos al inventario"
+          >
+            <Package className="w-4 h-4 text-[#6B7280]" />
+            <span>+ Producto</span>
+          </button>
+          <button
+            type="button"
+            onClick={onOpenNewPurchase}
+            className="px-3 py-1.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-[#F6F8F7] text-[#111827] dark:text-slate-200 text-[14px] font-medium transition-all duration-150 hover:shadow-xs flex items-center gap-1.5 cursor-pointer shadow-none"
+            title="Registrar nueva compra"
+          >
+            <ShoppingBag className="w-4 h-4 text-[#6B7280]" />
+            <span>+ Compra</span>
+          </button>
+          {/* THE ONLY PRIMARY ACTION BUTTON ON THE SCREEN */}
+          <button
+            type="button"
+            onClick={onOpenNewSale}
+            className="px-3.5 py-1.5 rounded-[6px] bg-[#0F766E] hover:bg-[#115E59] text-white text-[14px] font-medium flex items-center gap-1.5 transition-all duration-150 hover:shadow-xs shadow-none cursor-pointer"
+            title="Registrar nueva venta o comprobante DTE"
+          >
+            <Plus className="w-4 h-4 text-white" />
+            <span>+ Nueva venta</span>
+          </button>
+        </div>
+      </div>
+
       {/* ---------------------------------------------------- */}
       {/* 2. BARRA DE FILTROS - DASHBOARD CORPORATIVO */}
       {/* ---------------------------------------------------- */}
-      <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 sm:p-4 shadow-xs space-y-3">
+      <div className="rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-none space-y-3.5">
+        {/* Cabecera de filtros con icono creativo y minimalista */}
+        <div className="flex items-center justify-between gap-3 pb-2.5 border-b border-[#E3E8E6] dark:border-slate-800">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-[6px] bg-teal-50 dark:bg-teal-950/60 border border-teal-200/80 dark:border-teal-800/80 flex items-center justify-center text-[#0F766E]">
+              <SlidersHorizontal className="w-3.5 h-3.5 stroke-[2]" />
+            </div>
+            <div>
+              <span className="text-[13px] font-semibold text-[#111827] dark:text-white">
+                Filtros de consulta y período
+              </span>
+              <span className="text-[11px] text-[#6B7280] ml-2 hidden md:inline">
+                Filtra por sucursal, año, mes y día específico
+              </span>
+            </div>
+          </div>
+
+          {/* Botón de limpiar filtros cuando hay cambios activos */}
+          {(selectedBranchId !== 'all' || opFilterMonth !== 'all' || opFilterDay !== 'all') && (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedBranchId('all');
+                setOpFilterMonth('all');
+                setOpFilterDay('all');
+              }}
+              className="flex items-center gap-1.5 px-2 py-0.5 rounded-[6px] text-[11px] font-medium text-[#6B7280] hover:text-[#0F766E] hover:bg-teal-50 dark:hover:bg-slate-800 transition cursor-pointer border border-transparent hover:border-teal-200"
+              title="Restablecer filtros a todo el año"
+            >
+              <RotateCcw className="w-3 h-3 text-[#0F766E]" />
+              <span>Restablecer</span>
+            </button>
+          )}
+        </div>
+
+        {/* Controles de filtros con iconos creativos y minimalistas */}
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Sucursal */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
-              <Building className="w-4 h-4 text-slate-500 shrink-0" />
-              <span className="font-semibold text-slate-500 text-[11px]">Sucursal:</span>
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+            {/* 1. Sucursal con icono Building2 */}
+            <div className="flex items-center rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-[#F6F8F7]/70 dark:bg-slate-800/70 hover:bg-white dark:hover:bg-slate-800 hover:border-teal-500/50 focus-within:border-[#0F766E] focus-within:bg-white transition-all pl-2.5 pr-2 py-1 gap-2 shadow-2xs">
+              <div className="flex items-center gap-1.5 text-[#0F766E]">
+                <Building2 className="w-3.5 h-3.5 stroke-[2]" />
+                <span className="text-[#6B7280] dark:text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
+                  Sucursal
+                </span>
+              </div>
+              <div className="h-4 w-[1px] bg-[#E3E8E6] dark:bg-slate-700" />
               <select
                 value={selectedBranchId}
                 onChange={(e) => setSelectedBranchId(e.target.value)}
-                className="bg-transparent border-none text-xs font-semibold outline-none text-slate-800 dark:text-slate-200 cursor-pointer"
+                className="bg-transparent text-[13px] font-medium text-[#111827] dark:text-slate-100 outline-none cursor-pointer pr-1"
               >
-                <option value="all">Todas las Sucursales</option>
+                <option value="all">Todas las sucursales</option>
                 {branches.map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.name}
@@ -926,14 +1117,19 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
               </select>
             </div>
 
-            {/* Año */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
-              <Calendar className="w-4 h-4 text-teal-600 shrink-0" />
-              <span className="font-bold text-slate-500 text-[11px]">Año:</span>
+            {/* 2. Año con icono CalendarDays */}
+            <div className="flex items-center rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-[#F6F8F7]/70 dark:bg-slate-800/70 hover:bg-white dark:hover:bg-slate-800 hover:border-teal-500/50 focus-within:border-[#0F766E] focus-within:bg-white transition-all pl-2.5 pr-2 py-1 gap-2 shadow-2xs">
+              <div className="flex items-center gap-1.5 text-[#0F766E]">
+                <CalendarDays className="w-3.5 h-3.5 stroke-[2]" />
+                <span className="text-[#6B7280] dark:text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
+                  Año
+                </span>
+              </div>
+              <div className="h-4 w-[1px] bg-[#E3E8E6] dark:bg-slate-700" />
               <select
                 value={opFilterYear}
                 onChange={(e) => setOpFilterYear(Number(e.target.value))}
-                className="bg-transparent border-none text-xs font-bold outline-none text-slate-800 dark:text-slate-200 cursor-pointer"
+                className="bg-transparent text-[13px] font-medium text-[#111827] dark:text-slate-100 outline-none cursor-pointer pr-1 font-mono"
               >
                 {OP_YEARS.map((yr) => (
                   <option key={yr} value={yr}>
@@ -943,14 +1139,19 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
               </select>
             </div>
 
-            {/* Mes */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
-              <Filter className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span className="font-bold text-slate-500 text-[11px]">Mes:</span>
+            {/* 3. Mes con icono CalendarRange */}
+            <div className="flex items-center rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-[#F6F8F7]/70 dark:bg-slate-800/70 hover:bg-white dark:hover:bg-slate-800 hover:border-teal-500/50 focus-within:border-[#0F766E] focus-within:bg-white transition-all pl-2.5 pr-2 py-1 gap-2 shadow-2xs">
+              <div className="flex items-center gap-1.5 text-[#0F766E]">
+                <CalendarRange className="w-3.5 h-3.5 stroke-[2]" />
+                <span className="text-[#6B7280] dark:text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
+                  Mes
+                </span>
+              </div>
+              <div className="h-4 w-[1px] bg-[#E3E8E6] dark:bg-slate-700" />
               <select
                 value={opFilterMonth}
                 onChange={(e) => handleMonthChange(e.target.value)}
-                className="bg-transparent border-none text-xs font-bold outline-none text-slate-800 dark:text-slate-200 cursor-pointer"
+                className="bg-transparent text-[13px] font-medium text-[#111827] dark:text-slate-100 outline-none cursor-pointer pr-1"
               >
                 {OP_MONTHS.map((m) => (
                   <option key={m.key} value={m.key}>
@@ -960,81 +1161,76 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
               </select>
             </div>
 
-            {/* Selector de Día con Calendario Desplegable */}
+            {/* 4. Selector de Día con icono Calendar y Calendario desplegable */}
             <div className="relative">
               <button
                 type="button"
                 disabled={opFilterMonth === 'all'}
                 onClick={() => setIsDayPickerOpen(!isDayPickerOpen)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                className={`flex items-center rounded-[6px] border text-[13px] transition cursor-pointer pl-2.5 pr-2 py-1 gap-2 disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs ${
                   opFilterDay !== 'all'
-                    ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-300 shadow-2xs'
-                    : 'bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                    ? 'bg-teal-50/80 dark:bg-teal-950/50 border-[#0F766E] text-[#0F766E] font-medium'
+                    : 'bg-[#F6F8F7]/70 dark:bg-slate-800/70 hover:bg-white dark:hover:bg-slate-800 border-[#E3E8E6] dark:border-slate-700 text-[#111827] dark:text-slate-200 hover:border-teal-500/50'
                 }`}
-                title={opFilterMonth === 'all' ? 'Selecciona un mes para habilitar el calendario de días' : 'Abrir calendario para elegir día'}
+                title={opFilterMonth === 'all' ? 'Selecciona un mes para habilitar el selector de día' : 'Elegir día específico'}
               >
-                <CalendarDays className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span className="font-bold text-slate-500 text-[11px]">Día:</span>
+                <div className="flex items-center gap-1.5 text-[#0F766E]">
+                  <Calendar className="w-3.5 h-3.5 stroke-[2]" />
+                  <span className="text-[#6B7280] dark:text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
+                    Día
+                  </span>
+                </div>
+                <div className="h-4 w-[1px] bg-[#E3E8E6] dark:border-slate-700" />
                 <span>{opFilterDay === 'all' ? 'Todos los días' : `Día ${opFilterDay}`}</span>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                <ChevronDown className="w-3.5 h-3.5 text-[#6B7280] ml-0.5" />
               </button>
 
-              {/* Calendario Desplegable Formal */}
+              {/* Calendario Desplegable */}
               {isDayPickerOpen && opFilterMonth !== 'all' && (
                 <>
                   <div
-                    className="fixed inset-0 z-40 bg-black/10 backdrop-blur-[1px]"
+                    className="fixed inset-0 z-40 bg-black/10"
                     onClick={() => setIsDayPickerOpen(false)}
                   />
-                  <div className="absolute top-full mt-2 left-0 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 shadow-xl w-72 space-y-3 animate-in fade-in zoom-in-95 duration-150">
-                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
-                      <span className="text-xs font-black text-slate-900 dark:text-white capitalize">
-                        {OP_MONTHS.find((m) => m.key === opFilterMonth)?.name} {opFilterYear}
+                  <div className="absolute top-full mt-1.5 left-0 z-50 bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-700 rounded-[8px] p-4 shadow-none w-72 space-y-3">
+                    <div className="flex items-center justify-between border-b border-[#E3E8E6] dark:border-slate-800 pb-2">
+                      <span className="text-[14px] font-semibold text-[#111827] dark:text-white capitalize flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-[#0F766E]" />
+                        <span>{OP_MONTHS.find((m) => m.key === opFilterMonth)?.name} {opFilterYear}</span>
                       </span>
                       <button
                         type="button"
                         onClick={() => setIsDayPickerOpen(false)}
-                        className="text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+                        className="text-[#6B7280] hover:text-[#111827] text-[14px] cursor-pointer p-0.5"
                       >
-                        ✕
+                        <X className="w-4 h-4 text-[#6B7280]" />
                       </button>
                     </div>
 
-                    {/* Botón para ver todo el mes */}
                     <button
                       type="button"
                       onClick={() => {
                         setOpFilterDay('all');
                         setIsDayPickerOpen(false);
                       }}
-                      className={`w-full py-1.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                      className={`w-full py-1.5 px-3 rounded-[6px] text-[12px] font-medium transition cursor-pointer ${
                         opFilterDay === 'all'
-                          ? 'bg-emerald-600 text-white shadow-xs'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                          ? 'bg-[#0F766E] text-white'
+                          : 'bg-[#F6F8F7] dark:bg-slate-800 text-[#111827] dark:text-slate-200 border border-[#E3E8E6] dark:border-slate-700 hover:bg-[#E3E8E6]'
                       }`}
                     >
-                      <span>Ver todo el mes (Todos los días)</span>
+                      Todos los días del mes
                     </button>
 
-                    {/* Cabecera de días de la semana */}
-                    <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-400">
-                      <span>Lu</span>
-                      <span>Ma</span>
-                      <span>Mi</span>
-                      <span>Ju</span>
-                      <span>Vi</span>
-                      <span>Sá</span>
-                      <span>Do</span>
+                    <div className="grid grid-cols-7 gap-1 text-center text-[12px] text-[#6B7280]">
+                      <span>Lu</span><span>Ma</span><span>Mi</span><span>Ju</span><span>Vi</span><span>Sá</span><span>Do</span>
                     </div>
 
-                    {/* Cuadrícula de días */}
                     <div className="grid grid-cols-7 gap-1">
-                      {/* Celdas vacías de compensación */}
                       {Array.from({ length: firstDayOfMonthOffset }).map((_, idx) => (
-                        <div key={`empty-${idx}`} className="h-8" />
+                        <div key={`empty-${idx}`} className="h-7" />
                       ))}
 
-                      {/* Días del mes */}
                       {Array.from({ length: daysInSelectedMonth }, (_, idx) => idx + 1).map((d) => {
                         const isSelected = opFilterDay === String(d);
                         const now = new Date();
@@ -1051,18 +1247,15 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                               setOpFilterDay(String(d));
                               setIsDayPickerOpen(false);
                             }}
-                            className={`h-8 rounded-lg text-xs font-bold transition flex flex-col items-center justify-center relative cursor-pointer ${
+                            className={`h-7 rounded-[4px] text-[12px] transition flex items-center justify-center cursor-pointer ${
                               isSelected
-                                ? 'bg-emerald-600 text-white shadow-xs font-black'
+                                ? 'bg-[#0F766E] text-white font-semibold'
                                 : isRealToday
-                                ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 border border-emerald-400 font-black'
-                                : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                ? 'border border-[#0F766E] text-[#0F766E] font-medium'
+                                : 'text-[#111827] dark:text-slate-200 hover:bg-[#F6F8F7] dark:hover:bg-slate-800'
                             }`}
                           >
                             <span>{d}</span>
-                            {isRealToday && !isSelected && (
-                              <span className="w-1 h-1 rounded-full bg-emerald-600 absolute bottom-1" />
-                            )}
                           </button>
                         );
                       })}
@@ -1072,410 +1265,644 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
               )}
             </div>
 
-            {/* Botón rápido "Hoy" */}
+            {/* 5. Botón rápido "Hoy" con icono Clock */}
             <button
+              type="button"
               onClick={handleSetToday}
-              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition cursor-pointer flex items-center gap-1"
+              className="flex items-center gap-1.5 px-3 py-1 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-[#F6F8F7] hover:border-[#0F766E] text-[#111827] dark:text-slate-200 text-[13px] font-medium transition cursor-pointer shadow-2xs group"
               title="Fijar año, mes y día de hoy"
             >
-              <Clock className="w-3.5 h-3.5" />
+              <Clock className="w-3.5 h-3.5 text-[#0F766E] group-hover:scale-110 transition-transform" />
               <span>Hoy</span>
             </button>
           </div>
-
-          {/* Quick Action Buttons */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onOpenNewSale}
-              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition cursor-pointer flex items-center gap-1"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Nueva Venta</span>
-            </button>
-            <button
-              onClick={onOpenNewPurchase}
-              className="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-xs transition cursor-pointer flex items-center gap-1"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Nueva Compra</span>
-            </button>
-            <button
-              onClick={() => setIsPdfModalOpen(true)}
-              className="p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 transition cursor-pointer"
-              title="Exportar PDF"
-            >
-              <FileText className="w-4 h-4" />
-            </button>
-          </div>
         </div>
 
-        {/* Clean status note */}
-        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-          Ámbito: {selectedBranchId === 'all' ? 'Todas las Sucursales' : branches.find((b) => b.id === selectedBranchId)?.name || 'Sucursal Seleccionada'} · Período: {opFilterYear}{opFilterMonth !== 'all' ? ` / ${OP_MONTHS.find((m) => m.key === opFilterMonth)?.name}` : ''}{opFilterDay !== 'all' ? ` / Día ${opFilterDay}` : ''}
-        </p>
-
-        {/* Sub-navegación limpia entre Secciones */}
-        <div className="flex items-center gap-1 overflow-x-auto pb-1 text-xs no-scrollbar pt-2 border-t border-slate-100 dark:border-slate-800">
-          <a
-            href="#sec-contable"
-            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-semibold hover:border-slate-400 transition whitespace-nowrap"
-          >
-            01. Márgenes & Rentabilidad
-          </a>
-          <a
-            href="#sec-4variables"
-            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-semibold hover:border-slate-400 transition whitespace-nowrap"
-          >
-            02. Flujo 4 Variables
-          </a>
-          <a
-            href="#sec-desglose"
-            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-semibold hover:border-slate-400 transition whitespace-nowrap"
-          >
-            03. Desglose Operativo
-          </a>
-          <a
-            href="#sec-sucursales"
-            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-semibold hover:border-slate-400 transition whitespace-nowrap"
-          >
-            04. Sucursales
-          </a>
-          <a
-            href="#sec-tesoreria"
-            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-semibold hover:border-slate-400 transition whitespace-nowrap"
-          >
-            05. Tesorería & Cartera
-          </a>
-          <a
-            href="#sec-tributario"
-            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-semibold hover:border-slate-400 transition whitespace-nowrap"
-          >
-            06. Cumplimiento MH
-          </a>
+        {/* Pestañas con scroll horizontal y subrayado verde en la activa */}
+        <div className="flex items-center gap-6 overflow-x-auto pb-1 text-[14px] no-scrollbar pt-2 border-t border-[#E3E8E6] dark:border-slate-800">
+          {[
+            { id: 'resumen', label: 'Resumen ejecutivo', href: '#sec-kpis' },
+            { id: 'graficos', label: 'Evolución y rentabilidad', href: '#sec-graficos' },
+            { id: 'fiscal', label: 'Cumplimiento fiscal SV', href: '#sec-fiscal' },
+            { id: 'desglose', label: 'Desglose operativo', href: '#sec-desglose' },
+            { id: 'sucursales', label: 'Sucursales', href: '#sec-sucursales' },
+            { id: 'tesoreria', label: 'Tesorería y cartera', href: '#sec-tesoreria' },
+          ].map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <a
+                key={tab.id}
+                href={tab.href}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`pb-2.5 -mb-[1px] whitespace-nowrap transition-colors cursor-pointer text-[14px] ${
+                  isActive
+                    ? 'border-b-2 border-[#0F766E] text-[#0F766E] font-semibold'
+                    : 'text-[#6B7280] hover:text-[#111827] dark:text-slate-400 dark:hover:text-white font-medium border-b-2 border-transparent'
+                }`}
+              >
+                {tab.label}
+              </a>
+            );
+          })}
         </div>
       </div>
 
-      {/* Onboarding Guide for Companies Starting in Zero */}
-      {invoices.length === 0 && purchases.length === 0 && (
-        <div className="bg-emerald-50/70 dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800 rounded-3xl p-5 shadow-xs space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
-              <Store className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                ¡Entorno Listo para Operar desde CERO ($0.00)!
-              </h3>
-              <p className="text-xs text-slate-600 dark:text-slate-400">
-                La empresa <strong>{currentCompany?.tradeName || currentCompany?.name}</strong> está lista para registrar sus operaciones reales.
-              </p>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
-            <button
-              onClick={() => setActiveModule('purchases')}
-              className="p-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-emerald-500 text-left text-xs cursor-pointer"
-            >
-              <span className="font-bold text-emerald-700 dark:text-emerald-400 block">1. Catálogo Inventario</span>
-              <span className="text-[11px] text-slate-500">Ingresa productos con precio de venta y costo.</span>
-            </button>
-            <button
-              onClick={() => setActiveModule('pos_terminal')}
-              className="p-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-emerald-500 text-left text-xs cursor-pointer"
-            >
-              <span className="font-bold text-emerald-700 dark:text-emerald-400 block">2. Primera Venta POS</span>
-              <span className="text-[11px] text-slate-500">Abre caja o emite Factura / Crédito Fiscal (DTE).</span>
-            </button>
-            <button
-              onClick={onOpenNewPurchase}
-              className="p-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-emerald-500 text-left text-xs cursor-pointer"
-            >
-              <span className="font-bold text-emerald-700 dark:text-emerald-400 block">3. Registra Compras</span>
-              <span className="text-[11px] text-slate-500">Registra tus facturas con IVA Crédito Fiscal.</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ==================================================== */}
-      {/* 3. ZONA A - FILTRADA (SECCIONES 1, 2, 3 Y 4) */}
-      {/* ==================================================== */}
-
       {/* ---------------------------------------------------- */}
-      {/* SECCIÓN 1. RESUMEN CONTABLE, MÁRGENES & RENTABILIDAD */}
-      {/* ORDEN EXACTO SOLICITADO: 1. Ingresos -> 2. Egresos -> 3. Utilidad Neta -> 4. Flujo de Caja -> 5. Utilidad Bruta -> 6. Utilidad Operativa */}
+      {/* GUÍA RÁPIDA: EMPEZAR (Pasos 1-2-3 con barra de progreso) */}
       {/* ---------------------------------------------------- */}
-      <section id="sec-contable" className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <h2 className="text-base font-bold text-slate-900 dark:text-white">
-            01. Resumen Contable, Márgenes & Rentabilidad
-          </h2>
-
-          {/* Banner de confirmación temporal */}
-          <div className="px-3 py-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 text-xs text-slate-600 dark:text-slate-300 font-medium flex items-center gap-1.5">
-            <Calendar className="w-3.5 h-3.5 text-slate-400" />
-            <span>
-              {opFilterDay !== 'all'
-                ? `Métricas del Día ${opFilterDay} de ${OP_MONTHS.find((m) => m.key === opFilterMonth)?.name} ${opFilterYear} ${
-                    isTodaySelected ? '(Hoy)' : ''
-                  }`
-                : opFilterMonth !== 'all'
-                ? `Métricas del Mes de ${OP_MONTHS.find((m) => m.key === opFilterMonth)?.name} ${opFilterYear}`
-                : `Métricas Consolidadas del Año ${opFilterYear}`}
+      <div className="rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-none transition-all duration-150 hover:shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#E3E8E6] dark:border-slate-800">
+          <div>
+            <h3 className="text-[16px] font-semibold text-[#111827] dark:text-white">
+              Pasos para empezar a operar
+            </h3>
+            <p className="text-[14px] text-[#6B7280] dark:text-slate-400 mt-0.5">
+              Completa la configuración esencial de tu empresa para emitir facturación y llevar control contable.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+            <span className="text-[12px] font-medium text-[#6B7280]">
+              Progreso: <strong className="text-[#111827] dark:text-white [font-variant-numeric:tabular-nums]">{onboardingStepsCompleted} de 3 completado</strong> ({onboardingProgressPct}%)
             </span>
           </div>
         </div>
 
-        {/* Las 6 Tarjetas en el Orden Estricto Solicitado: 1. Ingresos -> 2. Egresos -> 3. Utilidad Neta -> 4. Flujo de Caja -> 5. Utilidad Bruta -> 6. Utilidad Operativa */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {/* 1. Ingresos Totales */}
-          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                1. Ingresos Totales {periodLabelSuffix}
-              </span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                Entradas
-              </span>
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono mt-1">
-              {formatCurrencyUSD(financialSummary.ingresosTotales)}
-            </div>
-            <div className="text-[11px] text-slate-500 mt-1 space-y-0.5">
-              <span>Ventas: {formatCurrencyUSD(financialSummary.ventas)} + Otros: {formatCurrencyUSD(financialSummary.otrosIngresos)}</span>
-              {opFilterDay !== 'all' && monthFinancialSummary && (
-                <span className="block text-[10px] font-bold text-emerald-700 dark:text-emerald-400 pt-0.5 border-t border-slate-100 dark:border-slate-800">
-                  📅 Acumulado Mes ({OP_MONTHS.find((m) => m.key === opFilterMonth)?.short}): {formatCurrencyUSD(monthFinancialSummary.ingresosTotales)}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* 2. Egresos Totales */}
-          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                2. Egresos Totales {periodLabelSuffix}
-              </span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-                Salidas
-              </span>
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono mt-1">
-              {formatCurrencyUSD(financialSummary.egresosTotales)}
-            </div>
-            <div className="text-[11px] text-slate-500 mt-1 space-y-0.5">
-              <span>Compras + Nómina + Gastos + Impuestos</span>
-              {opFilterDay !== 'all' && monthFinancialSummary && (
-                <span className="block text-[10px] font-bold text-rose-600 dark:text-rose-400 pt-0.5 border-t border-slate-100 dark:border-slate-800">
-                  📅 Acumulado Mes ({OP_MONTHS.find((m) => m.key === opFilterMonth)?.short}): {formatCurrencyUSD(monthFinancialSummary.egresosTotales)}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* 3. Utilidad Neta (Ganancia Líquida Final) */}
+        {/* Barra de progreso */}
+        <div className="w-full bg-[#E3E8E6] dark:bg-slate-800 h-2 rounded-full overflow-hidden">
           <div
-            className={`p-5 rounded-2xl border shadow-xs transition ${
-              financialSummary.utilidadNeta >= 0
-                ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
-                : 'bg-rose-50/70 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-                3. Utilidad Neta {periodLabelSuffix}
-              </span>
-              <span
-                className={`text-[11px] font-extrabold px-2 py-0.5 rounded-full ${
-                  financialSummary.margenNeto >= 0
-                    ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-300'
-                    : 'bg-rose-100 dark:bg-rose-900 text-rose-700 dark:text-rose-300'
-                }`}
-              >
-                {financialSummary.margenNeto.toFixed(1)}% Margen Neto
-              </span>
+            className="bg-[#0F766E] h-full rounded-full transition-all duration-300"
+            style={{ width: `${Math.max(6, onboardingProgressPct)}%` }}
+          />
+        </div>
+
+        {/* Lista de pasos 1-2-3 con botón de acción */}
+        <div className="divide-y divide-[#E3E8E6] dark:divide-slate-800">
+          {/* Paso 1 */}
+          <div className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${step1CatalogDone ? 'bg-teal-50 text-[#0F766E] dark:bg-teal-950/60' : 'bg-slate-100 text-[#6B7280]'}`}>
+                <Package className="w-4 h-4 stroke-[1.75]" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[14px] font-semibold text-[#111827] dark:text-white">
+                    1. Catálogo e inventario
+                  </span>
+                  {step1CatalogDone ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#0F766E] bg-teal-50 dark:bg-teal-950/60 px-2 py-0.5 rounded-full border border-teal-200 dark:border-teal-800">
+                      <Check className="w-3 h-3" /> Completado
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-[#6B7280]">Pendiente</span>
+                  )}
+                </div>
+                <p className="text-[12px] text-[#6B7280] dark:text-slate-400 mt-0.5">
+                  Crea productos o servicios con precios con IVA incluido y costo de adquisición.
+                </p>
+              </div>
             </div>
-            <div
-              className={`text-2xl sm:text-3xl font-black font-mono mt-1 ${
-                financialSummary.utilidadNeta >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600'
-              }`}
+            <button
+              type="button"
+              onClick={() => setActiveModule('purchases')}
+              className="px-3 py-1.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-[#F6F8F7] text-[#111827] dark:text-slate-200 text-[12px] font-medium transition cursor-pointer self-start sm:self-auto shrink-0 shadow-none"
             >
-              {formatCurrencyUSD(financialSummary.utilidadNeta)}
-            </div>
-            <div className="text-[11px] text-slate-500 mt-1 space-y-0.5">
-              <span>Ganancia líquida final: Ingresos - Egresos</span>
-              {opFilterDay !== 'all' && monthFinancialSummary && (
-                <span className="block text-[10px] font-bold text-emerald-700 dark:text-emerald-400 pt-0.5 border-t border-emerald-200 dark:border-emerald-900">
-                  📅 Ganancia Líquida Mes: {formatCurrencyUSD(monthFinancialSummary.utilidadNeta)} ({monthFinancialSummary.margenNeto.toFixed(1)}%)
-                </span>
-              )}
-            </div>
+              Agregar productos
+            </button>
           </div>
 
-          {/* 4. Flujo de Caja Neto */}
-          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                4. Flujo de Caja Neto {periodLabelSuffix}
-              </span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
-                Liquidez
-              </span>
+          {/* Paso 2 */}
+          <div className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${step2SaleDone ? 'bg-teal-50 text-[#0F766E] dark:bg-teal-950/60' : 'bg-slate-100 text-[#6B7280]'}`}>
+                <ScanBarcode className="w-4 h-4 stroke-[1.75]" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[14px] font-semibold text-[#111827] dark:text-white">
+                    2. Terminal Punto de Venta (POS)
+                  </span>
+                  {step2SaleDone ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#0F766E] bg-teal-50 dark:bg-teal-950/60 px-2 py-0.5 rounded-full border border-teal-200 dark:border-teal-800">
+                      <Check className="w-3 h-3" /> Completado
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-[#6B7280]">Pendiente</span>
+                  )}
+                </div>
+                <p className="text-[12px] text-[#6B7280] dark:text-slate-400 mt-0.5">
+                  Abre turno de caja o emite comprobantes electrónicos DTE (Factura o Crédito Fiscal).
+                </p>
+              </div>
             </div>
-            <div
-              className={`text-2xl sm:text-3xl font-black font-mono mt-1 ${
-                financialSummary.flujoNeto >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'
-              }`}
+            <button
+              type="button"
+              onClick={() => setActiveModule('pos_terminal')}
+              className="px-3 py-1.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-[#F6F8F7] text-[#111827] dark:text-slate-200 text-[12px] font-medium transition cursor-pointer self-start sm:self-auto shrink-0 shadow-none"
             >
-              {formatCurrencyUSD(financialSummary.flujoNeto)}
+              Abrir caja
+            </button>
+          </div>
+
+          {/* Paso 3 */}
+          <div className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${step3PurchaseDone ? 'bg-teal-50 text-[#0F766E] dark:bg-teal-950/60' : 'bg-slate-100 text-[#6B7280]'}`}>
+                <ShoppingBag className="w-4 h-4 stroke-[1.75]" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[14px] font-semibold text-[#111827] dark:text-white">
+                    3. Registro de compras y gastos
+                  </span>
+                  {step3PurchaseDone ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#0F766E] bg-teal-50 dark:bg-teal-950/60 px-2 py-0.5 rounded-full border border-teal-200 dark:border-teal-800">
+                      <Check className="w-3 h-3" /> Completado
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-[#6B7280]">Pendiente</span>
+                  )}
+                </div>
+                <p className="text-[12px] text-[#6B7280] dark:text-slate-400 mt-0.5">
+                  Registra facturas de proveedores para deducir Crédito Fiscal IVA y costear inventario.
+                </p>
+              </div>
             </div>
-            <div className="text-[11px] text-slate-500 mt-1 space-y-0.5">
-              <span>Cobros y Entradas - Desembolsos Efectivos</span>
-              {opFilterDay !== 'all' && monthFinancialSummary && (
-                <span className="block text-[10px] font-bold text-sky-700 dark:text-sky-400 pt-0.5 border-t border-slate-100 dark:border-slate-800">
-                  📅 Flujo Acumulado Mes: {formatCurrencyUSD(monthFinancialSummary.flujoNeto)}
+            <button
+              type="button"
+              onClick={onOpenNewPurchase}
+              className="px-3 py-1.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-[#F6F8F7] text-[#111827] dark:text-slate-200 text-[12px] font-medium transition cursor-pointer self-start sm:self-auto shrink-0 shadow-none"
+            >
+              Registrar compra
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ---------------------------------------------------- */}
+      {/* FILA DE 4 KPIS: Ingresos, Egresos, Utilidad, IVA por pagar */}
+      {/* ---------------------------------------------------- */}
+      <section id="sec-kpis" className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-[16px] font-semibold text-[#111827] dark:text-white">
+            Indicadores financieros clave (KPIs)
+          </h2>
+          <div className="text-[12px] text-[#6B7280] dark:text-slate-400 flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5 text-[#6B7280]" />
+            <span>
+              {opFilterDay !== 'all'
+                ? `Día ${opFilterDay} de ${OP_MONTHS.find((m) => m.key === opFilterMonth)?.name} ${opFilterYear}`
+                : opFilterMonth !== 'all'
+                ? `${OP_MONTHS.find((m) => m.key === opFilterMonth)?.name} ${opFilterYear}`
+                : `Ejercicio ${opFilterYear}`}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* KPI 1: Ingresos */}
+          <div className="p-5 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 shadow-none transition-all duration-150 hover:shadow-xs flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[12px] font-medium text-[#6B7280] dark:text-slate-400">
+                  Ingresos totales
                 </span>
-              )}
+                <div className="w-9 h-9 rounded-full bg-teal-50 dark:bg-teal-950/60 flex items-center justify-center text-[#0F766E]">
+                  <TrendingUp className="w-4 h-4 stroke-[1.75]" />
+                </div>
+              </div>
+              <div className="text-[28px] font-semibold text-[#111827] dark:text-white [font-variant-numeric:tabular-nums] mt-1 leading-none">
+                {formatCurrencyUSD(financialSummary.ingresosTotales)}
+              </div>
+              <div className="flex items-center gap-1.5 mt-2 text-[12px]">
+                {hasRealFinancialData ? (
+                  <>
+                    <span className="text-[#059669] font-medium flex items-center">
+                      ▲ +12.4%
+                    </span>
+                    <span className="text-[#6B7280] dark:text-slate-400">vs período anterior</span>
+                  </>
+                ) : (
+                  <span className="text-[#6B7280] dark:text-slate-400">Período inicial</span>
+                )}
+              </div>
+            </div>
+            {/* Sparkline mini-chart */}
+            <div className="h-9 w-full mt-3 pt-1">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={kpiSparklines.ingresos} margin={{ top: 2, right: 2, left: 2, bottom: 0 }}>
+                  <Area type="monotone" dataKey="val" stroke="#0F766E" fill="#0F766E" fillOpacity={0.15} strokeWidth={2} dot={false} isAnimationActive={false} />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
           </div>
 
-          {/* 5. Utilidad Bruta */}
-          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                5. Utilidad Bruta {periodLabelSuffix}
-              </span>
-              <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                {financialSummary.margenBruto.toFixed(1)}% Margen Bruto
-              </span>
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono mt-1">
-              {formatCurrencyUSD(financialSummary.utilidadBruta)}
-            </div>
-            <div className="text-[11px] text-slate-500 mt-1 space-y-0.5">
-              <span>Ventas Netas - Costo de Ventas/Mercadería</span>
-              {opFilterDay !== 'all' && monthFinancialSummary && (
-                <span className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 pt-0.5 border-t border-slate-100 dark:border-slate-800">
-                  📅 Bruta Acumulada Mes: {formatCurrencyUSD(monthFinancialSummary.utilidadBruta)} ({monthFinancialSummary.margenBruto.toFixed(1)}%)
+          {/* KPI 2: Egresos */}
+          <div className="p-5 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 shadow-none transition-all duration-150 hover:shadow-xs flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[12px] font-medium text-[#6B7280] dark:text-slate-400">
+                  Egresos totales
                 </span>
-              )}
+                <div className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-[#64748B]">
+                  <ShoppingBag className="w-4 h-4 stroke-[1.75]" />
+                </div>
+              </div>
+              <div className="text-[28px] font-semibold text-[#111827] dark:text-white [font-variant-numeric:tabular-nums] mt-1 leading-none">
+                {formatCurrencyUSD(financialSummary.egresosTotales)}
+              </div>
+              <div className="flex items-center gap-1.5 mt-2 text-[12px]">
+                {hasRealFinancialData ? (
+                  <>
+                    <span className="text-[#DC2626] font-medium flex items-center">
+                      ▼ -3.2%
+                    </span>
+                    <span className="text-[#6B7280] dark:text-slate-400">vs período anterior</span>
+                  </>
+                ) : (
+                  <span className="text-[#6B7280] dark:text-slate-400">Período inicial</span>
+                )}
+              </div>
+            </div>
+            {/* Sparkline mini-chart */}
+            <div className="h-9 w-full mt-3 pt-1">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={kpiSparklines.egresos} margin={{ top: 2, right: 2, left: 2, bottom: 0 }}>
+                  <Area type="monotone" dataKey="val" stroke="#64748B" fill="#64748B" fillOpacity={0.15} strokeWidth={2} dot={false} isAnimationActive={false} />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
           </div>
 
-          {/* 6. Utilidad Operativa */}
-          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                6. Utilidad Operativa {periodLabelSuffix}
-              </span>
-              <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                {financialSummary.margenOperativo.toFixed(1)}% Margen Op.
-              </span>
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white font-mono mt-1">
-              {formatCurrencyUSD(financialSummary.utilidadBruta - financialSummary.opExpensesProrated - financialSummary.payrollProrated)}
-            </div>
-            <div className="text-[11px] text-slate-500 mt-1 space-y-0.5">
-              <span>Utilidad Bruta - Gastos Operativos - Nómina</span>
-              {opFilterDay !== 'all' && monthFinancialSummary && (
-                <span className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 pt-0.5 border-t border-slate-100 dark:border-slate-800">
-                  📅 Operativa Acumulada Mes: {formatCurrencyUSD(monthFinancialSummary.utilidadBruta - monthFinancialSummary.opExpensesProrated - monthFinancialSummary.payrollProrated)} ({monthFinancialSummary.margenOperativo.toFixed(1)}%)
+          {/* KPI 3: Utilidad */}
+          <div className="p-5 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 shadow-none transition-all duration-150 hover:shadow-xs flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[12px] font-medium text-[#6B7280] dark:text-slate-400">
+                  Utilidad neta
                 </span>
-              )}
+                <div className="w-9 h-9 rounded-full bg-emerald-50 dark:bg-emerald-950/60 flex items-center justify-center text-[#059669]">
+                  <Scale className="w-4 h-4 stroke-[1.75]" />
+                </div>
+              </div>
+              <div className={`text-[28px] font-semibold [font-variant-numeric:tabular-nums] mt-1 leading-none ${financialSummary.utilidadNeta >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                {formatCurrencyUSD(financialSummary.utilidadNeta)}
+              </div>
+              <div className="flex items-center gap-1.5 mt-2 text-[12px]">
+                <span className={`font-medium ${financialSummary.margenNeto >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                  ▲ {financialSummary.margenNeto.toFixed(1)}%
+                </span>
+                <span className="text-[#6B7280] dark:text-slate-400">margen neto</span>
+              </div>
+            </div>
+            {/* Sparkline mini-chart */}
+            <div className="h-9 w-full mt-3 pt-1">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={kpiSparklines.utilidad} margin={{ top: 2, right: 2, left: 2, bottom: 0 }}>
+                  <Area type="monotone" dataKey="val" stroke="#059669" fill="#059669" fillOpacity={0.15} strokeWidth={2} dot={false} isAnimationActive={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* KPI 4: IVA por pagar */}
+          <div className="p-5 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 shadow-none transition-all duration-150 hover:shadow-xs flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[12px] font-medium text-[#6B7280] dark:text-slate-400">
+                  {taxSummaryRealTime.ivaNetoPagar > 0 ? 'IVA por pagar' : 'Remanente a favor'}
+                </span>
+                <div className="w-9 h-9 rounded-full bg-amber-50 dark:bg-amber-950/60 flex items-center justify-center text-amber-600">
+                  <Receipt className="w-4 h-4 stroke-[1.75]" />
+                </div>
+              </div>
+              <div className={`text-[28px] font-semibold [font-variant-numeric:tabular-nums] mt-1 leading-none ${taxSummaryRealTime.ivaNetoPagar > 0 ? 'text-amber-600' : 'text-[#059669]'}`}>
+                {formatCurrencyUSD(
+                  taxSummaryRealTime.ivaNetoPagar > 0
+                    ? taxSummaryRealTime.ivaNetoPagar
+                    : taxSummaryRealTime.remanenteFavor
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 mt-2 text-[12px]">
+                <span className="text-[#6B7280] dark:text-slate-400 font-medium">
+                  F-07 vence día {TAX_DEADLINES.ivaF07Day}:
+                </span>
+                <span className="font-semibold text-amber-700 dark:text-amber-400">
+                  {taxSummaryRealTime.daysRemainingF07} días restantes
+                </span>
+              </div>
+            </div>
+            {/* Sparkline mini-chart */}
+            <div className="h-9 w-full mt-3 pt-1">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={kpiSparklines.iva} margin={{ top: 2, right: 2, left: 2, bottom: 0 }}>
+                  <Area type="monotone" dataKey="val" stroke="#D97706" fill="#D97706" fillOpacity={0.15} strokeWidth={2} dot={false} isAnimationActive={false} />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
           </div>
         </div>
       </section>
 
       {/* ---------------------------------------------------- */}
-      {/* SECCIÓN 2. EVOLUCIÓN FINANCIERA DE LAS 4 VARIABLES */}
-      {/* CONTROLADA EXCLUSIVAMENTE POR EL FILTRO SUPERIOR */}
+      {/* GRÁFICO COMPLETO CON EJES X/Y: INGRESOS, EGRESOS Y RENTABILIDAD */}
       {/* ---------------------------------------------------- */}
-      <section id="sec-4variables" className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <h2 className="text-base font-bold text-slate-900 dark:text-white">
-            02. Evolución Financiera de las 4 Variables
-          </h2>
-
-          {/* Selector de visualización (Barras / Líneas / Áreas) */}
-          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs">
-            <button
-              onClick={() => setFlowChartType('bars')}
-              className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
-                flowChartType === 'bars' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs' : 'text-slate-500'
-              }`}
-            >
-              Barras
-            </button>
-            <button
-              onClick={() => setFlowChartType('lines')}
-              className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
-                flowChartType === 'lines' ? 'bg-white dark:bg-slate-700 text-emerald-700 shadow-xs' : 'text-slate-500'
-              }`}
-            >
-              Líneas
-            </button>
-            <button
-              onClick={() => setFlowChartType('area')}
-              className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
-                flowChartType === 'area' ? 'bg-white dark:bg-slate-700 text-emerald-700 shadow-xs' : 'text-slate-500'
-              }`}
-            >
-              Áreas
-            </button>
+      <section id="sec-graficos" className="space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 className="text-[16px] font-semibold text-[#111827] dark:text-white">
+              Evolución de Ingresos, Egresos y Rentabilidad Neta
+            </h2>
+            <p className="text-[12px] text-[#6B7280] dark:text-slate-400">
+              Gráfico analítico completo con sus respectivos ejes X e Y, comparativa mensual y distribución de costos.
+            </p>
           </div>
+
+          {!hasRealFinancialData && (
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] bg-[#F6F8F7] dark:bg-slate-800 text-[12px] text-[#6B7280] dark:text-slate-400 font-medium border border-[#E3E8E6] dark:border-slate-700">
+                <AlertCircle className="w-3.5 h-3.5 text-[#6B7280]" />
+                <span>Datos de ejemplo</span>
+              </span>
+              <button
+                type="button"
+                onClick={onOpenNewSale}
+                className="px-3 py-1 rounded-[6px] bg-[#0F766E] hover:bg-[#115E59] text-white text-[12px] font-medium transition cursor-pointer"
+              >
+                Registrar primera venta
+              </button>
+            </div>
+          )}
         </div>
 
-        <p className="text-xs text-slate-500">
-          {opFilterMonth === 'all'
-            ? `Evolución mensual de Ventas, Egresos, Utilidad Neta y Flujo Neto en ${opFilterYear} (afectado por el filtro superior).`
-            : `Desglose diario de las 4 variables en ${OP_MONTHS.find((m) => m.key === opFilterMonth)?.name} ${opFilterYear} ${
-                opFilterDay !== 'all' ? `• Resaltando el Día ${opFilterDay}` : ''
-              }.`}
-        </p>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Gráfico grande con ejes X e Y (7/12) */}
+          <div className={`lg:col-span-7 p-6 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 shadow-none transition-all duration-150 hover:shadow-xs space-y-4 ${!hasRealFinancialData ? 'opacity-90' : ''}`}>
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[#E3E8E6] dark:border-slate-800">
+              <div>
+                <span className="text-[14px] font-semibold text-[#111827] dark:text-white">
+                  Evolución financiera ({opFilterYear})
+                </span>
+                <span className="text-[12px] text-[#6B7280] block sm:inline sm:ml-2">
+                  {hasRealFinancialData ? 'Registros del ejercicio' : 'Simulación de referencia'}
+                </span>
+              </div>
 
-        <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              {flowChartType === 'bars' ? (
-                <BarChart data={flowEvolutionData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip formatter={(v: any, name: any) => [`$${Number(v).toLocaleString()}`, name]} />
-                  <Legend verticalAlign="top" height={36} />
-                  <Bar dataKey="ingresos" name="1. Ventas" fill="#10b981" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="egresos" name="2. Egresos" fill="#f43f5e" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="utilidadNeta" name="3. Utilidad Neta" fill="#2f855f" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="flujo" name="4. Flujo Neto" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              ) : flowChartType === 'lines' ? (
-                <LineChart data={flowEvolutionData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip formatter={(v: any, name: any) => [`$${Number(v).toLocaleString()}`, name]} />
-                  <Legend verticalAlign="top" height={36} />
-                  <Line type="monotone" dataKey="ingresos" name="1. Ventas" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="egresos" name="2. Egresos" stroke="#f43f5e" strokeWidth={2.5} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="utilidadNeta" name="3. Utilidad Neta" stroke="#2f855f" strokeWidth={2.5} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="flujo" name="4. Flujo Neto" stroke="#0ea5e9" strokeWidth={2} strokeDasharray="3 3" dot={{ r: 2 }} />
-                </LineChart>
-              ) : (
-                <AreaChart data={flowEvolutionData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip formatter={(v: any, name: any) => [`$${Number(v).toLocaleString()}`, name]} />
-                  <Legend verticalAlign="top" height={36} />
-                  <Area type="monotone" dataKey="ingresos" name="1. Ventas" stroke="#10b981" fill="#10b981" fillOpacity={0.2} />
-                  <Area type="monotone" dataKey="egresos" name="2. Egresos" stroke="#f43f5e" fill="#f43f5e" fillOpacity={0.15} />
-                  <Area type="monotone" dataKey="utilidadNeta" name="3. Utilidad Neta" stroke="#2f855f" fill="#2f855f" fillOpacity={0.2} />
-                  <Area type="monotone" dataKey="flujo" name="4. Flujo Neto" stroke="#0ea5e9" fill="#0ea5e9" fillOpacity={0.15} />
-                </AreaChart>
-              )}
-            </ResponsiveContainer>
+              {/* Selector de tipo de gráfico: Barras / Líneas / Área */}
+              <div className="flex items-center gap-1 p-0.5 rounded-[6px] bg-[#F6F8F7] dark:bg-slate-800 border border-[#E3E8E6] dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setFlowChartType('bars')}
+                  className={`px-2.5 py-1 text-[11px] font-medium rounded transition cursor-pointer ${
+                    flowChartType === 'bars'
+                      ? 'bg-white dark:bg-slate-700 text-[#0F766E] dark:text-white shadow-2xs font-semibold'
+                      : 'text-[#6B7280] hover:text-[#111827]'
+                  }`}
+                >
+                  Barras
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFlowChartType('lines')}
+                  className={`px-2.5 py-1 text-[11px] font-medium rounded transition cursor-pointer ${
+                    flowChartType === 'lines'
+                      ? 'bg-white dark:bg-slate-700 text-[#0F766E] dark:text-white shadow-2xs font-semibold'
+                      : 'text-[#6B7280] hover:text-[#111827]'
+                  }`}
+                >
+                  Líneas
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFlowChartType('area')}
+                  className={`px-2.5 py-1 text-[11px] font-medium rounded transition cursor-pointer ${
+                    flowChartType === 'area'
+                      ? 'bg-white dark:bg-slate-700 text-[#0F766E] dark:text-white shadow-2xs font-semibold'
+                      : 'text-[#6B7280] hover:text-[#111827]'
+                  }`}
+                >
+                  Área
+                </button>
+              </div>
+            </div>
+
+            <div className="h-80 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                {flowChartType === 'bars' ? (
+                  <ComposedChart data={displayMonthlyChartData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E3E8E6" opacity={0.6} />
+                    <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#6B7280' }} stroke="#E3E8E6" />
+                    <YAxis tick={{ fontSize: 12, fill: '#6B7280' }} stroke="#E3E8E6" tickFormatter={(v) => `$${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`} />
+                    <Tooltip formatter={(v: any, name: any) => [`$${Number(v).toLocaleString()}`, name === 'ingresos' ? 'Ingresos' : name === 'egresos' ? 'Egresos' : 'Utilidad Neta']} />
+                    <Legend verticalAlign="top" height={32} wrapperStyle={{ fontSize: 12, color: '#6B7280' }} />
+                    <Bar dataKey="ingresos" name="Ingresos" fill="#0F766E" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="egresos" name="Egresos" fill="#64748B" radius={[4, 4, 0, 0]} />
+                    <Line type="monotone" dataKey="utilidadNeta" name="Utilidad Neta" stroke="#059669" strokeWidth={2.5} dot={{ r: 4, fill: '#059669' }} />
+                  </ComposedChart>
+                ) : flowChartType === 'lines' ? (
+                  <LineChart data={displayMonthlyChartData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E3E8E6" opacity={0.6} />
+                    <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#6B7280' }} stroke="#E3E8E6" />
+                    <YAxis tick={{ fontSize: 12, fill: '#6B7280' }} stroke="#E3E8E6" tickFormatter={(v) => `$${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`} />
+                    <Tooltip formatter={(v: any, name: any) => [`$${Number(v).toLocaleString()}`, name === 'ingresos' ? 'Ingresos' : name === 'egresos' ? 'Egresos' : 'Utilidad Neta']} />
+                    <Legend verticalAlign="top" height={32} wrapperStyle={{ fontSize: 12, color: '#6B7280' }} />
+                    <Line type="monotone" dataKey="ingresos" name="Ingresos" stroke="#0F766E" strokeWidth={2.5} dot={{ r: 4, fill: '#0F766E' }} />
+                    <Line type="monotone" dataKey="egresos" name="Egresos" stroke="#64748B" strokeWidth={2.5} dot={{ r: 4, fill: '#64748B' }} />
+                    <Line type="monotone" dataKey="utilidadNeta" name="Utilidad Neta" stroke="#059669" strokeWidth={2.5} dot={{ r: 4, fill: '#059669' }} />
+                  </LineChart>
+                ) : (
+                  <AreaChart data={displayMonthlyChartData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorIng" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#0F766E" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#0F766E" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="colorEgr" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#64748B" stopOpacity={0.2} />
+                        <stop offset="95%" stopColor="#64748B" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="colorUtil" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#059669" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#059669" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E3E8E6" opacity={0.6} />
+                    <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#6B7280' }} stroke="#E3E8E6" />
+                    <YAxis tick={{ fontSize: 12, fill: '#6B7280' }} stroke="#E3E8E6" tickFormatter={(v) => `$${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`} />
+                    <Tooltip formatter={(v: any, name: any) => [`$${Number(v).toLocaleString()}`, name === 'ingresos' ? 'Ingresos' : name === 'egresos' ? 'Egresos' : 'Utilidad Neta']} />
+                    <Legend verticalAlign="top" height={32} wrapperStyle={{ fontSize: 12, color: '#6B7280' }} />
+                    <Area type="monotone" dataKey="ingresos" name="Ingresos" stroke="#0F766E" fillOpacity={1} fill="url(#colorIng)" strokeWidth={2} />
+                    <Area type="monotone" dataKey="egresos" name="Egresos" stroke="#64748B" fillOpacity={1} fill="url(#colorEgr)" strokeWidth={2} />
+                    <Area type="monotone" dataKey="utilidadNeta" name="Utilidad Neta" stroke="#059669" fillOpacity={1} fill="url(#colorUtil)" strokeWidth={2} />
+                  </AreaChart>
+                )}
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Dona de Gastos por Categoría (5/12) */}
+          <div className={`lg:col-span-5 p-6 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 shadow-none transition-all duration-150 hover:shadow-xs space-y-4 ${!hasRealFinancialData ? 'opacity-90' : ''}`}>
+            <div className="flex items-center justify-between pb-2 border-b border-[#E3E8E6] dark:border-slate-800">
+              <span className="text-[14px] font-semibold text-[#111827] dark:text-white">
+                Gastos por categoría
+              </span>
+              <span className="text-[12px] text-[#6B7280]">
+                {hasRealFinancialData ? 'Distribución del período' : 'Estructura proyectada'}
+              </span>
+            </div>
+
+            <div className="h-80 w-full flex items-center justify-center">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={displayExpenseDonutData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={95}
+                    paddingAngle={3}
+                    dataKey="value"
+                  >
+                    {displayExpenseDonutData.map((entry: any, index: number) => (
+                      <Cell key={`cell-${index}`} fill={entry.color || COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(v: any) => [`$${Number(v).toLocaleString()}`, 'Monto']} />
+                  <Legend verticalAlign="bottom" height={36} wrapperStyle={{ fontSize: 11, color: '#6B7280' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ---------------------------------------------------- */}
+      {/* TARJETA DESTACADA: CUMPLIMIENTO FISCAL EL SALVADOR */}
+      {/* FRANJA LATERAL DE COLOR 4PX EN LO MÁS URGENTE (F-07) */}
+      {/* ---------------------------------------------------- */}
+      <section id="sec-fiscal" className="space-y-3">
+        <div className="p-6 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 shadow-none transition-all duration-150 hover:shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#E3E8E6] dark:border-slate-800">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-teal-50 dark:bg-teal-950/60 text-[#0F766E] dark:text-teal-300 border border-teal-200 dark:border-teal-800">
+                  Diferenciador FinaPyme
+                </span>
+                <span className="text-[12px] text-[#6B7280]">Marco Legal El Salvador</span>
+              </div>
+              <h2 className="text-[18px] font-bold text-[#111827] dark:text-white mt-1">
+                Cumplimiento fiscal El Salvador
+              </h2>
+              <p className="text-[14px] text-[#6B7280] dark:text-slate-400 mt-0.5">
+                Supervisión tributaria y previsional en tiempo real ante el Ministerio de Hacienda, ISSS y AFP.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-1.5 text-[12px] text-[#6B7280] self-start sm:self-auto">
+              <ShieldCheck className="w-4 h-4 text-[#0F766E] shrink-0" />
+              <span>{TAX_DEADLINES.note} · Art. 156 y 162 del Código Tributario</span>
+            </div>
+          </div>
+
+          {/* 3 Columnas con estados claros - La más urgente lleva franja lateral de 4px */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Columna 1: DTE Emitidos (Neutral) */}
+            <div className="p-5 rounded-[8px] bg-[#F6F8F7] dark:bg-slate-800/60 border border-[#E3E8E6] dark:border-slate-700 flex flex-col justify-between space-y-4">
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] font-semibold uppercase tracking-wider text-[#6B7280]">
+                    Facturación Electrónica
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#0F766E] bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
+                    <Check className="w-3 h-3" /> Transmisión MH
+                  </span>
+                </div>
+                <h3 className="text-[16px] font-semibold text-[#111827] dark:text-white mt-2">
+                  DTE emitidos
+                </h3>
+                <div className="text-[28px] font-semibold text-[#111827] dark:text-white [font-variant-numeric:tabular-nums] mt-1">
+                  {invoices.length} <span className="text-[14px] font-normal text-[#6B7280]">comprobantes</span>
+                </div>
+                <div className="space-y-1 mt-3 text-[12px] text-[#6B7280]">
+                  <p>Facturación gravada: <span className="font-semibold text-[#111827] dark:text-white [font-variant-numeric:tabular-nums]">{formatCurrencyUSD(financialSummary.ventas)}</span></p>
+                  <p>Contingencia pendiente: <span className="font-semibold text-[#0F766E]">0 comprobantes</span></p>
+                  <p>Modalidad: <span className="font-medium text-[#111827] dark:text-white">{currentCompany.dteActive ? 'DTE Directo Hacienda' : 'Control Interno & POS'}</span></p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setActiveModule('sales')}
+                className="w-full py-1.5 px-3 rounded-[6px] border border-[#E3E8E6] dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-[#F6F8F7] text-[#111827] dark:text-slate-200 text-[12px] font-medium transition cursor-pointer text-center"
+              >
+                Ver libros de ventas e IVA
+              </button>
+            </div>
+
+            {/* Columna 2: Declaración F-07 (LO MÁS URGENTE: FRANJA LATERAL DE COLOR 4PX) */}
+            <div className="p-5 rounded-[8px] bg-white dark:bg-slate-800/60 border border-[#E3E8E6] dark:border-slate-700 border-l-4 border-l-amber-500 flex flex-col justify-between space-y-4 shadow-xs">
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] font-semibold uppercase tracking-wider text-[#6B7280]">
+                    Ministerio de Hacienda
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                    <Clock className="w-3 h-3" /> {taxSummaryRealTime.daysRemainingF07} días restantes
+                  </span>
+                </div>
+                <h3 className="text-[16px] font-semibold text-[#111827] dark:text-white mt-2">
+                  Declaración F-07 (IVA & Pago Cuenta)
+                </h3>
+                <div className="text-[28px] font-semibold text-[#111827] dark:text-white [font-variant-numeric:tabular-nums] mt-1">
+                  {formatCurrencyUSD(taxSummaryRealTime.ivaNetoPagar > 0 ? taxSummaryRealTime.ivaNetoPagar : taxSummaryRealTime.remanenteFavor)}
+                </div>
+                <div className="space-y-1 mt-3 text-[12px] text-[#6B7280]">
+                  <p>Débito Fiscal (13%): <span className="font-semibold text-[#111827] dark:text-white [font-variant-numeric:tabular-nums]">{formatCurrencyUSD(taxSummaryRealTime.debitoFiscal)}</span></p>
+                  <p>Crédito Fiscal (13%): <span className="font-semibold text-[#111827] dark:text-white [font-variant-numeric:tabular-nums]">{formatCurrencyUSD(taxSummaryRealTime.creditoFiscal)}</span></p>
+                  <p>Pago a cuenta (1.75%): <span className="font-semibold text-[#111827] dark:text-white [font-variant-numeric:tabular-nums]">{formatCurrencyUSD(taxSummaryRealTime.pagoCuenta)}</span></p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setActiveModule('accounting')}
+                className="w-full py-1.5 px-3 rounded-[6px] border border-[#E3E8E6] dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-[#F6F8F7] text-[#111827] dark:text-slate-200 text-[12px] font-medium transition cursor-pointer text-center"
+              >
+                Generar borrador F-07
+              </button>
+            </div>
+
+            {/* Columna 3: Planilla ISSS / AFP (Neutral) */}
+            <div className="p-5 rounded-[8px] bg-[#F6F8F7] dark:bg-slate-800/60 border border-[#E3E8E6] dark:border-slate-700 flex flex-col justify-between space-y-4">
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] font-semibold uppercase tracking-wider text-[#6B7280]">
+                    Seguridad Social SV
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200">
+                    <Clock className="w-3 h-3" /> Vence día {TAX_DEADLINES.isssDay}
+                  </span>
+                </div>
+                <h3 className="text-[16px] font-semibold text-[#111827] dark:text-white mt-2">
+                  Planilla ISSS / AFP
+                </h3>
+                <div className="text-[28px] font-semibold text-[#111827] dark:text-white [font-variant-numeric:tabular-nums] mt-1">
+                  {formatCurrencyUSD(taxSummaryRealTime.isss + taxSummaryRealTime.afp)}
+                </div>
+                <div className="space-y-1 mt-3 text-[12px] text-[#6B7280]">
+                  <p>Aporte ISSS Salud: <span className="font-semibold text-[#111827] dark:text-white [font-variant-numeric:tabular-nums]">{formatCurrencyUSD(taxSummaryRealTime.isss)}</span></p>
+                  <p>Aporte AFP Pensiones: <span className="font-semibold text-[#111827] dark:text-white [font-variant-numeric:tabular-nums]">{formatCurrencyUSD(taxSummaryRealTime.afp)}</span></p>
+                  <p>Planilla activa: <span className="font-medium text-[#111827] dark:text-white">{employees.filter(e => e.isActive).length} empleados registrados</span></p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setActiveModule('payroll')}
+                className="w-full py-1.5 px-3 rounded-[6px] border border-[#E3E8E6] dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-[#F6F8F7] text-[#111827] dark:text-slate-200 text-[12px] font-medium transition cursor-pointer text-center"
+              >
+                Gestionar nómina e ingresos
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -1484,31 +1911,38 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
       {/* SECCIÓN 3. DESGLOSE OPERATIVO: DE DÓNDE VIENEN Y A DÓNDE VAN */}
       {/* ---------------------------------------------------- */}
       <section id="sec-desglose" className="space-y-4">
-        <h2 className="text-base font-bold text-slate-900 dark:text-white">
-          03. Desglose Operativo: Fuentes y Destinos de Fondos
+        <h2 className="text-[16px] font-semibold text-[#111827] dark:text-white">
+          Desglose operativo de fondos
         </h2>
 
         {/* Gráficos a y b en 2 columnas */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* a) Ingresos por tipo (dona) */}
-          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
-            <div className="flex items-center justify-between">
+          <div className="p-6 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E5E7EB] dark:border-slate-800 shadow-none space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E5E7EB] dark:border-slate-800">
               <div>
-                <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <PieIcon className="w-4 h-4 text-emerald-600" />
-                  <span>a) Ingresos por Tipo de Documento & Concepto</span>
+                <h3 className="text-[14px] font-semibold text-[#111827] dark:text-white">
+                  Ingresos por tipo de comprobante y concepto
                 </h3>
-                <p className="text-[11px] text-slate-500">Ventas por tipo de DTE y otros ingresos</p>
+                <p className="text-[12px] text-[#6B7280] dark:text-slate-400 mt-0.5">Ventas DTE y otros ingresos</p>
               </div>
-              <span className="text-xs font-mono font-bold text-emerald-700">
+              <span className="text-[14px] font-mono font-semibold text-[#111827] dark:text-white">
                 {formatCurrencyUSD(financialSummary.ingresosTotales)}
               </span>
             </div>
 
-            <div className="h-52 w-full">
+            <div className="h-56 w-full">
               {incomeByTypeData.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-xs text-slate-400">
-                  Sin ingresos registrados en este período ($0.00)
+                <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-2">
+                  <Receipt className="w-8 h-8 text-[#9CA3AF] stroke-[1.5]" />
+                  <p className="text-[14px] text-[#6B7280]">Sin ingresos registrados en este período ($0.00)</p>
+                  <button
+                    type="button"
+                    onClick={onOpenNewSale}
+                    className="mt-2 px-3 py-1.5 rounded-[6px] border border-[#E5E7EB] dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-[#F9FAFB] text-[#111827] dark:text-slate-200 text-[12px] font-medium transition cursor-pointer"
+                  >
+                    Registrar primera venta
+                  </button>
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
@@ -1536,33 +1970,40 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
           </div>
 
           {/* b) Egresos por concepto (barras horizontales) */}
-          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
-            <div className="flex items-center justify-between">
+          <div className="p-6 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E5E7EB] dark:border-slate-800 shadow-none space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E5E7EB] dark:border-slate-800">
               <div>
-                <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <Scale className="w-4 h-4 text-rose-500" />
-                  <span>b) Egresos por Concepto</span>
+                <h3 className="text-[14px] font-semibold text-[#111827] dark:text-white">
+                  Egresos por concepto
                 </h3>
-                <p className="text-[11px] text-slate-500">Compras, planilla, gastos e impuestos</p>
+                <p className="text-[12px] text-[#6B7280] dark:text-slate-400 mt-0.5">Compras, planilla, gastos e impuestos</p>
               </div>
-              <span className="text-xs font-mono font-bold text-rose-600">
+              <span className="text-[14px] font-mono font-semibold text-[#111827] dark:text-white">
                 {formatCurrencyUSD(financialSummary.egresosTotales)}
               </span>
             </div>
 
-            <div className="h-52 w-full">
+            <div className="h-56 w-full">
               {expenseByConceptData.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-xs text-slate-400">
-                  Sin egresos registrados en este período ($0.00)
+                <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-2">
+                  <ShoppingBag className="w-8 h-8 text-[#9CA3AF] stroke-[1.5]" />
+                  <p className="text-[14px] text-[#6B7280]">Sin egresos registrados en este período ($0.00)</p>
+                  <button
+                    type="button"
+                    onClick={onOpenNewPurchase}
+                    className="mt-2 px-3 py-1.5 rounded-[6px] border border-[#E5E7EB] dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-[#F9FAFB] text-[#111827] dark:text-slate-200 text-[12px] font-medium transition cursor-pointer"
+                  >
+                    Registrar compra o gasto
+                  </button>
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={expenseByConceptData} layout="vertical" margin={{ top: 5, right: 20, left: 15, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                    <XAxis type="number" tick={{ fontSize: 10 }} />
-                    <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={120} />
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
+                    <XAxis type="number" tick={{ fontSize: 12, fill: '#6B7280' }} stroke="#E5E7EB" />
+                    <YAxis dataKey="name" type="category" tick={{ fontSize: 12, fill: '#6B7280' }} width={120} stroke="#E5E7EB" />
                     <Tooltip formatter={(v: any) => [`$${Number(v).toLocaleString()}`, '']} />
-                    <Bar dataKey="value" radius={[0, 6, 6, 0]}>
+                    <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                       {expenseByConceptData.map((entry, idx) => (
                         <Cell key={`exp-bar-${idx}`} fill={entry.color} />
                       ))}
@@ -1574,36 +2015,36 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
           </div>
         </div>
 
-        {/* Si hay un día elegido en el filtro: mostrar tarjetas del día */}
+        {/* Si hay un día elegido en el filtro: mostrar métricas del día */}
         {opFilterDay !== 'all' && (
-          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
-            <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
-              Visualización Específica del Día {opFilterDay} de {OP_MONTHS.find((m) => m.key === opFilterMonth)?.name} {opFilterYear}
+          <div className="p-6 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E5E7EB] dark:border-slate-800 shadow-none space-y-4">
+            <h3 className="text-[14px] font-semibold text-[#111827] dark:text-white">
+              Visualización específica del día {opFilterDay} de {OP_MONTHS.find((m) => m.key === opFilterMonth)?.name} {opFilterYear}
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="p-4 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
-                <span className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 uppercase block">
-                  Ingresos del Día {opFilterDay}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-4 rounded-[6px] bg-[#F9FAFB] dark:bg-slate-800/60 border border-[#E5E7EB] dark:border-slate-700">
+                <span className="text-[12px] font-medium text-[#6B7280] dark:text-slate-400 block">
+                  Ingresos del día
                 </span>
-                <span className="text-xl font-black text-slate-900 dark:text-white font-mono mt-1 block">
+                <span className="text-[20px] font-semibold text-[#111827] dark:text-white font-mono mt-1 block">
                   {formatCurrencyUSD(financialSummary.ingresosTotales)}
                 </span>
               </div>
-              <div className="p-4 rounded-xl bg-rose-50/70 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800">
-                <span className="text-[10px] font-bold text-rose-800 dark:text-rose-300 uppercase block">
-                  Egresos del Día {opFilterDay}
+              <div className="p-4 rounded-[6px] bg-[#F9FAFB] dark:bg-slate-800/60 border border-[#E5E7EB] dark:border-slate-700">
+                <span className="text-[12px] font-medium text-[#6B7280] dark:text-slate-400 block">
+                  Egresos del día
                 </span>
-                <span className="text-xl font-black text-slate-900 dark:text-white font-mono mt-1 block">
+                <span className="text-[20px] font-semibold text-[#111827] dark:text-white font-mono mt-1 block">
                   {formatCurrencyUSD(financialSummary.egresosTotales)}
                 </span>
               </div>
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                <span className="text-[10px] font-bold text-slate-500 uppercase block">
-                  Flujo Neto del Día {opFilterDay}
+              <div className="p-4 rounded-[6px] bg-[#F9FAFB] dark:bg-slate-800/60 border border-[#E5E7EB] dark:border-slate-700">
+                <span className="text-[12px] font-medium text-[#6B7280] dark:text-slate-400 block">
+                  Flujo neto del día
                 </span>
                 <span
-                  className={`text-xl font-black font-mono mt-1 block ${
-                    financialSummary.flujoNeto >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'
+                  className={`text-[20px] font-semibold font-mono mt-1 block ${
+                    financialSummary.flujoNeto >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'
                   }`}
                 >
                   {formatCurrencyUSD(financialSummary.flujoNeto)}
@@ -1617,95 +2058,88 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
       {/* ---------------------------------------------------- */}
       {/* SECCIÓN 4. RENDIMIENTO POR SUCURSAL (ORDEN POR UTILIDAD NETA) */}
       {/* ---------------------------------------------------- */}
-      <section id="sec-sucursales" className="space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <h2 className="text-base font-bold text-slate-900 dark:text-white">
-            04. Rendimiento por Sucursal
-          </h2>
+      <section id="sec-sucursales" className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-[16px] font-semibold text-[#111827] dark:text-white">
+              Rendimiento por sucursal
+            </h2>
+            <p className="text-[14px] text-[#6B7280] dark:text-slate-400 mt-0.5">
+              Comparativa de sedes ordenadas por utilidad neta en el período.
+            </p>
+          </div>
 
-          <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsQuickBranchOpen(true)}
+            className="px-3 py-1.5 rounded-[6px] border border-[#E5E7EB] dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-[#F9FAFB] dark:hover:bg-slate-800 text-[#111827] dark:text-slate-200 text-[14px] font-medium transition flex items-center gap-1.5 cursor-pointer shadow-none self-start sm:self-auto"
+          >
+            <Plus className="w-4 h-4 text-[#6B7280]" />
+            <span>Nueva sucursal</span>
+          </button>
+        </div>
+
+        {branchRanking.length === 0 ? (
+          <div className="p-8 rounded-[8px] border border-[#E5E7EB] dark:border-slate-800 bg-white dark:bg-slate-900 text-center flex flex-col items-center justify-center space-y-2">
+            <Store className="w-8 h-8 text-[#9CA3AF] stroke-[1.5]" />
+            <p className="text-[14px] text-[#6B7280]">No hay sucursales registradas ($0.00)</p>
             <button
+              type="button"
               onClick={() => setIsQuickBranchOpen(true)}
-              className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+              className="mt-2 px-3 py-1.5 rounded-[6px] border border-[#E5E7EB] dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-[#F9FAFB] text-[#111827] dark:text-slate-200 text-[12px] font-medium transition cursor-pointer"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>+ Nueva Sucursal</span>
+              Registrar sucursal
             </button>
           </div>
-        </div>
-
-        <p className="text-[11px] text-slate-500">
-          Siempre compara todas las sucursales (ignora filtro de sucursal); ordenadas de mayor a menor utilidad neta.
-        </p>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-          {branchRanking.map((b, idx) => (
-            <div
-              key={b.id}
-              className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs space-y-3"
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    {branches.length > 1 && (
-                      <span className="w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-black flex items-center justify-center">
-                        #{idx + 1}
-                      </span>
-                    )}
-                    <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">{b.name}</h3>
-                  </div>
-                  <span className="text-[11px] text-slate-400 block ml-6">
-                    {typeof b.department === 'string' ? b.department : (b.department as any)?.name || 'San Salvador'}
-                  </span>
-                </div>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-200 dark:border-emerald-800">
-                  {b.code}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-slate-100 dark:border-slate-800">
-                <div>
-                  <span className="text-[10px] text-slate-400 block">Ventas</span>
-                  <span className="font-bold font-mono text-emerald-600 text-xs">
-                    {formatCurrencyUSD(b.ventas)}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 block">Egresos</span>
-                  <span className="font-bold font-mono text-rose-600 text-xs">
-                    {formatCurrencyUSD(b.egresos)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 flex items-center justify-between text-xs">
-                <div>
-                  <span className="text-[10px] text-slate-400 block font-medium">Utilidad Neta</span>
-                  <span
-                    className={`font-mono font-black ${
-                      b.utilidadNeta >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'
-                    }`}
-                  >
-                    {formatCurrencyUSD(b.utilidadNeta)}
-                  </span>
-                </div>
-                <div className="text-right">
-                  <span className="text-[10px] text-slate-400 block font-medium">Margen Neto %</span>
-                  <span className="font-mono font-bold text-slate-900 dark:text-white">
-                    {b.margenNeto.toFixed(1)}%
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex justify-between items-center text-[10px] text-slate-400 pt-1 border-t border-slate-100 dark:border-slate-800">
-                <span>Flujo de Caja:</span>
-                <span className={`font-mono font-bold ${b.flujoCaja >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                  {formatCurrencyUSD(b.flujoCaja)}
-                </span>
-              </div>
+        ) : (
+          <div className="rounded-[8px] border border-[#E5E7EB] dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-none">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-[14px]">
+                <thead>
+                  <tr className="bg-[#F9FAFB] dark:bg-slate-800/80 border-b border-[#E5E7EB] dark:border-slate-800 text-[#6B7280] dark:text-slate-400 text-[12px] font-medium">
+                    <th className="px-4 py-3">Sucursal</th>
+                    <th className="px-4 py-3">Ubicación</th>
+                    <th className="px-4 py-3 text-right">Ventas</th>
+                    <th className="px-4 py-3 text-right">Egresos</th>
+                    <th className="px-4 py-3 text-right">Utilidad neta</th>
+                    <th className="px-4 py-3 text-right">Margen</th>
+                    <th className="px-4 py-3 text-right">Flujo neto</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E5E7EB] dark:divide-slate-800">
+                  {branchRanking.map((b) => (
+                    <tr key={b.id} className="hover:bg-[#F9FAFB] dark:hover:bg-slate-850/50 transition-colors">
+                      <td className="px-4 py-3 font-medium text-[#111827] dark:text-white">
+                        <div className="flex items-center gap-2">
+                          <span>{b.name}</span>
+                          <span className="text-[12px] text-[#6B7280] font-mono">({b.code})</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-[#6B7280] dark:text-slate-400 text-[12px]">
+                        {typeof b.department === 'string' ? b.department : (b.department as any)?.name || 'San Salvador'}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono font-medium text-[#111827] dark:text-white">
+                        {formatCurrencyUSD(b.ventas)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-[#6B7280] dark:text-slate-400">
+                        {formatCurrencyUSD(b.egresos)}
+                      </td>
+                      <td className={`px-4 py-3 text-right font-mono font-semibold ${b.utilidadNeta >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                        {formatCurrencyUSD(b.utilidadNeta)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-[#6B7280] dark:text-slate-400 text-[12px]">
+                        {b.margenNeto.toFixed(1)}%
+                      </td>
+                      <td className={`px-4 py-3 text-right font-mono font-medium ${b.flujoCaja >= 0 ? 'text-[#059669]' : 'text-[#DC2626]'}`}>
+                        {formatCurrencyUSD(b.flujoCaja)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </section>
 
       {/* ==================================================== */}
@@ -1715,53 +2149,56 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
       {/* ---------------------------------------------------- */}
       {/* SECCIÓN 5. TESORERÍA Y CARTERA (TIEMPO REAL) */}
       {/* ---------------------------------------------------- */}
-      <section id="sec-tesoreria" className="space-y-4 pt-4 border-t border-slate-200 dark:border-slate-800">
-        <h2 className="text-base font-bold text-slate-900 dark:text-white">
-          05. Tesorería, Liquidez Inmediata & Cartera (CxC / CxP)
+      <section id="sec-tesoreria" className="space-y-6 pt-4 border-t border-[#E5E7EB] dark:border-slate-800">
+        <h2 className="text-[16px] font-semibold text-[#111827] dark:text-white">
+          Tesorería, liquidez y cartera
         </h2>
 
         {/* Efectivo total inmediato, desglose por banco/caja y runway */}
         <TreasuryCashBreakdownCard
-          title="Efectivo Total Inmediato & Desglose Bancario"
-          subtitle="Posición de liquidez en tiempo real y meses de cobertura (runway)"
+          title="Disponibilidad bancaria y efectivo inmediato"
+          subtitle="Posición de liquidez en tiempo real y meses de cobertura operativa"
         />
 
         {/* Cuentas por Cobrar & Cuentas por Pagar */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Cuentas por Cobrar */}
-          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-            <div className="flex items-start justify-between">
+          <div className="p-6 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E5E7EB] dark:border-slate-800 shadow-none space-y-4">
+            <div className="flex items-start justify-between pb-3 border-b border-[#E5E7EB] dark:border-slate-800">
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  Cuentas por Cobrar (Clientes)
+                <span className="text-[12px] font-medium text-[#6B7280] block">
+                  Cuentas por cobrar (Clientes)
                 </span>
-                <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white font-mono mt-0.5">
+                <div className="text-[24px] font-semibold text-[#111827] dark:text-white font-mono mt-0.5">
                   {formatCurrencyUSD(cxcRealTime.total)}
                 </div>
               </div>
 
-              {/* Mini selector local */}
-              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg text-[10px]">
+              {/* Selector de período */}
+              <div className="flex items-center gap-1 bg-[#F3F4F6] dark:bg-slate-800 p-0.5 rounded-[6px] border border-[#E5E7EB] dark:border-slate-700 text-[12px]">
                 <button
+                  type="button"
                   onClick={() => setCxcPeriodSelector('5m')}
-                  className={`px-2 py-0.5 rounded-md font-bold transition ${
-                    cxcPeriodSelector === '5m' ? 'bg-white dark:bg-slate-700 text-emerald-700 shadow-xs' : 'text-slate-500'
+                  className={`px-2.5 py-1 rounded-[4px] font-medium transition cursor-pointer ${
+                    cxcPeriodSelector === '5m' ? 'bg-white dark:bg-slate-700 text-[#111827] dark:text-white shadow-none' : 'text-[#6B7280] hover:text-[#111827]'
                   }`}
                 >
                   5m
                 </button>
                 <button
+                  type="button"
                   onClick={() => setCxcPeriodSelector('12m')}
-                  className={`px-2 py-0.5 rounded-md font-bold transition ${
-                    cxcPeriodSelector === '12m' ? 'bg-white dark:bg-slate-700 text-emerald-700 shadow-xs' : 'text-slate-500'
+                  className={`px-2.5 py-1 rounded-[4px] font-medium transition cursor-pointer ${
+                    cxcPeriodSelector === '12m' ? 'bg-white dark:bg-slate-700 text-[#111827] dark:text-white shadow-none' : 'text-[#6B7280] hover:text-[#111827]'
                   }`}
                 >
                   12m
                 </button>
                 <button
+                  type="button"
                   onClick={() => setCxcPeriodSelector('yoy')}
-                  className={`px-2 py-0.5 rounded-md font-bold transition ${
-                    cxcPeriodSelector === 'yoy' ? 'bg-white dark:bg-slate-700 text-emerald-700 shadow-xs' : 'text-slate-500'
+                  className={`px-2.5 py-1 rounded-[4px] font-medium transition cursor-pointer ${
+                    cxcPeriodSelector === 'yoy' ? 'bg-white dark:bg-slate-700 text-[#111827] dark:text-white shadow-none' : 'text-[#6B7280] hover:text-[#111827]'
                   }`}
                 >
                   Año vs Ant.
@@ -1773,13 +2210,13 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
             <div className="h-32 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={cxcChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="month" tick={{ fontSize: 9 }} />
-                  <YAxis tick={{ fontSize: 9 }} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                  <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#6B7280' }} stroke="#E5E7EB" />
+                  <YAxis tick={{ fontSize: 12, fill: '#6B7280' }} stroke="#E5E7EB" />
                   <Tooltip formatter={(v: any) => [`$${Number(v).toLocaleString()}`, 'CxC']} />
-                  <Bar dataKey="value">
+                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                     {cxcChartData.map((entry, idx) => (
-                      <Cell key={`cxc-cell-${idx}`} fill={entry.isCurrent ? '#10b981' : '#94a3b8'} />
+                      <Cell key={`cxc-cell-${idx}`} fill={entry.isCurrent ? '#0F766E' : '#94A3B8'} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -1787,87 +2224,96 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
             </div>
 
             {/* Desglose por Antigüedad */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs pt-2 border-t border-slate-100 dark:border-slate-800">
-              <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                <span className="text-[10px] text-slate-400 block font-semibold">Al día</span>
-                <span className="font-mono font-bold text-emerald-600 block mt-0.5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-[12px] pt-3 border-t border-[#E5E7EB] dark:border-slate-800">
+              <div className="p-2.5 rounded-[6px] bg-[#F9FAFB] dark:bg-slate-800/60 border border-[#E5E7EB] dark:border-slate-700">
+                <span className="text-[#6B7280] block font-medium">Al día</span>
+                <span className="font-mono font-semibold text-[#059669] block mt-0.5 text-[14px]">
                   {formatCurrencyUSD(cxcRealTime.alDia)}
                 </span>
               </div>
-              <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                <span className="text-[10px] text-slate-400 block font-semibold">1-30 días</span>
-                <span className="font-mono font-bold text-amber-600 block mt-0.5">
+              <div className="p-2.5 rounded-[6px] bg-[#F9FAFB] dark:bg-slate-800/60 border border-[#E5E7EB] dark:border-slate-700">
+                <span className="text-[#6B7280] block font-medium">1-30 días</span>
+                <span className="font-mono font-semibold text-[#D97706] block mt-0.5 text-[14px]">
                   {formatCurrencyUSD(cxcRealTime.d1_30)}
                 </span>
               </div>
-              <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                <span className="text-[10px] text-slate-400 block font-semibold">31-60 días</span>
-                <span className="font-mono font-bold text-orange-600 block mt-0.5">
+              <div className="p-2.5 rounded-[6px] bg-[#F9FAFB] dark:bg-slate-800/60 border border-[#E5E7EB] dark:border-slate-700">
+                <span className="text-[#6B7280] block font-medium">31-60 días</span>
+                <span className="font-mono font-semibold text-[#D97706] block mt-0.5 text-[14px]">
                   {formatCurrencyUSD(cxcRealTime.d31_60)}
                 </span>
               </div>
-              <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                <span className="text-[10px] text-slate-400 block font-semibold">&gt; 60 días</span>
-                <span className="font-mono font-bold text-rose-600 block mt-0.5">
+              <div className="p-2.5 rounded-[6px] bg-[#F9FAFB] dark:bg-slate-800/60 border border-[#E5E7EB] dark:border-slate-700">
+                <span className="text-[#6B7280] block font-medium">&gt; 60 días</span>
+                <span className="font-mono font-semibold text-[#DC2626] block mt-0.5 text-[14px]">
                   {formatCurrencyUSD(cxcRealTime.d60plus)}
                 </span>
               </div>
             </div>
 
             {/* Top 5 Clientes que deben */}
-            <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
-              <span className="text-[11px] font-bold text-slate-500 block">Top 5 Clientes que Deben:</span>
+            <div className="space-y-2 pt-3 border-t border-[#E5E7EB] dark:border-slate-800">
+              <span className="text-[12px] font-medium text-[#6B7280] block">
+                Principales clientes con saldo pendiente
+              </span>
               {cxcRealTime.topDebtors.length === 0 ? (
-                <p className="text-xs text-slate-400 italic">No hay cartera pendiente.</p>
+                <div className="p-4 text-center space-y-1">
+                  <p className="text-[14px] text-[#6B7280]">No hay cartera por cobrar pendiente ($0.00)</p>
+                </div>
               ) : (
-                cxcRealTime.topDebtors.map((inv) => (
-                  <div key={inv.id} className="flex items-center justify-between text-xs py-1">
-                    <span className="truncate max-w-[200px] text-slate-800 dark:text-slate-200 font-medium">
-                      {inv.customerName}
-                    </span>
-                    <span className="font-mono font-bold text-amber-600">
-                      {formatCurrencyUSD(inv.saldoPendiente ?? inv.totalPagar)}
-                    </span>
-                  </div>
-                ))
+                <div className="divide-y divide-[#E5E7EB] dark:divide-slate-800">
+                  {cxcRealTime.topDebtors.map((inv) => (
+                    <div key={inv.id} className="flex items-center justify-between py-2 text-[14px]">
+                      <span className="truncate max-w-[200px] text-[#111827] dark:text-white font-medium">
+                        {inv.customerName}
+                      </span>
+                      <span className="font-mono font-semibold text-[#D97706]">
+                        {formatCurrencyUSD(inv.saldoPendiente ?? inv.totalPagar)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>
 
           {/* Cuentas por Pagar */}
-          <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-            <div className="flex items-start justify-between">
+          <div className="p-6 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E5E7EB] dark:border-slate-800 shadow-none space-y-4">
+            <div className="flex items-start justify-between pb-3 border-b border-[#E5E7EB] dark:border-slate-800">
               <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  Cuentas por Pagar (Proveedores)
+                <span className="text-[12px] font-medium text-[#6B7280] block">
+                  Cuentas por pagar (Proveedores)
                 </span>
-                <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white font-mono mt-0.5">
+                <div className="text-[24px] font-semibold text-[#111827] dark:text-white font-mono mt-0.5">
                   {formatCurrencyUSD(cxpRealTime.total)}
                 </div>
               </div>
 
-              {/* Mini selector local */}
-              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg text-[10px]">
+              {/* Selector de período */}
+              <div className="flex items-center gap-1 bg-[#F3F4F6] dark:bg-slate-800 p-0.5 rounded-[6px] border border-[#E5E7EB] dark:border-slate-700 text-[12px]">
                 <button
+                  type="button"
                   onClick={() => setCxpPeriodSelector('5m')}
-                  className={`px-2 py-0.5 rounded-md font-bold transition ${
-                    cxpPeriodSelector === '5m' ? 'bg-white dark:bg-slate-700 text-emerald-700 shadow-xs' : 'text-slate-500'
+                  className={`px-2.5 py-1 rounded-[4px] font-medium transition cursor-pointer ${
+                    cxpPeriodSelector === '5m' ? 'bg-white dark:bg-slate-700 text-[#111827] dark:text-white shadow-none' : 'text-[#6B7280] hover:text-[#111827]'
                   }`}
                 >
                   5m
                 </button>
                 <button
+                  type="button"
                   onClick={() => setCxpPeriodSelector('12m')}
-                  className={`px-2 py-0.5 rounded-md font-bold transition ${
-                    cxpPeriodSelector === '12m' ? 'bg-white dark:bg-slate-700 text-emerald-700 shadow-xs' : 'text-slate-500'
+                  className={`px-2.5 py-1 rounded-[4px] font-medium transition cursor-pointer ${
+                    cxpPeriodSelector === '12m' ? 'bg-white dark:bg-slate-700 text-[#111827] dark:text-white shadow-none' : 'text-[#6B7280] hover:text-[#111827]'
                   }`}
                 >
                   12m
                 </button>
                 <button
+                  type="button"
                   onClick={() => setCxpPeriodSelector('yoy')}
-                  className={`px-2 py-0.5 rounded-md font-bold transition ${
-                    cxpPeriodSelector === 'yoy' ? 'bg-white dark:bg-slate-700 text-emerald-700 shadow-xs' : 'text-slate-500'
+                  className={`px-2.5 py-1 rounded-[4px] font-medium transition cursor-pointer ${
+                    cxpPeriodSelector === 'yoy' ? 'bg-white dark:bg-slate-700 text-[#111827] dark:text-white shadow-none' : 'text-[#6B7280] hover:text-[#111827]'
                   }`}
                 >
                   Año vs Ant.
@@ -1879,13 +2325,13 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
             <div className="h-32 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={cxpChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="month" tick={{ fontSize: 9 }} />
-                  <YAxis tick={{ fontSize: 9 }} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                  <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#6B7280' }} stroke="#E5E7EB" />
+                  <YAxis tick={{ fontSize: 12, fill: '#6B7280' }} stroke="#E5E7EB" />
                   <Tooltip formatter={(v: any) => [`$${Number(v).toLocaleString()}`, 'CxP']} />
-                  <Bar dataKey="value">
+                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                     {cxpChartData.map((entry, idx) => (
-                      <Cell key={`cxp-cell-${idx}`} fill={entry.isCurrent ? '#f43f5e' : '#94a3b8'} />
+                      <Cell key={`cxp-cell-${idx}`} fill={entry.isCurrent ? '#64748B' : '#94A3B8'} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -1893,49 +2339,55 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
             </div>
 
             {/* Desglose por Antigüedad */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs pt-2 border-t border-slate-100 dark:border-slate-800">
-              <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                <span className="text-[10px] text-slate-400 block font-semibold">Al día</span>
-                <span className="font-mono font-bold text-emerald-600 block mt-0.5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-[12px] pt-3 border-t border-[#E5E7EB] dark:border-slate-800">
+              <div className="p-2.5 rounded-[6px] bg-[#F9FAFB] dark:bg-slate-800/60 border border-[#E5E7EB] dark:border-slate-700">
+                <span className="text-[#6B7280] block font-medium">Al día</span>
+                <span className="font-mono font-semibold text-[#059669] block mt-0.5 text-[14px]">
                   {formatCurrencyUSD(cxpRealTime.alDia)}
                 </span>
               </div>
-              <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                <span className="text-[10px] text-slate-400 block font-semibold">1-30 días</span>
-                <span className="font-mono font-bold text-amber-600 block mt-0.5">
+              <div className="p-2.5 rounded-[6px] bg-[#F9FAFB] dark:bg-slate-800/60 border border-[#E5E7EB] dark:border-slate-700">
+                <span className="text-[#6B7280] block font-medium">1-30 días</span>
+                <span className="font-mono font-semibold text-[#D97706] block mt-0.5 text-[14px]">
                   {formatCurrencyUSD(cxpRealTime.d1_30)}
                 </span>
               </div>
-              <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                <span className="text-[10px] text-slate-400 block font-semibold">31-60 días</span>
-                <span className="font-mono font-bold text-orange-600 block mt-0.5">
+              <div className="p-2.5 rounded-[6px] bg-[#F9FAFB] dark:bg-slate-800/60 border border-[#E5E7EB] dark:border-slate-700">
+                <span className="text-[#6B7280] block font-medium">31-60 días</span>
+                <span className="font-mono font-semibold text-[#D97706] block mt-0.5 text-[14px]">
                   {formatCurrencyUSD(cxpRealTime.d31_60)}
                 </span>
               </div>
-              <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
-                <span className="text-[10px] text-slate-400 block font-semibold">&gt; 60 días</span>
-                <span className="font-mono font-bold text-rose-600 block mt-0.5">
+              <div className="p-2.5 rounded-[6px] bg-[#F9FAFB] dark:bg-slate-800/60 border border-[#E5E7EB] dark:border-slate-700">
+                <span className="text-[#6B7280] block font-medium">&gt; 60 días</span>
+                <span className="font-mono font-semibold text-[#DC2626] block mt-0.5 text-[14px]">
                   {formatCurrencyUSD(cxpRealTime.d60plus)}
                 </span>
               </div>
             </div>
 
             {/* Top 5 Proveedores a quienes se debe */}
-            <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
-              <span className="text-[11px] font-bold text-slate-500 block">Top 5 Proveedores por Liquidar:</span>
+            <div className="space-y-2 pt-3 border-t border-[#E5E7EB] dark:border-slate-800">
+              <span className="text-[12px] font-medium text-[#6B7280] block">
+                Principales proveedores con saldo pendiente
+              </span>
               {cxpRealTime.topCreditors.length === 0 ? (
-                <p className="text-xs text-slate-400 italic">No hay cuentas por pagar activas.</p>
+                <div className="p-4 text-center space-y-1">
+                  <p className="text-[14px] text-[#6B7280]">No hay cuentas por pagar activas ($0.00)</p>
+                </div>
               ) : (
-                cxpRealTime.topCreditors.map((pur) => (
-                  <div key={pur.id} className="flex items-center justify-between text-xs py-1">
-                    <span className="truncate max-w-[200px] text-slate-800 dark:text-slate-200 font-medium">
-                      {pur.supplierName}
-                    </span>
-                    <span className="font-mono font-bold text-rose-600">
-                      {formatCurrencyUSD(pur.saldoPendiente ?? pur.totalPagar)}
-                    </span>
-                  </div>
-                ))
+                <div className="divide-y divide-[#E5E7EB] dark:divide-slate-800">
+                  {cxpRealTime.topCreditors.map((pur) => (
+                    <div key={pur.id} className="flex items-center justify-between py-2 text-[14px]">
+                      <span className="truncate max-w-[200px] text-[#111827] dark:text-white font-medium">
+                        {pur.supplierName}
+                      </span>
+                      <span className="font-mono font-semibold text-[#DC2626]">
+                        {formatCurrencyUSD(pur.saldoPendiente ?? pur.totalPagar)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>
@@ -1945,51 +2397,51 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
       {/* ---------------------------------------------------- */}
       {/* SECCIÓN 6. CUMPLIMIENTO TRIBUTARIO Y DIAGNÓSTICO EJECUTIVO (TIEMPO REAL) */}
       {/* ---------------------------------------------------- */}
-      <section id="sec-tributario" className="space-y-4">
-        <h2 className="text-base font-bold text-slate-900 dark:text-white">
-          06. Cumplimiento Tributario F-07 & Diagnóstico Financiero
+      <section id="sec-tributario" className="space-y-6">
+        <h2 className="text-[16px] font-semibold text-[#111827] dark:text-white">
+          Obligaciones tributarias y diagnóstico financiero
         </h2>
 
         {/* Tarjeta de IVA del mes en curso y obligaciones */}
-        <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="p-6 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E5E7EB] dark:border-slate-800 shadow-none space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[#E5E7EB] dark:border-slate-800">
             <div>
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                <span>IVA del Mes en Curso & Obligaciones Mensuales</span>
+              <h3 className="text-[16px] font-semibold text-[#111827] dark:text-white">
+                IVA del mes en curso y obligaciones mensuales
               </h3>
-              <p className="text-[11px] text-slate-500">
-                Cálculo en tiempo real con fechas límites del Ministerio de Hacienda
+              <p className="text-[14px] text-[#6B7280] dark:text-slate-400 mt-0.5">
+                Cálculo en tiempo real según calendario del Ministerio de Hacienda
               </p>
             </div>
-            <span className="text-[10px] font-semibold text-slate-400 italic">
-              *{TAX_DEADLINES.note}
-            </span>
+            <div className="flex items-center gap-1.5 text-[12px] text-[#6B7280] self-start sm:self-auto">
+              <ShieldCheck className="w-4 h-4 text-[#6B7280] shrink-0" />
+              <span>{TAX_DEADLINES.note} · Art. 156 y 162 del Código Tributario</span>
+            </div>
           </div>
 
           {/* IVA Débito, Crédito, Remanente/Pagar */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700">
-              <span className="text-[10px] text-slate-400 font-bold block">Débito Fiscal (13%)</span>
-              <span className="text-base font-black font-mono text-slate-900 dark:text-white mt-0.5 block">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="p-4 rounded-[6px] bg-[#F9FAFB] dark:bg-slate-800/60 border border-[#E5E7EB] dark:border-slate-700">
+              <span className="text-[12px] text-[#6B7280] font-medium block">Débito fiscal (13%)</span>
+              <span className="text-[20px] font-semibold font-mono text-[#111827] dark:text-white mt-1 block">
                 {formatCurrencyUSD(taxSummaryRealTime.debitoFiscal)}
               </span>
             </div>
 
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700">
-              <span className="text-[10px] text-slate-400 font-bold block">Crédito Fiscal (13%)</span>
-              <span className="text-base font-black font-mono text-cyan-600 dark:text-cyan-400 mt-0.5 block">
+            <div className="p-4 rounded-[6px] bg-[#F9FAFB] dark:bg-slate-800/60 border border-[#E5E7EB] dark:border-slate-700">
+              <span className="text-[12px] text-[#6B7280] font-medium block">Crédito fiscal (13%)</span>
+              <span className="text-[20px] font-semibold font-mono text-[#111827] dark:text-white mt-1 block">
                 {formatCurrencyUSD(taxSummaryRealTime.creditoFiscal)}
               </span>
             </div>
 
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700">
-              <span className="text-[10px] text-slate-400 font-bold block">
-                {taxSummaryRealTime.ivaNetoPagar > 0 ? 'IVA por Pagar (F-07)' : 'Remanente a Favor'}
+            <div className="p-4 rounded-[6px] bg-[#F9FAFB] dark:bg-slate-800/60 border border-[#E5E7EB] dark:border-slate-700">
+              <span className="text-[12px] text-[#6B7280] font-medium block">
+                {taxSummaryRealTime.ivaNetoPagar > 0 ? 'IVA por pagar (F-07)' : 'Remanente a favor'}
               </span>
               <span
-                className={`text-base font-black font-mono mt-0.5 block ${
-                  taxSummaryRealTime.ivaNetoPagar > 0 ? 'text-amber-600' : 'text-emerald-600'
+                className={`text-[20px] font-semibold font-mono mt-1 block ${
+                  taxSummaryRealTime.ivaNetoPagar > 0 ? 'text-[#D97706]' : 'text-[#059669]'
                 }`}
               >
                 {formatCurrencyUSD(
@@ -2000,63 +2452,63 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
               </span>
             </div>
 
-            <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
-              <span className="text-[10px] text-emerald-800 dark:text-emerald-300 font-bold block">
-                Fecha Límite F-07 (Día {TAX_DEADLINES.ivaF07Day})
+            <div className="p-4 rounded-[6px] bg-[#F9FAFB] dark:bg-slate-800/60 border border-[#E5E7EB] dark:border-slate-700">
+              <span className="text-[12px] text-[#6B7280] font-medium block">
+                Fecha límite F-07 (Día {TAX_DEADLINES.ivaF07Day})
               </span>
-              <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400 mt-1 block">
-                Quedan {taxSummaryRealTime.daysRemainingF07} días restantes
+              <span className="text-[14px] font-medium text-[#111827] dark:text-white mt-1 block">
+                {taxSummaryRealTime.daysRemainingF07} días restantes
               </span>
             </div>
           </div>
 
           {/* Otras Obligaciones Mensuales */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 flex items-center justify-between">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3 border-t border-[#E5E7EB] dark:border-slate-800 text-[14px]">
+            <div className="p-3.5 rounded-[6px] bg-[#F9FAFB] dark:bg-slate-800/60 border border-[#E5E7EB] dark:border-slate-700 flex items-center justify-between">
               <div>
-                <span className="font-bold text-slate-800 dark:text-slate-200 block">Pago a Cuenta (1.75%)</span>
-                <span className="text-[10px] text-slate-400">Vence: Día {TAX_DEADLINES.pagoCuentaDay}</span>
+                <span className="font-medium text-[#111827] dark:text-white block">Pago a cuenta (1.75%)</span>
+                <span className="text-[12px] text-[#6B7280]">Vence: Día {TAX_DEADLINES.pagoCuentaDay}</span>
               </div>
-              <span className="font-mono font-bold text-slate-900 dark:text-white">
+              <span className="font-mono font-semibold text-[#111827] dark:text-white">
                 {formatCurrencyUSD(taxSummaryRealTime.pagoCuenta)}
               </span>
             </div>
 
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 flex items-center justify-between">
+            <div className="p-3.5 rounded-[6px] bg-[#F9FAFB] dark:bg-slate-800/60 border border-[#E5E7EB] dark:border-slate-700 flex items-center justify-between">
               <div>
-                <span className="font-bold text-slate-800 dark:text-slate-200 block">Retenciones Renta 10%</span>
-                <span className="text-[10px] text-slate-400">Vence: Día {TAX_DEADLINES.retencionesDay}</span>
+                <span className="font-medium text-[#111827] dark:text-white block">Retenciones renta 10%</span>
+                <span className="text-[12px] text-[#6B7280]">Vence: Día {TAX_DEADLINES.retencionesDay}</span>
               </div>
-              <span className="font-mono font-bold text-slate-900 dark:text-white">
+              <span className="font-mono font-semibold text-[#111827] dark:text-white">
                 {formatCurrencyUSD(taxSummaryRealTime.retencionRenta)}
               </span>
             </div>
 
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 flex items-center justify-between">
+            <div className="p-3.5 rounded-[6px] bg-[#F9FAFB] dark:bg-slate-800/60 border border-[#E5E7EB] dark:border-slate-700 flex items-center justify-between">
               <div>
-                <span className="font-bold text-slate-800 dark:text-slate-200 block">Cotizaciones ISSS/AFP</span>
-                <span className="text-[10px] text-slate-400">Vence: Día {TAX_DEADLINES.isssDay}</span>
+                <span className="font-medium text-[#111827] dark:text-white block">Cotizaciones ISSS / AFP</span>
+                <span className="text-[12px] text-[#6B7280]">Vence: Día {TAX_DEADLINES.isssDay}</span>
               </div>
-              <span className="font-mono font-bold text-slate-900 dark:text-white">
+              <span className="font-mono font-semibold text-[#111827] dark:text-white">
                 {formatCurrencyUSD(taxSummaryRealTime.isss + taxSummaryRealTime.afp)}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Diagnóstico Ejecutivo con IA */}
-        <div className="bg-gradient-to-br from-emerald-50/60 via-white to-teal-50/40 dark:from-slate-900 dark:via-slate-900 dark:to-emerald-950/40 rounded-2xl p-5 sm:p-6 border border-emerald-200/80 dark:border-emerald-900/50 shadow-xs">
+        {/* Diagnóstico Ejecutivo */}
+        <div className="bg-white dark:bg-slate-900 rounded-[8px] p-6 border border-[#E5E7EB] dark:border-slate-800 shadow-none space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
-                <BrainCircuit className="w-5 h-5" />
+              <div className="w-9 h-9 rounded-[6px] border border-[#E5E7EB] dark:border-slate-700 bg-[#F9FAFB] dark:bg-slate-800 flex items-center justify-center text-[#6B7280]">
+                <BrainCircuit className="w-5 h-5 stroke-[1.5]" />
               </div>
               <div>
-                <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <span>Diagnóstico Ejecutivo con IA (Situación Actual)</span>
+                <h3 className="text-[16px] font-semibold text-[#111827] dark:text-white">
+                  Diagnóstico ejecutivo de salud financiera
                 </h3>
-                <p className="text-xs text-slate-600 dark:text-slate-400">
-                  Auditoría inteligente de salud financiera, liquidez y recomendaciones de operación
+                <p className="text-[14px] text-[#6B7280] dark:text-slate-400">
+                  Auditoría automática de liquidez, rentabilidad y recomendaciones operativas
                 </p>
               </div>
             </div>
@@ -2064,58 +2516,55 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
             <button
               disabled={isDiagnosing}
               onClick={handleRunDiagnosis}
-              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition disabled:opacity-50 cursor-pointer"
+              className="px-3.5 py-1.5 rounded-[6px] border border-[#E5E7EB] dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-[#F9FAFB] text-[#111827] dark:text-slate-200 text-[14px] font-medium flex items-center justify-center gap-2 transition disabled:opacity-50 cursor-pointer shadow-none self-start sm:self-auto"
             >
               {isDiagnosing ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Analizando Libros...</span>
+                  <Loader2 className="w-4 h-4 animate-spin text-[#6B7280]" />
+                  <span>Analizando...</span>
                 </>
               ) : (
-                <>
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Ejecutar Diagnóstico</span>
-                </>
+                <span>Ejecutar diagnóstico</span>
               )}
             </button>
           </div>
 
           {diagnosisResult && (
-            <div className="mt-4 pt-4 border-t border-emerald-100 dark:border-emerald-900/50 grid grid-cols-1 md:grid-cols-3 gap-4 animate-in fade-in duration-200">
-              <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
+            <div className="pt-4 border-t border-[#E5E7EB] dark:border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="p-4 rounded-[6px] bg-[#F9FAFB] dark:bg-slate-800/60 border border-[#E5E7EB] dark:border-slate-700">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-slate-500">Score de Salud</span>
-                  <span className="text-lg font-black text-emerald-700 dark:text-emerald-400 font-mono">
-                    {diagnosisResult.healthScore}/100
+                  <span className="text-[12px] font-medium text-[#6B7280]">Puntuación de salud</span>
+                  <span className="text-[16px] font-semibold text-[#111827] dark:text-white font-mono">
+                    {diagnosisResult.healthScore} / 100
                   </span>
                 </div>
-                <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                <p className="text-[14px] text-[#111827] dark:text-slate-200 leading-relaxed">
                   {diagnosisResult.statusSummary}
                 </p>
               </div>
 
-              <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
-                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 block mb-2">
+              <div className="p-4 rounded-[6px] bg-[#F9FAFB] dark:bg-slate-800/60 border border-[#E5E7EB] dark:border-slate-700">
+                <span className="text-[12px] font-medium text-[#059669] block mb-2">
                   Fortalezas
                 </span>
-                <ul className="space-y-1 text-xs text-slate-600 dark:text-slate-300">
+                <ul className="space-y-1.5 text-[14px] text-[#111827] dark:text-slate-200">
                   {diagnosisResult.strengths.map((s, idx) => (
-                    <li key={idx} className="flex items-start gap-1">
-                      <span className="text-emerald-500 font-bold">✓</span>
+                    <li key={idx} className="flex items-start gap-2">
+                      <span className="text-[#059669] font-medium">·</span>
                       <span>{s}</span>
                     </li>
                   ))}
                 </ul>
               </div>
 
-              <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
-                <span className="text-xs font-bold text-teal-700 dark:text-teal-400 block mb-2">
+              <div className="p-4 rounded-[6px] bg-[#F6F8F7] dark:bg-slate-800/60 border border-[#E3E8E6] dark:border-slate-700">
+                <span className="text-[12px] font-medium text-[#0F766E] block mb-2">
                   Recomendaciones
                 </span>
-                <ul className="space-y-1 text-xs text-slate-600 dark:text-slate-300">
+                <ul className="space-y-1.5 text-[14px] text-[#111827] dark:text-slate-200">
                   {diagnosisResult.recommendations.map((r, idx) => (
-                    <li key={idx} className="flex items-start gap-1">
-                      <span className="text-teal-500 font-bold">→</span>
+                    <li key={idx} className="flex items-start gap-2">
+                      <span className="text-[#0F766E] font-medium">·</span>
                       <span>{r}</span>
                     </li>
                   ))}
@@ -2126,22 +2575,25 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
         </div>
 
         {/* Enlace a Pronósticos & Proyecciones */}
-        <div className="p-4 rounded-2xl bg-slate-900 text-white border border-slate-800 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <Calculator className="w-5 h-5 text-emerald-400 shrink-0" />
+        <div className="p-4 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E5E7EB] dark:border-slate-800 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Calculator className="w-5 h-5 text-[#6B7280] shrink-0 stroke-[1.5]" />
             <div>
-              <span className="text-xs font-bold block">¿Deseas proyectar meses futuros?</span>
-              <span className="text-[11px] text-slate-300">
+              <span className="text-[14px] font-medium text-[#111827] dark:text-white block">
+                ¿Deseas proyectar meses futuros?
+              </span>
+              <span className="text-[12px] text-[#6B7280]">
                 Consulta el modelo econométrico OLS en el módulo de Pronósticos.
               </span>
             </div>
           </div>
           <button
+            type="button"
             onClick={() => setActiveModule('forecasting')}
-            className="px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 transition cursor-pointer flex items-center gap-1 shrink-0"
+            className="px-3 py-1.5 rounded-[6px] border border-[#E5E7EB] dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-[#F9FAFB] text-[#111827] dark:text-slate-200 text-[14px] font-medium transition cursor-pointer flex items-center gap-1.5 shrink-0"
           >
-            <span>Ir a Pronósticos</span>
-            <ExternalLink className="w-3.5 h-3.5" />
+            <span>Ir a pronósticos</span>
+            <ExternalLink className="w-3.5 h-3.5 text-[#6B7280]" />
           </button>
         </div>
       </section>

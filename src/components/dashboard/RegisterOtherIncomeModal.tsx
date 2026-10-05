@@ -102,24 +102,24 @@ export const RegisterOtherIncomeModal: React.FC<RegisterOtherIncomeModalProps> =
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
+      <div className="bg-white dark:bg-slate-900 rounded-[8px] max-w-lg w-full border border-[#E5E7EB] dark:border-slate-800 shadow-none overflow-hidden">
         {/* Header */}
-        <div className="p-5 bg-gradient-to-r from-indigo-700 via-indigo-800 to-slate-900 text-white flex items-center justify-between">
+        <div className="p-5 border-b border-[#E5E7EB] dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center">
-              <DollarSign className="w-5 h-5 text-emerald-300" />
-            </div>
+            <DollarSign className="w-5 h-5 text-[#6B7280] stroke-[1.5]" />
             <div>
-              <h3 className="text-base font-bold">Registrar Otro Ingreso Extraordinario</h3>
-              <p className="text-xs text-indigo-200">
-                Remanentes de Hacienda, Venta de Activo Fijo, Rendimientos
+              <h3 className="text-[16px] font-semibold text-[#111827] dark:text-white">
+                Registrar otro ingreso extraordinario
+              </h3>
+              <p className="text-[12px] text-[#6B7280] dark:text-slate-400">
+                Remanentes tributarios, venta de activo fijo o rendimientos
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-white/80 hover:bg-white/20 transition cursor-pointer"
+            className="p-1 rounded-[6px] text-[#6B7280] hover:text-[#111827] dark:hover:text-white hover:bg-[#F9FAFB] transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -129,13 +129,13 @@ export const RegisterOtherIncomeModal: React.FC<RegisterOtherIncomeModalProps> =
         <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
           {/* Category */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              Tipo / Concepto de Ingreso <span className="text-rose-500">*</span>
+            <label className="block text-[12px] font-medium text-[#111827] dark:text-slate-300 mb-1">
+              Tipo / Concepto de ingreso *
             </label>
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value as OtherIncomeCategory)}
-              className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+              className="w-full text-[14px] rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 p-2 font-medium text-[#111827] dark:text-white outline-none focus:border-[#0F766E]"
             >
               {CATEGORY_OPTIONS.map((cat) => (
                 <option key={cat.value} value={cat.value}>
@@ -143,34 +143,34 @@ export const RegisterOtherIncomeModal: React.FC<RegisterOtherIncomeModalProps> =
                 </option>
               ))}
             </select>
-            <p className="text-[11px] text-slate-500 mt-1">
+            <p className="text-[12px] text-[#6B7280] mt-1">
               {CATEGORY_OPTIONS.find((c) => c.value === category)?.description}
             </p>
           </div>
 
           {/* Description */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              Descripción Detallada <span className="text-rose-500">*</span>
+            <label className="block text-[12px] font-medium text-[#111827] dark:text-slate-300 mb-1">
+              Descripción detallada *
             </label>
             <input
               type="text"
               required
-              placeholder="Ej. Devolución de remanente IVA 2025 resuelto por MH..."
+              placeholder="Ej. Devolución de remanente IVA resuelto por MH..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+              className="w-full text-[14px] rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 p-2 font-medium text-[#111827] dark:text-white outline-none focus:border-[#0F766E]"
             />
           </div>
 
           {/* Amount & Date */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Monto Recibido ($ USD) <span className="text-rose-500">*</span>
+              <label className="block text-[12px] font-medium text-[#111827] dark:text-slate-300 mb-1">
+                Monto recibido ($ USD) *
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">$</span>
+                <span className="absolute left-3 top-2 text-[14px] text-[#6B7280]">$</span>
                 <input
                   type="number"
                   step="0.01"
@@ -179,21 +179,21 @@ export const RegisterOtherIncomeModal: React.FC<RegisterOtherIncomeModalProps> =
                   placeholder="0.00"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                  className="w-full pl-7 text-xs font-mono font-bold rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                  className="w-full pl-7 text-[14px] font-mono font-medium rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-[#111827] dark:text-white outline-none focus:border-[#0F766E]"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Fecha de Acreditación <span className="text-rose-500">*</span>
+              <label className="block text-[12px] font-medium text-[#111827] dark:text-slate-300 mb-1">
+                Fecha de acreditación *
               </label>
               <input
                 type="date"
                 required
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                className="w-full text-[14px] rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 p-2 font-medium text-[#111827] dark:text-white outline-none focus:border-[#0F766E]"
               />
             </div>
           </div>
@@ -201,13 +201,13 @@ export const RegisterOtherIncomeModal: React.FC<RegisterOtherIncomeModalProps> =
           {/* Target Bank Account & Branch */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Cuenta Bancaria / Destino <span className="text-rose-500">*</span>
+              <label className="block text-[12px] font-medium text-[#111827] dark:text-slate-300 mb-1">
+                Cuenta bancaria / Destino *
               </label>
               <select
                 value={targetAccountId}
                 onChange={(e) => setTargetAccountId(e.target.value)}
-                className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                className="w-full text-[14px] rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 p-2 font-medium text-[#111827] dark:text-white outline-none focus:border-[#0F766E]"
               >
                 {bankAccounts.map((b) => (
                   <option key={b.id} value={b.id}>
@@ -218,13 +218,13 @@ export const RegisterOtherIncomeModal: React.FC<RegisterOtherIncomeModalProps> =
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Sucursal / Centro de Costos
+              <label className="block text-[12px] font-medium text-[#111827] dark:text-slate-300 mb-1">
+                Sucursal
               </label>
               <select
                 value={branchId}
                 onChange={(e) => setBranchId(e.target.value)}
-                className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                className="w-full text-[14px] rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 p-2 font-medium text-[#111827] dark:text-white outline-none focus:border-[#0F766E]"
               >
                 {branches.map((b) => (
                   <option key={b.id} value={b.id}>
@@ -238,60 +238,55 @@ export const RegisterOtherIncomeModal: React.FC<RegisterOtherIncomeModalProps> =
           {/* Payment Method & Reference */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Forma de Pago
+              <label className="block text-[12px] font-medium text-[#111827] dark:text-slate-300 mb-1">
+                Forma de pago
               </label>
               <select
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value as any)}
-                className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                className="w-full text-[14px] rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 p-2 font-medium text-[#111827] dark:text-white outline-none focus:border-[#0F766E]"
               >
-                <option value="transferencia">Transferencia Bancaria / SPEI</option>
+                <option value="transferencia">Transferencia bancaria</option>
                 <option value="cheque">Cheque</option>
-                <option value="deposito">Depósito en Ventanilla</option>
-                <option value="efectivo">Efectivo en Caja</option>
+                <option value="deposito">Depósito en ventanilla</option>
+                <option value="efectivo">Efectivo en caja</option>
               </select>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                N° de Referencia / Comprobante
+              <label className="block text-[12px] font-medium text-[#111827] dark:text-slate-300 mb-1">
+                N° de referencia / Comprobante
               </label>
               <input
                 type="text"
-                placeholder="Ej. MH-REF-2026-001"
+                placeholder="Ej. REF-2026-001"
                 value={referenceNumber}
                 onChange={(e) => setReferenceNumber(e.target.value)}
-                className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                className="w-full text-[14px] rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 p-2 font-medium text-[#111827] dark:text-white outline-none focus:border-[#0F766E]"
               />
             </div>
           </div>
 
           {/* Automatic Accounting Note */}
-          <div className="p-3 bg-indigo-50/80 dark:bg-indigo-950/40 rounded-xl border border-indigo-100 dark:border-indigo-900/50 flex items-start gap-2 text-xs text-indigo-900 dark:text-indigo-200">
-            <CheckCircle2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
-            <div>
-              <span className="font-bold">Automatización Contable & Tesorería:</span>
-              <p className="text-[11px] text-indigo-700 dark:text-indigo-300 mt-0.5">
-                Al guardar, se generará la partida contable de ingresos no operacionales, se incrementará el saldo bancario y se reflejará de inmediato en los gráficos ejecutivos.
-              </p>
-            </div>
+          <div className="flex items-center gap-2 text-[12px] text-[#6B7280]">
+            <CheckCircle2 className="w-4 h-4 text-[#059669] shrink-0" />
+            <span>Se registrará automáticamente en contabilidad y en la disponibilidad de tesorería.</span>
           </div>
 
           {/* Buttons */}
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E3E8E6] dark:border-slate-800">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              className="px-3.5 py-1.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-[#F9FAFB] text-[#111827] dark:text-slate-200 text-[14px] font-medium transition cursor-pointer"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold shadow-md shadow-indigo-600/30 transition cursor-pointer"
+              className="px-4 py-1.5 rounded-[6px] bg-[#0F766E] hover:bg-[#115E59] text-white text-[14px] font-medium transition cursor-pointer shadow-none"
             >
-              Guardar Ingreso
+              Guardar ingreso
             </button>
           </div>
         </form>

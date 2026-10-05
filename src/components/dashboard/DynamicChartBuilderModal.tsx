@@ -153,52 +153,52 @@ export const DynamicChartBuilderModal: React.FC<DynamicChartBuilderModalProps> =
   ];
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-3 sm:p-4">
+      <div className="bg-white dark:bg-slate-900 rounded-[8px] shadow-lg border border-[#E3E8E6] dark:border-slate-800 w-full max-w-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-900">
+        <div className="p-4 sm:p-5 border-b border-[#E3E8E6] dark:border-slate-800 flex items-center justify-between bg-[#F6F8F7] dark:bg-slate-900">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-md">
-              <Sparkles className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-[6px] bg-[#0F4C45] text-white flex items-center justify-center">
+              <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              <h3 className="text-[15px] font-semibold text-[#111827] dark:text-white">
                 Crear Widget & Gráfico Dinámico
               </h3>
-              <p className="text-xs text-slate-500">
+              <p className="text-[12px] text-[#6B7280]">
                 Añade visualizadores analíticos personalizados al Dashboard
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200 dark:hover:bg-slate-800 transition"
+            className="p-1.5 rounded-[6px] text-[#6B7280] hover:text-[#111827] hover:bg-[#E3E8E6] dark:hover:bg-slate-800 transition cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Mode Selector */}
-        <div className="p-4 bg-slate-100 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 flex gap-2">
+        <div className="p-3 bg-[#F6F8F7] dark:bg-slate-800/60 border-b border-[#E3E8E6] dark:border-slate-800 flex gap-2">
           <button
             type="button"
             onClick={() => setMode('ai')}
-            className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition ${
+            className={`flex-1 py-1.5 px-3 rounded-[6px] text-[12px] font-semibold flex items-center justify-center gap-2 transition cursor-pointer ${
               mode === 'ai'
-                ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                ? 'bg-white dark:bg-slate-700 text-[#0F766E] dark:text-teal-300 shadow-2xs border border-[#E3E8E6] dark:border-slate-600'
+                : 'text-[#6B7280] hover:text-[#111827] dark:text-slate-400'
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Generar con Inteligencia Artificial (Gemini)</span>
+            <span>Generador Automatizado de Métricas</span>
           </button>
           <button
             type="button"
             onClick={() => setMode('manual')}
-            className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition ${
+            className={`flex-1 py-1.5 px-3 rounded-[6px] text-[12px] font-semibold flex items-center justify-center gap-2 transition cursor-pointer ${
               mode === 'manual'
-                ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                ? 'bg-white dark:bg-slate-700 text-[#0F766E] dark:text-teal-300 shadow-2xs border border-[#E3E8E6] dark:border-slate-600'
+                : 'text-[#6B7280] hover:text-[#111827] dark:text-slate-400'
             }`}
           >
             <BarChart3 className="w-3.5 h-3.5" />
@@ -207,11 +207,11 @@ export const DynamicChartBuilderModal: React.FC<DynamicChartBuilderModalProps> =
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-4">
+        <div className="p-5 space-y-4">
           {mode === 'ai' ? (
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                <label className="block text-[12px] font-semibold text-[#111827] dark:text-slate-300 mb-1.5">
                   ¿Qué información deseas graficar y analizar?
                 </label>
                 <textarea
@@ -219,12 +219,12 @@ export const DynamicChartBuilderModal: React.FC<DynamicChartBuilderModalProps> =
                   value={aiPrompt}
                   onChange={(e) => setAiPrompt(e.target.value)}
                   placeholder="Ej: Genera un gráfico de pastel mostrando la proporción de ventas por género (femenino, masculino, corporativo) y añade 2 insights clave..."
-                  className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  className="w-full text-[13px] rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 p-3 text-[#111827] dark:text-white placeholder:text-[#6B7280] outline-none focus:border-[#0F766E]"
                 />
               </div>
 
               <div>
-                <p className="text-[11px] font-semibold text-slate-500 mb-2">
+                <p className="text-[11px] font-semibold text-[#6B7280] mb-2">
                   Sugerencias rápidas para Startups y Pymes:
                 </p>
                 <div className="flex flex-wrap gap-1.5">
@@ -233,7 +233,7 @@ export const DynamicChartBuilderModal: React.FC<DynamicChartBuilderModalProps> =
                       key={i}
                       type="button"
                       onClick={() => setAiPrompt(sug)}
-                      className="text-[11px] bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-600 dark:hover:text-indigo-300 text-slate-600 dark:text-slate-300 px-2.5 py-1.5 rounded-lg text-left transition border border-slate-200 dark:border-slate-700"
+                      className="text-[11px] bg-[#F6F8F7] dark:bg-slate-800 hover:bg-teal-50 hover:text-[#0F766E] dark:hover:bg-slate-700 text-[#6B7280] dark:text-slate-300 px-2.5 py-1.5 rounded-[6px] text-left transition border border-[#E3E8E6] dark:border-slate-700 cursor-pointer"
                     >
                       ✨ {sug}
                     </button>
@@ -242,7 +242,7 @@ export const DynamicChartBuilderModal: React.FC<DynamicChartBuilderModalProps> =
               </div>
 
               {errorMessage && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs">
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-[6px] text-rose-700 text-[12px]">
                   {errorMessage}
                 </div>
               )}
@@ -250,7 +250,7 @@ export const DynamicChartBuilderModal: React.FC<DynamicChartBuilderModalProps> =
           ) : (
             <div className="space-y-3.5">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-[12px] font-semibold text-[#111827] dark:text-slate-300 mb-1">
                   Título del Gráfico
                 </label>
                 <input
@@ -258,12 +258,12 @@ export const DynamicChartBuilderModal: React.FC<DynamicChartBuilderModalProps> =
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="Ej: Margen por Línea de Producto"
-                  className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                  className="w-full text-[13px] rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-[#111827] dark:text-white outline-none focus:border-[#0F766E]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-[12px] font-semibold text-[#111827] dark:text-slate-300 mb-1">
                   Tipo de Visualización
                 </label>
                 <div className="grid grid-cols-3 gap-2">
@@ -278,10 +278,10 @@ export const DynamicChartBuilderModal: React.FC<DynamicChartBuilderModalProps> =
                         key={t.id}
                         type="button"
                         onClick={() => setChartType(t.id as any)}
-                        className={`p-2.5 rounded-xl border text-xs font-semibold flex flex-col items-center gap-1.5 transition ${
+                        className={`p-2.5 rounded-[6px] border text-[12px] font-semibold flex flex-col items-center gap-1.5 transition cursor-pointer ${
                           chartType === t.id
-                            ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'
-                            : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                            ? 'border-[#0F766E] bg-teal-50 dark:bg-teal-950/40 text-[#0F766E] dark:text-teal-300'
+                            : 'border-[#E3E8E6] dark:border-slate-700 text-[#6B7280] dark:text-slate-400 hover:bg-[#F6F8F7]'
                         }`}
                       >
                         <Icon className="w-4 h-4" />
@@ -294,13 +294,13 @@ export const DynamicChartBuilderModal: React.FC<DynamicChartBuilderModalProps> =
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  <label className="text-[12px] font-semibold text-[#111827] dark:text-slate-300">
                     Puntos de Datos
                   </label>
                   <button
                     type="button"
                     onClick={addDataPoint}
-                    className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1 hover:underline"
+                    className="text-[11px] font-semibold text-[#0F766E] flex items-center gap-1 hover:underline cursor-pointer"
                   >
                     <Plus className="w-3 h-3" />
                     <span>Añadir Fila</span>
@@ -314,19 +314,19 @@ export const DynamicChartBuilderModal: React.FC<DynamicChartBuilderModalProps> =
                         value={dp.name}
                         onChange={(e) => updateDataPoint(idx, 'name', e.target.value)}
                         placeholder="Etiqueta"
-                        className="flex-1 text-xs rounded-lg border border-slate-300 dark:border-slate-700 p-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                        className="flex-1 text-[12px] rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 p-2 bg-white dark:bg-slate-800 text-[#111827] dark:text-white outline-none focus:border-[#0F766E]"
                       />
                       <input
                         type="number"
                         value={dp.value}
                         onChange={(e) => updateDataPoint(idx, 'value', e.target.value)}
                         placeholder="Valor ($)"
-                        className="w-24 text-xs rounded-lg border border-slate-300 dark:border-slate-700 p-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                        className="w-24 text-[12px] rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 p-2 bg-white dark:bg-slate-800 text-[#111827] dark:text-white outline-none focus:border-[#0F766E]"
                       />
                       <button
                         type="button"
                         onClick={() => removeDataPoint(idx)}
-                        className="p-1 text-slate-400 hover:text-rose-600 transition"
+                        className="p-1 text-[#6B7280] hover:text-rose-600 transition cursor-pointer"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -339,11 +339,11 @@ export const DynamicChartBuilderModal: React.FC<DynamicChartBuilderModalProps> =
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex justify-end gap-2">
+        <div className="p-4 border-t border-[#E3E8E6] dark:border-slate-800 bg-[#F6F8F7] dark:bg-slate-900 flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition"
+            className="px-3.5 py-1.5 rounded-[6px] text-[13px] font-medium border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 text-[#111827] dark:text-slate-300 hover:bg-[#E3E8E6] transition cursor-pointer"
           >
             Cancelar
           </button>
@@ -352,7 +352,7 @@ export const DynamicChartBuilderModal: React.FC<DynamicChartBuilderModalProps> =
               type="button"
               disabled={isLoading || !aiPrompt.trim()}
               onClick={handleGenerateAI}
-              className="px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white shadow-md flex items-center gap-2 disabled:opacity-50 transition cursor-pointer"
+              className="px-4 py-1.5 rounded-[6px] text-[13px] font-medium bg-[#0F766E] hover:bg-[#115E59] text-white flex items-center gap-2 disabled:opacity-50 transition cursor-pointer"
             >
               {isLoading ? (
                 <>
@@ -371,7 +371,7 @@ export const DynamicChartBuilderModal: React.FC<DynamicChartBuilderModalProps> =
               type="button"
               disabled={!title.trim()}
               onClick={handleCreateManual}
-              className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm disabled:opacity-50 transition cursor-pointer"
+              className="px-4 py-1.5 rounded-[6px] text-[13px] font-medium bg-[#0F766E] hover:bg-[#115E59] text-white disabled:opacity-50 transition cursor-pointer"
             >
               Guardar Widget
             </button>

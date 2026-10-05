@@ -52,7 +52,7 @@ export const CloudUserManagerModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [isSaving, setIsSaving] = useState(false);
 
   // Form State
-  const [accountType, setAccountType] = useState<'finanzas_personales' | 'emprendedor' | 'consolidada'>('finanzas_personales');
+  const [accountType, setAccountType] = useState<'emprendedor' | 'consolidada' | 'finanzas_personales'>('emprendedor');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('123456');
@@ -312,37 +312,6 @@ export const CloudUserManagerModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 1. Selecciona el Tipo de Cuenta (Predeterminado & Aislado):
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {/* Finanzas Personales */}
-                <button
-                  type="button"
-                  onClick={() => setAccountType('finanzas_personales')}
-                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                    accountType === 'finanzas_personales'
-                      ? 'border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40 shadow-sm ring-2 ring-emerald-500/20'
-                      : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-850 hover:border-slate-300'
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="p-1.5 rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300">
-                        <Wallet className="w-4 h-4" />
-                      </span>
-                      {accountType === 'finanzas_personales' && (
-                        <Check className="w-4 h-4 text-emerald-600" />
-                      )}
-                    </div>
-                    <p className="text-xs font-black text-slate-900 dark:text-white">
-                      Finanzas Personales
-                    </p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">
-                      Portal aparte. Solo ve sus ingresos, gastos, ahorro y presupuesto. Sin nada de empresas ni DTE.
-                    </p>
-                  </div>
-                  <span className="mt-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-                    Aislado 100%
-                  </span>
-                </button>
-
                 {/* Empresa Emprendedor */}
                 <button
                   type="button"
@@ -363,14 +332,14 @@ export const CloudUserManagerModal: React.FC<Props> = ({ isOpen, onClose }) => {
                       )}
                     </div>
                     <p className="text-xs font-black text-slate-900 dark:text-white">
-                      Empresa Emprendedor
+                      Negocio Emprendedor
                     </p>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">
-                      Microempresa o negocio iniciando. Control interno, caja POS de ventas rápidas sin DTE estricto.
+                      Comercio, tienda o servicios. Control interno, inventario con lector de barras y caja POS.
                     </p>
                   </div>
                   <span className="mt-2 text-[10px] font-bold text-blue-600 dark:text-blue-400">
-                    Control Interno
+                    Control Interno POS
                   </span>
                 </button>
 
@@ -394,14 +363,45 @@ export const CloudUserManagerModal: React.FC<Props> = ({ isOpen, onClose }) => {
                       )}
                     </div>
                     <p className="text-xs font-black text-slate-900 dark:text-white">
-                      Empresa Consolidada
+                      Empresa Formal (DTE)
                     </p>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">
-                      PyME o Empresa. Facturación DTE oficial de Hacienda, IVA 13%, CCF, retenciones y contabilidad.
+                      PyME formal con IVA 13%, DTE ante Ministerio de Hacienda, CCF, retenciones y libros contables.
                     </p>
                   </div>
                   <span className="mt-2 text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
-                    DTE MH Activo
+                    DTE MH Oficial
+                  </span>
+                </button>
+
+                {/* Finanzas Personales (Aparte) */}
+                <button
+                  type="button"
+                  onClick={() => setAccountType('finanzas_personales')}
+                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                    accountType === 'finanzas_personales'
+                      ? 'border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40 shadow-sm ring-2 ring-emerald-500/20'
+                      : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-850 hover:border-slate-300'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="p-1.5 rounded-xl bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300">
+                        <Wallet className="w-4 h-4" />
+                      </span>
+                      {accountType === 'finanzas_personales' && (
+                        <Check className="w-4 h-4 text-emerald-600" />
+                      )}
+                    </div>
+                    <p className="text-xs font-black text-slate-900 dark:text-white">
+                      Finanzas Personales
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">
+                      Exclusivo individual. Control de gastos personales, ahorro y calculadora de salario neto SV.
+                    </p>
+                  </div>
+                  <span className="mt-2 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                    Espacio Individual
                   </span>
                 </button>
               </div>

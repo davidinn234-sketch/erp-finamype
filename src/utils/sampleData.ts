@@ -20,6 +20,9 @@ import {
   AttendanceRecord,
   EmployeeLeaveRequest,
   CompanyAttendanceConfig,
+  PersonalTransaction,
+  PersonalBudgetCategory,
+  PersonalSavingGoal,
 } from '../types';
 import { DEFAULT_FISCAL_CONFIG } from './salvadoranTax';
 
@@ -2455,3 +2458,251 @@ export const SAMPLE_LEAVE_REQUESTS: EmployeeLeaveRequest[] = [
     createdAt: '2026-09-23T10:00:00Z',
   },
 ];
+
+export function getSamplePersonalFinancesData() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const fmt = (year: number, monthIdx: number, day: number) => {
+    const d = new Date(year, monthIdx, day);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+
+  const m2 = m - 2;
+  const m1 = m - 1;
+  const m0 = m;
+
+  const transactions: PersonalTransaction[] = [
+    // Month - 2 (Carryover base):
+    {
+      id: 'ptx_m2_1',
+      userId: 'user_david',
+      type: 'ingreso',
+      amount: 1400.0,
+      category: 'Salario & Sueldo Formal',
+      concept: 'Salario Mensual Neto',
+      date: fmt(y, m2, 1),
+      paymentMethod: 'transferencia',
+    },
+    {
+      id: 'ptx_m2_2',
+      userId: 'user_david',
+      type: 'gasto',
+      amount: 320.0,
+      category: 'Supermercado & Alimentación',
+      concept: 'Compras quincenales Super Selectos',
+      date: fmt(y, m2, 5),
+      paymentMethod: 'debito',
+    },
+    {
+      id: 'ptx_m2_3',
+      userId: 'user_david',
+      type: 'gasto',
+      amount: 250.0,
+      category: 'Vivienda, Alquiler & Servicios',
+      concept: 'Alquiler habitacional + agua y luz',
+      date: fmt(y, m2, 6),
+      paymentMethod: 'transferencia',
+    },
+    {
+      id: 'ptx_m2_4',
+      userId: 'user_david',
+      type: 'gasto',
+      amount: 120.0,
+      category: 'Transporte, Combustible & Mantenimiento',
+      concept: 'Combustible Puma Energy',
+      date: fmt(y, m2, 12),
+      paymentMethod: 'credito',
+    },
+    {
+      id: 'ptx_m2_5',
+      userId: 'user_david',
+      type: 'gasto',
+      amount: 80.0,
+      category: 'Entretenimiento & Restaurantes',
+      concept: 'Cena familiar fin de semana',
+      date: fmt(y, m2, 20),
+      paymentMethod: 'efectivo',
+    },
+
+    // Month - 1 (Previous month):
+    {
+      id: 'ptx_m1_1',
+      userId: 'user_david',
+      type: 'ingreso',
+      amount: 1400.0,
+      category: 'Salario & Sueldo Formal',
+      concept: 'Salario Mensual Neto',
+      date: fmt(y, m1, 1),
+      paymentMethod: 'transferencia',
+    },
+    {
+      id: 'ptx_m1_2',
+      userId: 'user_david',
+      type: 'ingreso',
+      amount: 220.0,
+      category: 'Honorarios & Servicios Profesionales',
+      concept: 'Consultoría externa diseño web',
+      date: fmt(y, m1, 14),
+      paymentMethod: 'transferencia',
+    },
+    {
+      id: 'ptx_m1_3',
+      userId: 'user_david',
+      type: 'gasto',
+      amount: 340.0,
+      category: 'Supermercado & Alimentación',
+      concept: 'Surtido mensual PriceSmart y Selectos',
+      date: fmt(y, m1, 3),
+      paymentMethod: 'debito',
+    },
+    {
+      id: 'ptx_m1_4',
+      userId: 'user_david',
+      type: 'gasto',
+      amount: 250.0,
+      category: 'Vivienda, Alquiler & Servicios',
+      concept: 'Alquiler y cuota de mantenimiento',
+      date: fmt(y, m1, 5),
+      paymentMethod: 'transferencia',
+    },
+    {
+      id: 'ptx_m1_5',
+      userId: 'user_david',
+      type: 'gasto',
+      amount: 125.0,
+      category: 'Transporte, Combustible & Mantenimiento',
+      concept: 'Gasolina y cambio de aceite',
+      date: fmt(y, m1, 10),
+      paymentMethod: 'credito',
+    },
+    {
+      id: 'ptx_m1_6',
+      userId: 'user_david',
+      type: 'gasto',
+      amount: 95.0,
+      category: 'Salud, Medicina & Seguros',
+      concept: 'Farmacia San Nicolás (vitaminas y recetas)',
+      date: fmt(y, m1, 16),
+      paymentMethod: 'debito',
+    },
+    {
+      id: 'ptx_m1_7',
+      userId: 'user_david',
+      type: 'gasto',
+      amount: 110.0,
+      category: 'Entretenimiento & Restaurantes',
+      concept: 'Salidas y cafés fin de semana',
+      date: fmt(y, m1, 22),
+      paymentMethod: 'efectivo',
+    },
+    {
+      id: 'ptx_m1_8',
+      userId: 'user_david',
+      type: 'gasto',
+      amount: 75.0,
+      category: 'Cuidado Personal & Ropa',
+      concept: 'Corte de cabello y artículos personales',
+      date: fmt(y, m1, 25),
+      paymentMethod: 'debito',
+    },
+
+    // Current Month (Month 0):
+    {
+      id: 'ptx_m0_1',
+      userId: 'user_david',
+      type: 'ingreso',
+      amount: 1400.0,
+      category: 'Salario & Sueldo Formal',
+      concept: 'Salario Mensual Neto',
+      date: fmt(y, m0, 1),
+      paymentMethod: 'transferencia',
+    },
+    {
+      id: 'ptx_m0_2',
+      userId: 'user_david',
+      type: 'gasto',
+      amount: 295.0,
+      category: 'Supermercado & Alimentación',
+      concept: 'Compras inteligentes de despensa',
+      date: fmt(y, m0, 3),
+      paymentMethod: 'debito',
+      notes: 'Ahorro de $45 respecto al mes anterior al aprovechar ofertas',
+    },
+    {
+      id: 'ptx_m0_3',
+      userId: 'user_david',
+      type: 'gasto',
+      amount: 250.0,
+      category: 'Vivienda, Alquiler & Servicios',
+      concept: 'Alquiler habitacional',
+      date: fmt(y, m0, 5),
+      paymentMethod: 'transferencia',
+    },
+    {
+      id: 'ptx_m0_4',
+      userId: 'user_david',
+      type: 'gasto',
+      amount: 95.0,
+      category: 'Transporte, Combustible & Mantenimiento',
+      concept: 'Gasolina Shell y carpool',
+      date: fmt(y, m0, 8),
+      paymentMethod: 'debito',
+      notes: 'Reducción de consumo en $30 respecto al mes pasado',
+    },
+    {
+      id: 'ptx_m0_5',
+      userId: 'user_david',
+      type: 'gasto',
+      amount: 55.0,
+      category: 'Salud, Medicina & Seguros',
+      concept: 'Control médico rutinario',
+      date: fmt(y, m0, 12),
+      paymentMethod: 'debito',
+    },
+    {
+      id: 'ptx_m0_6',
+      userId: 'user_david',
+      type: 'gasto',
+      amount: 60.0,
+      category: 'Entretenimiento & Restaurantes',
+      concept: 'Comida familiar moderada',
+      date: fmt(y, m0, 15),
+      paymentMethod: 'efectivo',
+    },
+  ];
+
+  const budgets: PersonalBudgetCategory[] = [
+    { id: 'pbd_1', category: 'Supermercado & Alimentación', budgetedAmount: 320.0 },
+    { id: 'pbd_2', category: 'Vivienda, Alquiler & Servicios', budgetedAmount: 260.0 },
+    { id: 'pbd_3', category: 'Transporte, Combustible & Mantenimiento', budgetedAmount: 110.0 },
+    { id: 'pbd_4', category: 'Salud, Medicina & Seguros', budgetedAmount: 80.0 },
+    { id: 'pbd_5', category: 'Entretenimiento & Restaurantes', budgetedAmount: 85.0 },
+    { id: 'pbd_6', category: 'Cuidado Personal & Ropa', budgetedAmount: 60.0 },
+    { id: 'pbd_7', category: 'Pago de Deudas & Tarjetas', budgetedAmount: 100.0 },
+    { id: 'pbd_8', category: 'Educación, Libros & Cursos', budgetedAmount: 50.0 },
+  ];
+
+  const goals: PersonalSavingGoal[] = [
+    {
+      id: 'pgoal_1',
+      title: 'Fondo de Emergencia (3 Meses)',
+      targetAmount: 2500.0,
+      currentAmount: 1450.0,
+      targetDate: `${y}-12-31`,
+      category: 'Seguridad Financiera',
+    },
+    {
+      id: 'pgoal_2',
+      title: 'Ahorro Vacaciones & Aguinaldo',
+      targetAmount: 800.0,
+      currentAmount: 520.0,
+      targetDate: `${y}-11-30`,
+      category: 'Metas Personales',
+    },
+  ];
+
+  return { transactions, budgets, goals };
+}

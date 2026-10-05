@@ -1472,7 +1472,7 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
                 <button
                   type="submit"
                   disabled={Boolean(editingEmployee.pinCode && getDuplicatePinEmployee(editingEmployee.pinCode, editingEmployee.id))}
-                  className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold cursor-pointer"
+                  className="px-4 py-1.5 rounded-lg bg-[#0F766E] hover:bg-[#115E59] disabled:opacity-50 text-white font-bold cursor-pointer"
                 >
                   Guardar Cambios y PIN
                 </button>

@@ -346,22 +346,18 @@ Puedo realizar acciones reales en tu empresa con solo pedírmelo:
   return (
     <>
       {/* ---------------------------------------------------- */}
-      {/* FLOATING TRIGGER BUTTON (Clean & Minimalist - HubSpot Style) */}
+      {/* FLOATING TRIGGER BUTTON (Circular 48px - Only Icon) */}
       {/* ---------------------------------------------------- */}
       {!isOpen && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3">
+        <div className="fixed bottom-6 right-6 z-40">
           <button
+            id="floating-erp-assistant-btn"
             onClick={() => setIsOpen(true)}
-            className="flex items-center gap-2 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all cursor-pointer border border-slate-700/80"
-            title="Abrir Asistente Financiero (Ctrl + J)"
+            className="w-12 h-12 rounded-full bg-[#0F766E] hover:bg-[#115E59] active:scale-95 text-white flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-150 cursor-pointer border border-teal-600/30"
+            title="Asistente ERP (Ctrl + J)"
+            aria-label="Abrir Asistente ERP"
           >
-            <Bot className="w-4 h-4 text-slate-300" />
-            <span className="font-semibold text-xs tracking-tight">
-              Asistente ERP
-            </span>
-            <span className="text-[10px] text-slate-400 font-mono font-normal">
-              Ctrl+J
-            </span>
+            <Bot className="w-6 h-6 text-white" />
           </button>
         </div>
       )}
@@ -371,24 +367,24 @@ Puedo realizar acciones reales en tu empresa con solo pedírmelo:
       {/* ---------------------------------------------------- */}
       {isOpen && (
         <div
-          className={`fixed z-50 transition-all duration-200 flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden ${
+          className={`fixed z-50 transition-all duration-200 flex flex-col bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 shadow-2xl overflow-hidden ${
             isExpanded
               ? 'inset-4 sm:inset-10 rounded-2xl'
               : 'bottom-4 right-4 sm:bottom-6 sm:right-6 w-[calc(100vw-2rem)] sm:w-[460px] h-[640px] max-h-[90vh] rounded-2xl'
           }`}
         >
           {/* Header */}
-          <div className="p-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+          <div className="p-4 bg-[#0F4C45] text-white flex items-center justify-between border-b border-[#0b3b36] shrink-0">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-slate-800 text-indigo-400 flex items-center justify-center font-bold">
-                <Bot className="w-5 h-5 text-indigo-400" />
+              <div className="w-9 h-9 rounded-xl bg-teal-900/60 text-teal-200 flex items-center justify-center font-bold border border-teal-700/50">
+                <Bot className="w-5 h-5 text-teal-200" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="font-bold text-sm text-white">Asistente Financiero & Operativo</h3>
+                  <h3 className="font-bold text-sm text-white">Asistente ERP</h3>
                 </div>
-                <p className="text-[11px] text-slate-400">
-                  {currentCompany?.tradeName || currentCompany?.name || 'FinaPyme SV'} · Saldo Líquido: <strong className="text-slate-200 font-mono">${totalLiquid.toLocaleString()}</strong>
+                <p className="text-[11px] text-teal-200/90">
+                  {currentCompany?.tradeName || currentCompany?.name || 'FinaPyme SV'} · Saldo Líquido: <strong className="text-white font-mono">${totalLiquid.toLocaleString()}</strong>
                 </p>
               </div>
             </div>
@@ -681,12 +677,12 @@ Puedo realizar acciones reales en tu empresa con solo pedírmelo:
                 onChange={(e) => setInputValue(e.target.value)}
                 placeholder="Escribe tu instrucción (ej: Registrar venta de $200 a María López)..."
                 disabled={isLoading}
-                className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 text-xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500 transition"
+                className="flex-1 px-3.5 py-2.5 rounded-xl border border-[#E3E8E6] dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 text-xs focus:outline-hidden focus:ring-2 focus:ring-[#0F766E] transition"
               />
               <button
                 type="submit"
                 disabled={!inputValue.trim() || isLoading}
-                className="p-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition cursor-pointer shrink-0"
+                className="p-2.5 bg-[#0F766E] text-white rounded-xl hover:bg-[#115E59] disabled:opacity-50 transition cursor-pointer shrink-0"
               >
                 <Send className="w-4 h-4" />
               </button>
