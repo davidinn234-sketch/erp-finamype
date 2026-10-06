@@ -3008,6 +3008,8 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const startDay = isSecondFortnight ? '16' : '01';
     const lastDayOfMonth = new Date(year, month, 0).getDate();
     const endDay = periodType === 'quincenal' ? (isSecondFortnight ? String(lastDayOfMonth) : '15') : String(lastDayOfMonth);
+    const startDateStr = `${year}-${month.toString().padStart(2, '0')}-${startDay}`;
+    const endDateStr = `${year}-${month.toString().padStart(2, '0')}-${endDay}`;
     const isCompanyOver10 = targetEmployees.length >= fiscalConfig.insaforpMinEmployees;
 
     const details = targetEmployees.map((emp) => {
@@ -3018,6 +3020,19 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         isCompanyOver10Employees: isCompanyOver10,
         config: fiscalConfig,
       });
+
+      // Connect attendance records to employee payroll
+      const empAttendance = attendanceRecords.filter((att) => {
+        if (att.employeeId !== emp.id) return false;
+        return att.date >= startDateStr && att.date <= endDateStr;
+      });
+
+      const lateRecords = empAttendance.filter(
+        (att) => att.status === 'tardanza' || (att.minutesLate && att.minutesLate > (att.toleranceApplied || 10))
+      );
+      const attendanceLateDays = lateRecords.length;
+      const attendanceTotalLateMinutes = lateRecords.reduce((acc, r) => acc + (r.minutesLate || 0), 0);
+      const attendancePresentDays = empAttendance.filter((att) => att.checkInTime).length;
 
       return {
         employeeId: emp.id,
@@ -3036,6 +3051,9 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         nightHours: 0,
         nightHoursAmount: 0,
         tardinessDiscount: 0,
+        attendanceLateDays,
+        attendanceTotalLateMinutes,
+        attendancePresentDays,
         advancesOrLoansDiscount: 0,
         isIncluded: true,
         isssLaboral: calc.isssLaboral,

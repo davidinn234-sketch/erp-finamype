@@ -90,34 +90,36 @@ export const ProfessionalServicesTab: React.FC = () => {
   const pendingCount = filteredRecords.filter((r) => r.status === 'pendiente').length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header Banner & Legal explanation */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-600/5 to-transparent border border-amber-300 dark:border-amber-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="p-4 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-teal-50 dark:bg-teal-950/60 text-[#0F766E] dark:text-teal-300 border border-teal-200 dark:border-teal-800">
               Art. 156 Código Tributario SV
             </span>
-            <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
+            <h2 className="text-base font-bold text-[#111827] dark:text-white">
               Planilla de Servicios Profesionales & Honorarios
             </h2>
           </div>
-          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 max-w-2xl">
+          <p className="text-xs text-[#6B7280] mt-1 max-w-2xl">
             Toda persona jurídica o comerciante que pague honorarios por servicios profesionales o técnicos a personas naturales en El Salvador debe retener el <strong>10% en concepto de Impuesto sobre la Renta (ISR)</strong> y enterarlo al Ministerio de Hacienda.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={() => setIsPrintAllOpen(true)}
-            className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+            className="px-3 py-1.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-[#F6F8F7] text-xs font-medium flex items-center gap-1.5 cursor-pointer text-[#111827] dark:text-slate-200"
           >
-            <Printer className="w-4 h-4 text-amber-600" />
+            <Printer className="w-4 h-4 text-[#0F766E]" />
             <span>Imprimir Planilla 10%</span>
           </button>
           <button
+            type="button"
             onClick={() => setIsNewModalOpen(true)}
-            className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 active:scale-95 text-white text-xs font-bold shadow flex items-center gap-1.5 cursor-pointer"
+            className="px-3 py-1.5 rounded-[6px] bg-[#0F766E] hover:bg-[#115E59] text-white text-xs font-medium flex items-center gap-1.5 cursor-pointer"
           >
             <PlusCircle className="w-4 h-4" />
             <span>Registrar Servicio Profesional</span>
@@ -127,45 +129,45 @@ export const ProfessionalServicesTab: React.FC = () => {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Honorarios Brutos</span>
-          <h4 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white mt-1 font-mono">
+        <div className="p-3.5 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 bg-white dark:bg-slate-900 shadow-none">
+          <span className="text-[10px] font-bold text-[#6B7280] uppercase tracking-wider block">Total Honorarios Brutos</span>
+          <h4 className="text-lg font-bold text-[#111827] dark:text-white mt-1 font-mono">
             {formatCurrencyUSD(totalGross)}
           </h4>
-          <span className="text-[10px] text-slate-500 mt-0.5 block">{filteredRecords.length} servicios registrados</span>
+          <span className="text-[10px] text-[#6B7280] mt-0.5 block">{filteredRecords.length} servicios registrados</span>
         </div>
 
-        <div className="p-4 rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/20 shadow-xs">
+        <div className="p-3.5 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 bg-white dark:bg-slate-900 shadow-none">
           <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider block">
             (-) Retención Legal 10% ISR
           </span>
-          <h4 className="text-lg sm:text-xl font-black text-amber-600 dark:text-amber-400 mt-1 font-mono">
+          <h4 className="text-lg font-bold text-amber-600 dark:text-amber-400 mt-1 font-mono">
             {formatCurrencyUSD(totalRetention)}
           </h4>
           <span className="text-[10px] text-amber-600 mt-0.5 block">Declarar en F-14 / F-07 MH</span>
         </div>
 
-        <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/50 dark:bg-emerald-950/20 shadow-xs">
+        <div className="p-3.5 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 bg-white dark:bg-slate-900 shadow-none">
           <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider block">
             (=) Líquido Neto Pagado
           </span>
-          <h4 className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400 mt-1 font-mono">
+          <h4 className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-1 font-mono">
             {formatCurrencyUSD(totalNet)}
           </h4>
           <span className="text-[10px] text-emerald-600 mt-0.5 block">Transferido a profesionales</span>
         </div>
 
-        <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Pendientes de Pago</span>
-          <h4 className="text-lg sm:text-xl font-black text-slate-700 dark:text-slate-300 mt-1 font-mono">
+        <div className="p-3.5 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 bg-white dark:bg-slate-900 shadow-none">
+          <span className="text-[10px] font-bold text-[#6B7280] uppercase tracking-wider block">Pendientes de Pago</span>
+          <h4 className="text-lg font-bold text-[#111827] dark:text-white mt-1 font-mono">
             {pendingCount}
           </h4>
-          <span className="text-[10px] text-slate-500 mt-0.5 block">Por desembolsar</span>
+          <span className="text-[10px] text-[#6B7280] mt-0.5 block">Por desembolsar</span>
         </div>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 shadow-none">
         <div className="flex items-center gap-2 flex-1 max-w-md">
           <div className="relative w-full">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -174,17 +176,17 @@ export const ProfessionalServicesTab: React.FC = () => {
               placeholder="Buscar por profesional, concepto o NIT..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs"
+              className="w-full pl-9 pr-3 py-1.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-[#111827] dark:text-white outline-none"
             />
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-slate-500">Filtrar por Mes:</label>
+          <label className="text-xs font-semibold text-[#6B7280]">Filtrar por Mes:</label>
           <select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(parseInt(e.target.value, 10))}
-            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-800 dark:text-slate-200"
+            className="p-1.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-medium text-[#111827] dark:text-slate-200 outline-none"
           >
             <option value={0}>Todos los Meses</option>
             <option value={1}>Enero</option>
@@ -204,10 +206,10 @@ export const ProfessionalServicesTab: React.FC = () => {
       </div>
 
       {/* Records Table */}
-      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs overflow-hidden">
+      <div className="rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 bg-white dark:bg-slate-900 shadow-none overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs font-mono">
-            <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 uppercase text-[10px] font-bold border-b border-slate-200 dark:border-slate-700">
+            <thead className="bg-[#F6F8F7] dark:bg-slate-800 text-[#6B7280] dark:text-slate-400 uppercase text-[10px] font-bold border-b border-[#E3E8E6] dark:border-slate-700">
               <tr>
                 <th className="p-3 font-sans">Profesional / DUI / NIT</th>
                 <th className="p-3 font-sans">Concepto del Servicio</th>

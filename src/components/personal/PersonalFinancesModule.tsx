@@ -506,33 +506,33 @@ export const PersonalFinancesModule: React.FC = () => {
   };
 
   return (
-    <div id="personal-finances-module" className="space-y-6 max-w-7xl mx-auto pb-12 font-sans">
+    <div id="personal-finances-module" className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto pb-16 font-sans">
       {/* Top Header: Clean, Quiet & Uncluttered */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-[#E3E8E6] dark:border-slate-800">
         <div>
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+          <div className="flex items-center gap-2 text-[12px] text-[#6B7280] dark:text-slate-400">
             <span>Finanzas Personales</span>
             <span aria-hidden="true">·</span>
             <span>El Salvador (USD)</span>
             <span aria-hidden="true">·</span>
             <span>{currentUser.name}</span>
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white mt-1">
-            Gestión Financiera Personal
+          <h1 className="text-[20px] font-semibold text-[#111827] dark:text-white leading-tight mt-1">
+            Gestión financiera personal
           </h1>
         </div>
 
         {/* Global Month Filter & Personalize Button */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Quick Period Buttons */}
-          <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs">
+          <div className="flex items-center p-0.5 bg-[#F6F8F7] dark:bg-slate-800 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 text-[12px]">
             <button
               type="button"
               onClick={() => setSelectedMonth(currentMonthStr)}
-              className={`px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
+              className={`px-2.5 py-1 rounded-[4px] font-medium transition cursor-pointer ${
                 selectedMonth === currentMonthStr
-                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs font-semibold'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  ? 'bg-white dark:bg-slate-900 text-[#0F766E] dark:text-teal-300 shadow-2xs font-semibold'
+                  : 'text-[#6B7280] dark:text-slate-400 hover:text-[#111827]'
               }`}
             >
               Este Mes
@@ -540,10 +540,10 @@ export const PersonalFinancesModule: React.FC = () => {
             <button
               type="button"
               onClick={() => setSelectedMonth(previousMonthStr)}
-              className={`px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
+              className={`px-2.5 py-1 rounded-[4px] font-medium transition cursor-pointer ${
                 selectedMonth === previousMonthStr
-                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs font-semibold'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  ? 'bg-white dark:bg-slate-900 text-[#0F766E] dark:text-teal-300 shadow-2xs font-semibold'
+                  : 'text-[#6B7280] dark:text-slate-400 hover:text-[#111827]'
               }`}
             >
               Mes Anterior
@@ -551,22 +551,22 @@ export const PersonalFinancesModule: React.FC = () => {
             <button
               type="button"
               onClick={() => setSelectedMonth('all')}
-              className={`px-2.5 py-1 rounded-lg font-medium transition cursor-pointer ${
+              className={`px-2.5 py-1 rounded-[4px] font-medium transition cursor-pointer ${
                 selectedMonth === 'all'
-                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs font-semibold'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  ? 'bg-white dark:bg-slate-900 text-[#0F766E] dark:text-teal-300 shadow-2xs font-semibold'
+                  : 'text-[#6B7280] dark:text-slate-400 hover:text-[#111827]'
               }`}
             >
               Todo
             </button>
           </div>
 
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs">
-            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-900 text-[12px]">
+            <Calendar className="w-3.5 h-3.5 text-[#0F766E]" />
             <select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-200 outline-none cursor-pointer"
+              className="bg-transparent text-[12px] font-medium text-[#111827] dark:text-slate-200 outline-none cursor-pointer"
             >
               <option value="all">Todo el Histórico</option>
               {availableMonths.map((m) => {
@@ -585,27 +585,27 @@ export const PersonalFinancesModule: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsExhaustiveCustomizationOpen(true)}
-            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium flex items-center gap-1.5 transition cursor-pointer"
+            className="px-3 py-1.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-[#F6F8F7] text-[#111827] dark:text-slate-200 text-[12px] font-medium flex items-center gap-1.5 transition cursor-pointer"
             title="Configurar perfil y preferencias"
           >
-            <Sliders className="w-3.5 h-3.5 text-slate-500" />
+            <Sliders className="w-3.5 h-3.5 text-[#6B7280]" />
             <span className="hidden sm:inline">Preferencias</span>
           </button>
 
           <button
             type="button"
             onClick={resetPersonalFinancesToSampleData}
-            className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium flex items-center gap-1.5 transition cursor-pointer"
+            className="px-3 py-1.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-[#F6F8F7] text-[#111827] dark:text-slate-200 text-[12px] font-medium flex items-center gap-1.5 transition cursor-pointer"
             title="Recargar datos de ejemplo con comparativas de mes anterior y arrastre patrimonial"
           >
-            <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+            <RotateCcw className="w-3.5 h-3.5 text-[#6B7280]" />
             <span className="hidden sm:inline">Recargar Demo Mes Anterior</span>
           </button>
         </div>
       </div>
 
       {/* Primary Navigation Tabs (Segmented Controls) */}
-      <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl overflow-x-auto">
+      <div className="flex items-center gap-1.5 border-b border-[#E3E8E6] dark:border-slate-800 pb-2 overflow-x-auto">
         {[
           { id: 'resumen', label: 'Resumen & Diagnóstico', icon: PieChart },
           { id: 'comparativa_mes', label: 'Comparativa Mes Anterior', icon: ArrowLeftRight, badge: 'Vs Anterior' },
@@ -621,16 +621,18 @@ export const PersonalFinancesModule: React.FC = () => {
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-[6px] text-[12px] whitespace-nowrap transition cursor-pointer ${
                 isActive
-                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  ? 'bg-[#0F766E] text-white font-semibold shadow-2xs'
+                  : 'text-[#6B7280] dark:text-slate-400 hover:bg-[#F6F8F7] dark:hover:bg-slate-800 hover:text-[#111827]'
               }`}
             >
               <Icon className="w-3.5 h-3.5" />
               <span>{tab.label}</span>
               {tab.badge && (
-                <span className="px-1.5 py-0.2 rounded text-[10px] bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold">
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                  isActive ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                }`}>
                   {tab.badge}
                 </span>
               )}
@@ -645,67 +647,92 @@ export const PersonalFinancesModule: React.FC = () => {
           {/* Main Financial KPI Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Balance Disponible */}
-            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-1">
-              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                Balance Neto del Período
-              </span>
-              <p className={`text-2xl font-bold tracking-tight font-mono ${metrics.balanceNeto >= 0 ? 'text-slate-900 dark:text-white' : 'text-rose-600'}`}>
-                ${metrics.balanceNeto.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </p>
-              <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100 dark:border-slate-800 text-slate-500">
+            <div className="p-5 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 shadow-none transition-all duration-150 hover:shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] font-medium text-[#6B7280] dark:text-slate-400">
+                    Balance neto del período
+                  </span>
+                  <div className="w-9 h-9 rounded-full bg-teal-50 dark:bg-teal-950/60 text-[#0F766E] flex items-center justify-center">
+                    <Wallet className="w-4 h-4 stroke-[1.75]" />
+                  </div>
+                </div>
+                <div className={`text-[28px] font-semibold [font-variant-numeric:tabular-nums] mt-1 leading-none ${metrics.balanceNeto >= 0 ? 'text-[#111827] dark:text-white' : 'text-rose-600'}`}>
+                  ${metrics.balanceNeto.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-[11px] pt-2 border-t border-[#E3E8E6] dark:border-slate-800 text-[#6B7280] dark:text-slate-400 mt-3">
                 <span>vs mes anterior:</span>
-                <span className={`font-mono font-semibold ${comparativeData.diffNet >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'}`}>
+                <span className={`font-semibold [font-variant-numeric:tabular-nums] ${comparativeData.diffNet >= 0 ? 'text-[#059669]' : 'text-rose-600'}`}>
                   {comparativeData.diffNet >= 0 ? '+' : ''}${comparativeData.diffNet.toFixed(2)}
                 </span>
               </div>
             </div>
 
             {/* Total Ingresos */}
-            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-1">
-              <div className="flex items-center justify-between text-xs font-medium text-slate-500 dark:text-slate-400">
-                <span>Ingresos Registrados</span>
-                <TrendingUp className="w-4 h-4 text-emerald-600" />
+            <div className="p-5 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 shadow-none transition-all duration-150 hover:shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] font-medium text-[#6B7280] dark:text-slate-400">
+                    Ingresos registrados
+                  </span>
+                  <div className="w-9 h-9 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-[#059669] flex items-center justify-center">
+                    <TrendingUp className="w-4 h-4 stroke-[1.75]" />
+                  </div>
+                </div>
+                <div className="text-[28px] font-semibold text-[#059669] [font-variant-numeric:tabular-nums] mt-1 leading-none">
+                  ${metrics.totalIngresos.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
               </div>
-              <p className="text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400 font-mono">
-                ${metrics.totalIngresos.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </p>
-              <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100 dark:border-slate-800 text-slate-500">
+              <div className="flex items-center justify-between text-[11px] pt-2 border-t border-[#E3E8E6] dark:border-slate-800 text-[#6B7280] dark:text-slate-400 mt-3">
                 <span>vs mes anterior:</span>
-                <span className={`font-mono font-semibold ${comparativeData.pctDiffIncome >= 0 ? 'text-emerald-600' : 'text-slate-500'}`}>
+                <span className={`font-semibold [font-variant-numeric:tabular-nums] ${comparativeData.pctDiffIncome >= 0 ? 'text-[#059669]' : 'text-[#6B7280]'}`}>
                   {comparativeData.pctDiffIncome >= 0 ? '+' : ''}{comparativeData.pctDiffIncome.toFixed(1)}%
                 </span>
               </div>
             </div>
 
             {/* Total Gastos */}
-            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-1">
-              <div className="flex items-center justify-between text-xs font-medium text-slate-500 dark:text-slate-400">
-                <span>Gastos & Consumos</span>
-                <TrendingDown className="w-4 h-4 text-rose-500" />
+            <div className="p-5 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 shadow-none transition-all duration-150 hover:shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] font-medium text-[#6B7280] dark:text-slate-400">
+                    Gastos & consumos
+                  </span>
+                  <div className="w-9 h-9 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center">
+                    <TrendingDown className="w-4 h-4 stroke-[1.75]" />
+                  </div>
+                </div>
+                <div className="text-[28px] font-semibold text-[#111827] dark:text-white [font-variant-numeric:tabular-nums] mt-1 leading-none">
+                  ${metrics.totalGastos.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
               </div>
-              <p className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white font-mono">
-                ${metrics.totalGastos.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </p>
-              <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100 dark:border-slate-800 text-slate-500">
+              <div className="flex items-center justify-between text-[11px] pt-2 border-t border-[#E3E8E6] dark:border-slate-800 text-[#6B7280] dark:text-slate-400 mt-3">
                 <span>vs mes anterior:</span>
-                <span className={`font-mono font-semibold ${comparativeData.diffExpense <= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                <span className={`font-semibold [font-variant-numeric:tabular-nums] ${comparativeData.diffExpense <= 0 ? 'text-[#059669]' : 'text-rose-600'}`}>
                   {comparativeData.diffExpense > 0 ? '+' : ''}{comparativeData.pctDiffExpense.toFixed(1)}%
                 </span>
               </div>
             </div>
 
             {/* Tasa de Ahorro */}
-            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-1">
-              <div className="flex items-center justify-between text-xs font-medium text-slate-500 dark:text-slate-400">
-                <span>Tasa de Ahorro</span>
-                <PiggyBank className="w-4 h-4 text-indigo-500" />
+            <div className="p-5 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 shadow-none transition-all duration-150 hover:shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] font-medium text-[#6B7280] dark:text-slate-400">
+                    Tasa de ahorro
+                  </span>
+                  <div className="w-9 h-9 rounded-full bg-teal-50 dark:bg-teal-950/60 text-[#0F766E] flex items-center justify-center">
+                    <PiggyBank className="w-4 h-4 stroke-[1.75]" />
+                  </div>
+                </div>
+                <div className="text-[28px] font-semibold text-[#0F766E] dark:text-teal-400 [font-variant-numeric:tabular-nums] mt-1 leading-none">
+                  {metrics.tasaAhorro.toFixed(1)}%
+                </div>
               </div>
-              <p className="text-2xl font-bold tracking-tight text-indigo-600 dark:text-indigo-400 font-mono">
-                {metrics.tasaAhorro.toFixed(1)}%
-              </p>
-              <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-100 dark:border-slate-800 text-slate-500">
+              <div className="flex items-center justify-between text-[11px] pt-2 border-t border-[#E3E8E6] dark:border-slate-800 text-[#6B7280] dark:text-slate-400 mt-3">
                 <span>vs mes anterior:</span>
-                <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">
+                <span className="font-semibold [font-variant-numeric:tabular-nums] text-[#111827] dark:text-slate-200">
                   {comparativeData.prevSavingsRate.toFixed(1)}% anterior
                 </span>
               </div>
@@ -713,24 +740,24 @@ export const PersonalFinancesModule: React.FC = () => {
           </div>
 
           {/* Arrastre de Meses Anteriores & Liquidez Real (Carryover Balance Banner) */}
-          <div className="p-5 rounded-2xl bg-slate-900 text-white dark:bg-slate-900 border border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="p-4 rounded-[8px] bg-[#111827] text-white border border-slate-800 shadow-none flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="space-y-1">
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <Clock className="w-4 h-4 text-indigo-400" />
+              <div className="flex items-center gap-2 text-[12px] text-teal-300">
+                <Clock className="w-4 h-4 text-teal-400" />
                 <span>Conciliación Patrimonial · Saldo Arrastrado del Mes Anterior</span>
               </div>
-              <h3 className="text-base font-bold text-white tracking-tight">
+              <h3 className="text-[15px] font-semibold text-white tracking-tight [font-variant-numeric:tabular-nums]">
                 Disponibilidad Real en Cuentas: ${comparativeData.totalLiquidAvailable.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </h3>
-              <p className="text-xs text-slate-400">
-                Remanente arrastrado hasta el inicio de {comparativeData.refMonthName}: <span className="font-mono text-white font-semibold">${comparativeData.carryoverBalance.toFixed(2)}</span> · Flujo neto de {comparativeData.refMonthName}: <span className="font-mono text-emerald-400 font-semibold">{comparativeData.refNet >= 0 ? '+' : ''}${comparativeData.refNet.toFixed(2)}</span>
+              <p className="text-[12px] text-slate-400">
+                Remanente arrastrado hasta el inicio de {comparativeData.refMonthName}: <span className="font-semibold text-white">${comparativeData.carryoverBalance.toFixed(2)}</span> · Flujo neto de {comparativeData.refMonthName}: <span className="font-semibold text-emerald-400">{comparativeData.refNet >= 0 ? '+' : ''}${comparativeData.refNet.toFixed(2)}</span>
               </p>
             </div>
 
             <button
               type="button"
               onClick={() => setActiveTab('comparativa_mes')}
-              className="px-4 py-2 rounded-xl bg-white text-slate-900 hover:bg-slate-100 font-semibold text-xs transition cursor-pointer flex items-center gap-1.5 self-start md:self-auto shrink-0"
+              className="px-3.5 py-1.5 rounded-[6px] bg-white text-[#111827] hover:bg-[#F6F8F7] font-medium text-[12px] transition cursor-pointer flex items-center gap-1.5 self-start md:self-auto shrink-0"
             >
               <span>Ver Análisis Comparativo Detallado</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -738,45 +765,45 @@ export const PersonalFinancesModule: React.FC = () => {
           </div>
 
           {/* Golden Rule 50/30/20 Analysis */}
-          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="p-5 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 shadow-none space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-[#E3E8E6] dark:border-slate-800 pb-3">
               <div>
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                <h3 className="text-[14px] font-semibold text-[#111827] dark:text-white">
                   Diagnóstico por Regla 50 / 30 / 20
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-[12px] text-[#6B7280] mt-0.5">
                   Distribución recomendada para salud patrimonial y cobertura de imprevistos
                 </p>
               </div>
-              <span className="text-xs text-slate-400 font-mono">
+              <span className="text-[11px] text-[#6B7280] font-mono">
                 {selectedMonth === 'all' ? 'Histórico General' : selectedMonth}
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {/* 50% Necesidades */}
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200/60 dark:border-slate-800 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+              <div className="p-4 rounded-[6px] bg-[#F6F8F7] dark:bg-slate-800 border border-[#E3E8E6] dark:border-slate-700 space-y-2">
+                <div className="flex items-center justify-between text-[12px]">
+                  <span className="font-semibold text-[#111827] dark:text-slate-200">
                     Necesidades Básicas (50%)
                   </span>
-                  <span className="font-mono font-bold text-slate-600 dark:text-slate-300">
+                  <span className="font-semibold text-[#111827] dark:text-slate-300 [font-variant-numeric:tabular-nums]">
                     {metrics.pctNecesidades}%
                   </span>
                 </div>
-                <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                <div className="w-full bg-[#E3E8E6] dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all ${
-                      metrics.pctNecesidades <= 50 ? 'bg-emerald-500' : 'bg-amber-500'
+                      metrics.pctNecesidades <= 50 ? 'bg-[#059669]' : 'bg-amber-500'
                     }`}
                     style={{ width: `${Math.min(100, metrics.pctNecesidades)}%` }}
                   />
                 </div>
-                <div className="flex justify-between text-[11px] text-slate-500">
-                  <span>${metrics.necesidades.toFixed(2)}</span>
+                <div className="flex justify-between text-[11px] text-[#6B7280]">
+                  <span className="[font-variant-numeric:tabular-nums]">${metrics.necesidades.toFixed(2)}</span>
                   <span>Objetivo: 50%</span>
                 </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed pt-1">
+                <p className="text-[11px] text-[#6B7280] leading-relaxed pt-1">
                   Comida, vivienda, transporte, salud y servicios esenciales.
                 </p>
               </div>
@@ -838,37 +865,37 @@ export const PersonalFinancesModule: React.FC = () => {
           </div>
 
           {/* Category Breakdown & Quick Actions */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Gastos por Categoría */}
-            <div className="lg:col-span-2 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+            <div className="lg:col-span-2 p-5 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 shadow-none space-y-4">
+              <h3 className="text-[14px] font-semibold text-[#111827] dark:text-white">
                 Distribución de Egresos por Rubro
               </h3>
 
               {categoryExpenses.length === 0 ? (
-                <p className="text-xs text-slate-400 py-6 text-center">
+                <p className="text-[12px] text-[#6B7280] py-6 text-center">
                   No hay gastos registrados en el período seleccionado.
                 </p>
               ) : (
                 <div className="space-y-3">
                   {categoryExpenses.map((cat) => (
                     <div key={cat.name} className="space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-700 dark:text-slate-300 font-medium">
+                      <div className="flex items-center justify-between text-[12px]">
+                        <span className="text-[#111827] dark:text-slate-300 font-medium">
                           {cat.name}
                         </span>
                         <div className="flex items-center gap-2 font-mono">
-                          <span className="text-slate-900 dark:text-white font-bold">
+                          <span className="text-[#111827] dark:text-white font-semibold">
                             ${cat.total.toFixed(2)}
                           </span>
-                          <span className="text-slate-400 text-[11px]">
+                          <span className="text-[#6B7280] text-[11px]">
                             ({cat.percentage}%)
                           </span>
                         </div>
                       </div>
-                      <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                      <div className="w-full bg-[#E3E8E6] dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
                         <div
-                          className="bg-indigo-600 dark:bg-indigo-500 h-full rounded-full transition-all"
+                          className="bg-[#0F766E] dark:bg-teal-500 h-full rounded-full transition-all"
                           style={{ width: `${cat.percentage}%` }}
                         />
                       </div>
@@ -879,15 +906,15 @@ export const PersonalFinancesModule: React.FC = () => {
             </div>
 
             {/* Quick Summary of Goals */}
-            <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
+            <div className="p-5 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 shadow-none space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                <h3 className="text-[14px] font-semibold text-[#111827] dark:text-white">
                   Metas de Ahorro
                 </h3>
                 <button
                   type="button"
                   onClick={() => setActiveTab('metas')}
-                  className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                  className="text-[12px] font-medium text-[#0F766E] dark:text-teal-400 hover:underline cursor-pointer"
                 >
                   Ver todas
                 </button>
@@ -895,36 +922,36 @@ export const PersonalFinancesModule: React.FC = () => {
 
               {personalSavingGoals.length === 0 ? (
                 <div className="text-center py-6 space-y-2">
-                  <p className="text-xs text-slate-400">Aún no has configurado metas de ahorro.</p>
+                  <p className="text-[12px] text-[#6B7280]">Aún no has configurado metas de ahorro.</p>
                   <button
                     type="button"
                     onClick={() => setShowNewGoalModal(true)}
-                    className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold cursor-pointer"
+                    className="px-3 py-1.5 rounded-[6px] bg-[#0F766E] text-white text-[12px] font-medium cursor-pointer"
                   >
                     Crear primera meta
                   </button>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   {personalSavingGoals.slice(0, 3).map((goal) => {
                     const pct = Math.min(100, Math.round((goal.currentAmount / goal.targetAmount) * 100));
                     return (
                       <div
                         key={goal.id}
-                        className="p-3 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200/60 dark:border-slate-800 space-y-1.5"
+                        className="p-3 rounded-[6px] bg-[#F6F8F7] dark:bg-slate-800 border border-[#E3E8E6] dark:border-slate-700 space-y-1.5"
                       >
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-semibold text-slate-800 dark:text-slate-200 truncate">
+                        <div className="flex items-center justify-between text-[12px]">
+                          <span className="font-semibold text-[#111827] dark:text-slate-200 truncate">
                             {goal.title}
                           </span>
-                          <span className="font-mono text-indigo-600 dark:text-indigo-400 font-bold">
+                          <span className="font-mono text-[#0F766E] dark:text-teal-400 font-bold">
                             {pct}%
                           </span>
                         </div>
-                        <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
-                          <div className="bg-indigo-600 h-full rounded-full" style={{ width: `${pct}%` }} />
+                        <div className="w-full bg-[#E3E8E6] dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                          <div className="bg-[#0F766E] h-full rounded-full" style={{ width: `${pct}%` }} />
                         </div>
-                        <div className="flex justify-between text-[11px] text-slate-500 font-mono">
+                        <div className="flex justify-between text-[11px] text-[#6B7280] font-mono">
                           <span>${goal.currentAmount.toFixed(2)}</span>
                           <span>Meta: ${goal.targetAmount.toFixed(2)}</span>
                         </div>
@@ -942,17 +969,17 @@ export const PersonalFinancesModule: React.FC = () => {
       {activeTab === 'comparativa_mes' && (
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* Section Header */}
-          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="p-5 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 shadow-none flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2 text-xs text-slate-500">
+              <div className="flex items-center gap-2 text-[12px] text-[#6B7280]">
                 <span>Análisis Histórico Comparativo</span>
                 <span aria-hidden="true">·</span>
                 <span>{comparativeData.prevMonthName} vs {comparativeData.refMonthName}</span>
               </div>
-              <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white mt-1">
+              <h2 className="text-[17px] font-semibold text-[#111827] dark:text-white mt-1">
                 Comparativa con el Mes Anterior
               </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-[12px] text-[#6B7280] mt-0.5">
                 Evaluación directa de desempeño de gastos, ingresos y conciliación del saldo arrastrado
               </p>
             </div>
@@ -977,10 +1004,10 @@ export const PersonalFinancesModule: React.FC = () => {
                     `Se actualizaron ${updatedCount} categorías de presupuesto basadas en el mes anterior.`
                   );
                 }}
-                className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-2 transition cursor-pointer"
+                className="px-3.5 py-1.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-[#F6F8F7] text-[#111827] dark:text-slate-200 text-[12px] font-medium flex items-center gap-1.5 transition cursor-pointer shadow-none"
                 title="Ajustar los presupuestos del mes actual según lo gastado en el mes anterior"
               >
-                <Copy className="w-3.5 h-3.5 text-indigo-500" />
+                <Copy className="w-3.5 h-3.5 text-[#0F766E]" />
                 <span>Replicar Presupuestos del Mes Anterior</span>
               </button>
             </div>
@@ -989,66 +1016,78 @@ export const PersonalFinancesModule: React.FC = () => {
           {/* Side-by-Side Comparison KPIs */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Ingresos Comparados */}
-            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-2">
-              <div className="flex items-center justify-between text-xs text-slate-500">
-                <span className="font-medium">Ingresos Totales</span>
-                <TrendingUp className="w-4 h-4 text-emerald-600" />
+            <div className="p-5 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 shadow-none transition-all duration-150 hover:shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between text-[12px] text-[#6B7280]">
+                  <span className="font-medium">Ingresos Totales</span>
+                  <div className="w-8 h-8 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-[#059669] flex items-center justify-center">
+                    <TrendingUp className="w-4 h-4 stroke-[1.75]" />
+                  </div>
+                </div>
+                <div className="space-y-0.5 mt-1">
+                  <p className="text-[24px] font-semibold [font-variant-numeric:tabular-nums] text-[#059669] leading-none">
+                    ${comparativeData.refIncome.toFixed(2)}
+                  </p>
+                  <p className="text-[11px] text-[#6B7280] [font-variant-numeric:tabular-nums]">
+                    Mes anterior: ${comparativeData.prevIncome.toFixed(2)}
+                  </p>
+                </div>
               </div>
-              <div className="space-y-0.5">
-                <p className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                  ${comparativeData.refIncome.toFixed(2)}
-                </p>
-                <p className="text-xs text-slate-400 font-mono">
-                  Mes anterior: ${comparativeData.prevIncome.toFixed(2)}
-                </p>
-              </div>
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-                <span className="text-slate-500">Diferencia:</span>
-                <span className={`font-mono font-bold ${comparativeData.diffIncome >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+              <div className="pt-2 border-t border-[#E3E8E6] dark:border-slate-800 flex items-center justify-between text-[11px] mt-3">
+                <span className="text-[#6B7280]">Diferencia:</span>
+                <span className={`font-semibold [font-variant-numeric:tabular-nums] ${comparativeData.diffIncome >= 0 ? 'text-[#059669]' : 'text-rose-600'}`}>
                   {comparativeData.diffIncome >= 0 ? '+' : ''}${comparativeData.diffIncome.toFixed(2)} ({comparativeData.pctDiffIncome >= 0 ? '+' : ''}{comparativeData.pctDiffIncome.toFixed(1)}%)
                 </span>
               </div>
             </div>
 
             {/* Gastos Comparados */}
-            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-2">
-              <div className="flex items-center justify-between text-xs text-slate-500">
-                <span className="font-medium">Gastos & Consumo</span>
-                <TrendingDown className="w-4 h-4 text-rose-500" />
+            <div className="p-5 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 shadow-none transition-all duration-150 hover:shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between text-[12px] text-[#6B7280]">
+                  <span className="font-medium">Gastos & Consumo</span>
+                  <div className="w-8 h-8 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center">
+                    <TrendingDown className="w-4 h-4 stroke-[1.75]" />
+                  </div>
+                </div>
+                <div className="space-y-0.5 mt-1">
+                  <p className="text-[24px] font-semibold [font-variant-numeric:tabular-nums] text-[#111827] dark:text-white leading-none">
+                    ${comparativeData.refExpense.toFixed(2)}
+                  </p>
+                  <p className="text-[11px] text-[#6B7280] [font-variant-numeric:tabular-nums]">
+                    Mes anterior: ${comparativeData.prevExpense.toFixed(2)}
+                  </p>
+                </div>
               </div>
-              <div className="space-y-0.5">
-                <p className="text-xl font-bold font-mono text-slate-900 dark:text-white">
-                  ${comparativeData.refExpense.toFixed(2)}
-                </p>
-                <p className="text-xs text-slate-400 font-mono">
-                  Mes anterior: ${comparativeData.prevExpense.toFixed(2)}
-                </p>
-              </div>
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-                <span className="text-slate-500">Variación:</span>
-                <span className={`font-mono font-bold ${comparativeData.diffExpense <= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+              <div className="pt-2 border-t border-[#E3E8E6] dark:border-slate-800 flex items-center justify-between text-[11px] mt-3">
+                <span className="text-[#6B7280]">Variación:</span>
+                <span className={`font-semibold [font-variant-numeric:tabular-nums] ${comparativeData.diffExpense <= 0 ? 'text-[#059669]' : 'text-rose-600'}`}>
                   {comparativeData.diffExpense > 0 ? '+' : ''}${comparativeData.diffExpense.toFixed(2)} ({comparativeData.pctDiffExpense > 0 ? '+' : ''}{comparativeData.pctDiffExpense.toFixed(1)}%)
                 </span>
               </div>
             </div>
 
             {/* Balance Neto Comparado */}
-            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-2">
-              <div className="flex items-center justify-between text-xs text-slate-500">
-                <span className="font-medium">Balance Neto Generado</span>
-                <Wallet className="w-4 h-4 text-indigo-500" />
+            <div className="p-5 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 shadow-none transition-all duration-150 hover:shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between text-[12px] text-[#6B7280]">
+                  <span className="font-medium">Balance Neto Generado</span>
+                  <div className="w-8 h-8 rounded-full bg-teal-50 dark:bg-teal-950/60 text-[#0F766E] flex items-center justify-center">
+                    <Wallet className="w-4 h-4 stroke-[1.75]" />
+                  </div>
+                </div>
+                <div className="space-y-0.5 mt-1">
+                  <p className={`text-[24px] font-semibold [font-variant-numeric:tabular-nums] leading-none ${comparativeData.refNet >= 0 ? 'text-[#111827] dark:text-white' : 'text-rose-600'}`}>
+                    ${comparativeData.refNet.toFixed(2)}
+                  </p>
+                  <p className="text-[11px] text-[#6B7280] [font-variant-numeric:tabular-nums]">
+                    Mes anterior: ${comparativeData.prevNet.toFixed(2)}
+                  </p>
+                </div>
               </div>
-              <div className="space-y-0.5">
-                <p className={`text-xl font-bold font-mono ${comparativeData.refNet >= 0 ? 'text-slate-900 dark:text-white' : 'text-rose-600'}`}>
-                  ${comparativeData.refNet.toFixed(2)}
-                </p>
-                <p className="text-xs text-slate-400 font-mono">
-                  Mes anterior: ${comparativeData.prevNet.toFixed(2)}
-                </p>
-              </div>
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-                <span className="text-slate-500">Evolución neta:</span>
-                <span className={`font-mono font-bold ${comparativeData.diffNet >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+              <div className="pt-2 border-t border-[#E3E8E6] dark:border-slate-800 flex items-center justify-between text-[11px] mt-3">
+                <span className="text-[#6B7280]">Evolución neta:</span>
+                <span className={`font-semibold [font-variant-numeric:tabular-nums] ${comparativeData.diffNet >= 0 ? 'text-[#059669]' : 'text-rose-600'}`}>
                   {comparativeData.diffNet >= 0 ? '+' : ''}${comparativeData.diffNet.toFixed(2)}
                 </span>
               </div>

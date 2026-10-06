@@ -29,19 +29,25 @@ import {
 } from 'lucide-react';
 
 interface HeaderProps {
+  isSidebarOpenMobile?: boolean;
   onOpenMobileMenu?: () => void;
+  onToggleMobileMenu?: () => void;
   onOpenCommandPalette: () => void;
   onOpenNewSaleModal: () => void;
   onOpenNewPurchaseModal: () => void;
   onOpenNewPayrollModal: () => void;
+  onOpenSecurityModal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
+  isSidebarOpenMobile,
   onOpenMobileMenu,
+  onToggleMobileMenu,
   onOpenCommandPalette,
   onOpenNewSaleModal,
   onOpenNewPurchaseModal,
   onOpenNewPayrollModal,
+  onOpenSecurityModal,
 }) => {
   const {
     companies,
@@ -76,9 +82,15 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Hamburger Menu Icon (Sin caja con borde) */}
         <button
           type="button"
-          onClick={onOpenMobileMenu}
-          className="p-1.5 text-white/90 hover:text-white transition cursor-pointer"
-          aria-label="Abrir menú"
+          onClick={() => {
+            if (onToggleMobileMenu) onToggleMobileMenu();
+            else if (onOpenMobileMenu) onOpenMobileMenu();
+          }}
+          className={`p-1.5 rounded-[6px] transition cursor-pointer ${
+            isSidebarOpenMobile ? 'bg-white/20 text-white' : 'text-white/90 hover:text-white hover:bg-white/10'
+          }`}
+          aria-label={isSidebarOpenMobile ? 'Cerrar menú' : 'Abrir menú'}
+          title="Menú de navegación de módulos"
         >
           <Menu className="w-5 h-5" />
         </button>
@@ -318,6 +330,19 @@ export const Header: React.FC<HeaderProps> = ({
             <span>Caja POS</span>
           </button>
         </div>
+
+        {/* Cybersecurity & IP Audit Badge Button */}
+        {onOpenSecurityModal && (
+          <button
+            type="button"
+            onClick={onOpenSecurityModal}
+            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-[6px] border border-teal-700/60 bg-teal-900/40 hover:bg-teal-900/70 text-teal-100 hover:text-white text-xs font-medium transition cursor-pointer"
+            title="Certificado de Ciberseguridad, Auditoría IP y Blindaje Legal FinaPyme"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden xl:inline">Seguridad & IP</span>
+          </button>
+        )}
 
         {/* User Role Switcher Button */}
         <div className="relative">

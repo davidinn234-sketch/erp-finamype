@@ -30,6 +30,8 @@ import { MasterAdminPortal } from './components/admin/MasterAdminPortal';
 import { TabletAttendanceKioskModal } from './components/payroll/TabletAttendanceKioskModal';
 import { Menu, Layers } from 'lucide-react';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { SecurityAndPrivacyBanner } from './components/common/SecurityAndPrivacyBanner';
+import { FinaPymeTermsAndProjectModal } from './components/common/FinaPymeTermsAndProjectModal';
 
 const MainLayout: React.FC = () => {
   const {
@@ -66,6 +68,8 @@ const MainLayout: React.FC = () => {
   const [isNewSaleModalOpen, setIsNewSaleModalOpen] = useState(false);
   const [isNewPurchaseModalOpen, setIsNewPurchaseModalOpen] = useState(false);
   const [isNewPayrollModalOpen, setIsNewPayrollModalOpen] = useState(false);
+  const [isSecurityTermsOpen, setIsSecurityTermsOpen] = useState(false);
+  const [securityModalTab, setSecurityModalTab] = useState<'manifesto' | 'terms' | 'security' | 'team'>('security');
 
   // If user is not authenticated, display login screen
   if (!isAuthenticated) {
@@ -142,16 +146,22 @@ const MainLayout: React.FC = () => {
           <div className="flex-1 flex flex-col min-w-0">
             {/* Sticky Header with Tenant Switcher & Quick Search */}
             <Header
+              isSidebarOpenMobile={isSidebarOpenMobile}
               onOpenMobileMenu={() => setIsSidebarOpenMobile(true)}
+              onToggleMobileMenu={() => setIsSidebarOpenMobile((prev) => !prev)}
               onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
               onOpenNewSaleModal={() => setIsNewSaleModalOpen(true)}
               onOpenNewPurchaseModal={() => setIsNewPurchaseModalOpen(true)}
               onOpenNewPayrollModal={() => setIsNewPayrollModalOpen(true)}
+              onOpenSecurityModal={() => {
+                setSecurityModalTab('security');
+                setIsSecurityTermsOpen(true);
+              }}
             />
 
             {/* Dynamic Active Module Render */}
             <main className="flex-1 pb-16">
-              <ErrorBoundary fallbackTitle="Error al cargar módulo de navegación">
+              <ErrorBoundary key={activeModule} fallbackTitle="Error al cargar módulo de navegación">
                 {activeModule === 'personal_finances' && <PersonalFinancesModule />}
                 {activeModule === 'pos_terminal' && <POSTerminalModule />}
 
@@ -229,6 +239,21 @@ const MainLayout: React.FC = () => {
         <CloudUserManagerModal
           isOpen={isCloudUserManagerOpen}
           onClose={() => setIsCloudUserManagerOpen(false)}
+        />
+
+        {/* Global Cybersecurity, SSL 256-bit & IP Address Telemetry Notice Banner */}
+        <SecurityAndPrivacyBanner
+          onOpenSecurityModal={() => {
+            setSecurityModalTab('security');
+            setIsSecurityTermsOpen(true);
+          }}
+        />
+
+        {/* Terms, Privacy, IP Logging & Cybersecurity Information Modal */}
+        <FinaPymeTermsAndProjectModal
+          isOpen={isSecurityTermsOpen}
+          onClose={() => setIsSecurityTermsOpen(false)}
+          defaultTab={securityModalTab}
         />
       </div>
     </div>

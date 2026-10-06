@@ -73,6 +73,8 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
     fiscalConfig,
     currentCompany,
     addNotification,
+    attendanceRecords,
+    attendanceConfig,
   } = useERP();
 
   const [activeTab, setActiveTab] = useState<'payrolls' | 'services' | 'employees' | 'recruitment' | 'attendance' | 'calculator'>('payrolls');
@@ -83,6 +85,33 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
   const [isEditEmployeeModalOpen, setIsEditEmployeeModalOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [selectedPayrollId, setSelectedPayrollId] = useState<string | null>(payrolls[0]?.id || null);
+  const [selectedAttendanceEmployeeId, setSelectedAttendanceEmployeeId] = useState<string | null>(null);
+
+  // Helper to compute attendance stats for a specific employee and payroll
+  const getEmployeePayrollAttendance = (empId: string, currentPay: Payroll | null) => {
+    if (!currentPay) return { punchCount: 0, lateCount: 0, lateMins: 0, records: [] };
+
+    // 1. First look for exact date range
+    let records = (attendanceRecords || []).filter((r) => {
+      if (r.employeeId !== empId) return false;
+      return r.date >= currentPay.startDate && r.date <= currentPay.endDate;
+    });
+
+    // 2. If no exact match (e.g. sample historical payroll or current punches), include recent records for this employee
+    if (records.length === 0) {
+      records = (attendanceRecords || []).filter((r) => r.employeeId === empId);
+    }
+
+    const lateRecords = records.filter(
+      (r) => r.status === 'tardanza' || (r.minutesLate && r.minutesLate > (r.toleranceApplied || attendanceConfig?.toleranceMinutes || 10))
+    );
+
+    const punchCount = records.filter((r) => r.checkInTime).length;
+    const lateCount = lateRecords.length;
+    const lateMins = lateRecords.reduce((acc, r) => acc + (r.minutesLate || 0), 0);
+
+    return { punchCount, lateCount, lateMins, records };
+  };
 
   // Helper to generate a collision-free 4-digit PIN
   const generateUniquePin = (existingList: Employee[], currentEmpId?: string): string => {
@@ -269,112 +298,122 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
   };
 
   return (
-    <div className="p-4 lg:p-8 space-y-6 max-w-7xl mx-auto">
+    <div className="p-4 lg:p-8 space-y-6 max-w-7xl mx-auto font-sans">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E3E8E6] dark:border-slate-800">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl lg:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+            <h1 className="text-[20px] font-semibold text-[#111827] dark:text-white leading-tight">
               Recursos Humanos & Planilla Legal (El Salvador)
             </h1>
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300">
+            <span className="px-2 py-0.5 rounded-[4px] text-[10px] font-semibold bg-teal-50 dark:bg-teal-950/60 text-[#0F766E] dark:text-teal-300 border border-teal-200 dark:border-teal-800">
               ISSS • AFP • INSAFORP • Renta MH
             </span>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-[13px] text-[#6B7280] dark:text-slate-400 mt-1">
             Liquidación quincenal y mensual, desglose de retenciones al empleado y costos patronales que asume el empresario.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <button
+            type="button"
             onClick={() => setIsKioskModalOpen(true)}
-            className="px-3.5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 active:scale-95 text-white text-xs font-black shadow flex items-center gap-1.5 cursor-pointer"
+            className="px-3 py-1.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-[#F6F8F7] text-[#111827] dark:text-slate-200 text-[13px] font-medium transition cursor-pointer flex items-center gap-1.5"
             title="Abrir terminal checador táctil para tablet con PIN"
           >
-            <Tablet className="w-4 h-4" />
+            <Tablet className="w-3.5 h-3.5 text-[#0F766E]" />
             <span>📱 Tablet Kiosko PIN</span>
           </button>
           <button
+            type="button"
             onClick={handleOpenNewEmployee}
-            className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+            className="px-3 py-1.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-[#F6F8F7] text-[#111827] dark:text-slate-200 text-[13px] font-medium transition cursor-pointer flex items-center gap-1.5"
           >
-            <UserPlus className="w-4 h-4 text-purple-500" />
+            <UserPlus className="w-3.5 h-3.5 text-[#6B7280]" />
             <span>Nuevo Colaborador</span>
           </button>
+          {/* THE ONLY PRIMARY ACTION BUTTON ON SCREEN */}
           <button
+            type="button"
             onClick={onOpenNewPayrollModal}
-            className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white text-xs font-bold shadow-md flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-1.5 rounded-[6px] bg-[#0F766E] hover:bg-[#115E59] text-white text-[13px] font-medium flex items-center gap-1.5 transition cursor-pointer shadow-none"
           >
-            <FileCheck2 className="w-4 h-4" />
-            <span>Generar Planilla Quincenal / Mensual</span>
+            <FileCheck2 className="w-4 h-4 text-white" />
+            <span>+ Generar Planilla</span>
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-[#E3E8E6] dark:border-slate-800 pb-2 overflow-x-auto">
         <button
+          type="button"
           onClick={() => setActiveTab('payrolls')}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+          className={`px-3 py-1.5 rounded-[6px] text-[12px] transition cursor-pointer flex items-center gap-1.5 ${
             activeTab === 'payrolls'
-              ? 'bg-purple-600 text-white'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              ? 'bg-[#0F766E] text-white font-semibold shadow-2xs'
+              : 'text-[#6B7280] dark:text-slate-400 hover:bg-[#F6F8F7] dark:hover:bg-slate-800 hover:text-[#111827]'
           }`}
         >
           <FileText className="w-3.5 h-3.5" />
           <span>Planilla de Salarios ({payrolls.length})</span>
         </button>
         <button
-          onClick={() => setActiveTab('services')}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-            activeTab === 'services'
-              ? 'bg-purple-600 text-white'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <Briefcase className="w-3.5 h-3.5" />
-          <span>Servicios Profesionales (10% Renta)</span>
-        </button>
-        <button
-          onClick={() => setActiveTab('recruitment')}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-            activeTab === 'recruitment'
-              ? 'bg-purple-600 text-white'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-          }`}
-        >
-          <FolderOpen className="w-3.5 h-3.5" />
-          <span>Bolsa de Empleo & CVs</span>
-        </button>
-        <button
+          type="button"
           onClick={() => setActiveTab('attendance')}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+          className={`px-3 py-1.5 rounded-[6px] text-[12px] transition cursor-pointer flex items-center gap-1.5 ${
             activeTab === 'attendance'
-              ? 'bg-cyan-600 text-white'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              ? 'bg-[#0F766E] text-white font-semibold shadow-2xs'
+              : 'text-[#6B7280] dark:text-slate-400 hover:bg-[#F6F8F7] dark:hover:bg-slate-800 hover:text-[#111827]'
           }`}
         >
           <Clock className="w-3.5 h-3.5" />
           <span>Asistencia, Tablet PIN & Horarios</span>
         </button>
         <button
+          type="button"
+          onClick={() => setActiveTab('services')}
+          className={`px-3 py-1.5 rounded-[6px] text-[12px] transition cursor-pointer flex items-center gap-1.5 ${
+            activeTab === 'services'
+              ? 'bg-[#0F766E] text-white font-semibold shadow-2xs'
+              : 'text-[#6B7280] dark:text-slate-400 hover:bg-[#F6F8F7] dark:hover:bg-slate-800 hover:text-[#111827]'
+          }`}
+        >
+          <Briefcase className="w-3.5 h-3.5" />
+          <span>Servicios Profesionales (10% Renta)</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('recruitment')}
+          className={`px-3 py-1.5 rounded-[6px] text-[12px] transition cursor-pointer flex items-center gap-1.5 ${
+            activeTab === 'recruitment'
+              ? 'bg-[#0F766E] text-white font-semibold shadow-2xs'
+              : 'text-[#6B7280] dark:text-slate-400 hover:bg-[#F6F8F7] dark:hover:bg-slate-800 hover:text-[#111827]'
+          }`}
+        >
+          <FolderOpen className="w-3.5 h-3.5" />
+          <span>Bolsa de Empleo & CVs</span>
+        </button>
+        <button
+          type="button"
           onClick={() => setActiveTab('employees')}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+          className={`px-3 py-1.5 rounded-[6px] text-[12px] transition cursor-pointer flex items-center gap-1.5 ${
             activeTab === 'employees'
-              ? 'bg-purple-600 text-white'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              ? 'bg-[#0F766E] text-white font-semibold shadow-2xs'
+              : 'text-[#6B7280] dark:text-slate-400 hover:bg-[#F6F8F7] dark:hover:bg-slate-800 hover:text-[#111827]'
           }`}
         >
           <Users className="w-3.5 h-3.5" />
           <span>Base de Empleados ({employees.length})</span>
         </button>
         <button
+          type="button"
           onClick={() => setActiveTab('calculator')}
-          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+          className={`px-3 py-1.5 rounded-[6px] text-[12px] transition cursor-pointer flex items-center gap-1.5 ${
             activeTab === 'calculator'
-              ? 'bg-purple-600 text-white'
-              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              ? 'bg-[#0F766E] text-white font-semibold shadow-2xs'
+              : 'text-[#6B7280] dark:text-slate-400 hover:bg-[#F6F8F7] dark:hover:bg-slate-800 hover:text-[#111827]'
           }`}
         >
           <Calculator className="w-3.5 h-3.5" />
@@ -386,13 +425,13 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
       {activeTab === 'payrolls' && currentSelectedPayroll && (
         <div className="space-y-6">
           {/* Action Bar & Selector */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-3.5 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 shadow-none">
             <div className="flex items-center gap-2 flex-wrap">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Planilla Activa:</label>
+              <label className="text-[12px] font-semibold text-[#111827] dark:text-slate-300">Planilla Activa:</label>
               <select
                 value={currentSelectedPayroll.id}
                 onChange={(e) => setSelectedPayrollId(e.target.value)}
-                className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                className="p-1.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 text-[12px] font-medium bg-white dark:bg-slate-800 text-[#111827] dark:text-white outline-none cursor-pointer"
               >
                 {payrolls.map((p) => {
                   const quincenaLabel = p.periodType === 'quincenal' 
@@ -409,46 +448,50 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
 
             <div className="flex items-center gap-2 flex-wrap">
               <button
+                type="button"
                 onClick={() => setIsEditorModalOpen(true)}
-                className="px-3 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-xs font-bold text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                className="px-3 py-1.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-[#F6F8F7] text-[#111827] dark:text-slate-200 text-[12px] font-medium flex items-center gap-1.5 cursor-pointer shadow-none"
                 title="Agregar o ajustar horas extras, nocturnidad, bonos y descuentos"
               >
-                <Sliders className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Ajustar Horas Extras / Bonos / Desc</span>
+                <Sliders className="w-3.5 h-3.5 text-[#0F766E]" />
+                <span>Ajustar Horas Extras / Bonos</span>
               </button>
 
               <button
+                type="button"
                 onClick={() => setIsPrintFullPayrollOpen(true)}
-                className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-750 text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-1.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-[#F6F8F7] text-[#111827] dark:text-slate-200 text-[12px] font-medium flex items-center gap-1.5 cursor-pointer shadow-none"
                 title="Imprimir la planilla completa en formato tabla oficial"
               >
-                <Printer className="w-3.5 h-3.5 text-indigo-500" />
-                <span>Imprimir Planilla Completa</span>
+                <Printer className="w-3.5 h-3.5 text-[#6B7280]" />
+                <span>Imprimir Planilla</span>
               </button>
 
               <button
+                type="button"
                 onClick={() => setIsPrintAllSlipsOpen(true)}
-                className="px-3 py-1.5 rounded-xl border border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 text-xs font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-1.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-[#F6F8F7] text-[#111827] dark:text-slate-200 text-[12px] font-medium flex items-center gap-1.5 cursor-pointer shadow-none"
                 title="Imprimir todas las boletas de pago de los empleados en un solo PDF"
               >
-                <FileText className="w-3.5 h-3.5 text-purple-600" />
-                <span>Imprimir Boletas de Todos</span>
+                <FileText className="w-3.5 h-3.5 text-[#6B7280]" />
+                <span>Imprimir Boletas</span>
               </button>
 
               {currentSelectedPayroll.status !== 'pagada' && (
                 <button
+                  type="button"
                   onClick={() => payPayroll(currentSelectedPayroll.id, bankAccounts[0]?.id || '')}
-                  className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  className="px-3.5 py-1.5 rounded-[6px] bg-[#059669] hover:bg-[#047857] text-white text-[12px] font-semibold flex items-center gap-1.5 cursor-pointer shadow-none"
                 >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-white" />
                   <span>Pagar y Dispersar</span>
                 </button>
               )}
               <span
-                className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                className={`px-2 py-0.5 rounded-[4px] text-[10px] font-semibold uppercase tracking-wider ${
                   currentSelectedPayroll.status === 'pagada'
-                    ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
-                    : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300'
+                    ? 'bg-emerald-50 text-[#059669] dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                    : 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
                 }`}
               >
                 {currentSelectedPayroll.status}
@@ -456,12 +499,13 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
 
               {payrolls.length > 1 && (
                 <button
+                  type="button"
                   onClick={() => {
                     if (window.confirm(`¿Estás seguro de eliminar esta planilla (Período ${currentSelectedPayroll.periodNumber})?`)) {
                       deletePayroll(currentSelectedPayroll.id);
                     }
                   }}
-                  className="p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:border-rose-200 text-slate-400 hover:text-rose-600 transition cursor-pointer"
+                  className="p-1.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:border-rose-200 text-[#6B7280] hover:text-rose-600 transition cursor-pointer"
                   title="Eliminar esta planilla"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -472,47 +516,47 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
 
           {/* KPI Row 1: Lo que Devengan y se Retiene a Empleados */}
           <div>
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">
+            <span className="text-[11px] font-semibold text-[#6B7280] uppercase tracking-wider block mb-2">
               1. Liquidación y Retenciones al Trabajador
             </span>
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-              <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
-                <span className="text-[11px] text-slate-500 font-semibold block">Total Devengado (Nominal)</span>
-                <h4 className="text-lg font-black text-slate-900 dark:text-white mt-0.5 font-mono">
+              <div className="p-4 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 bg-white dark:bg-slate-900 shadow-none">
+                <span className="text-[11px] text-[#6B7280] font-medium block">Total Devengado (Nominal)</span>
+                <h4 className="text-[20px] font-semibold text-[#111827] dark:text-white mt-1 [font-variant-numeric:tabular-nums]">
                   {formatCurrencyUSD(currentSelectedPayroll.totalDevengado)}
                 </h4>
               </div>
 
-              <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
-                <span className="text-[11px] text-indigo-600 font-semibold block">
+              <div className="p-4 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 bg-white dark:bg-slate-900 shadow-none">
+                <span className="text-[11px] text-[#0F766E] font-medium block">
                   (-) ISSS Laboral ({fiscalConfig.isssLaboralRate * 100}%)
                 </span>
-                <h4 className="text-lg font-black text-indigo-600 dark:text-indigo-400 mt-0.5 font-mono">
+                <h4 className="text-[20px] font-semibold text-[#0F766E] dark:text-teal-400 mt-1 [font-variant-numeric:tabular-nums]">
                   {formatCurrencyUSD(currentSelectedPayroll.totalIsssLaboral)}
                 </h4>
               </div>
 
-              <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
-                <span className="text-[11px] text-purple-600 font-semibold block">
+              <div className="p-4 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 bg-white dark:bg-slate-900 shadow-none">
+                <span className="text-[11px] text-[#0F766E] font-medium block">
                   (-) AFP Laboral ({fiscalConfig.afpLaboralRate * 100}%)
                 </span>
-                <h4 className="text-lg font-black text-purple-600 dark:text-purple-400 mt-0.5 font-mono">
+                <h4 className="text-[20px] font-semibold text-[#0F766E] dark:text-teal-400 mt-1 [font-variant-numeric:tabular-nums]">
                   {formatCurrencyUSD(currentSelectedPayroll.totalAfpLaboral)}
                 </h4>
               </div>
 
-              <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
-                <span className="text-[11px] text-amber-600 font-semibold block">(-) Renta MH Retenida</span>
-                <h4 className="text-lg font-black text-amber-600 dark:text-amber-400 mt-0.5 font-mono">
+              <div className="p-4 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 bg-white dark:bg-slate-900 shadow-none">
+                <span className="text-[11px] text-amber-700 dark:text-amber-400 font-medium block">(-) Renta MH Retenida</span>
+                <h4 className="text-[20px] font-semibold text-amber-700 dark:text-amber-400 mt-1 [font-variant-numeric:tabular-nums]">
                   {formatCurrencyUSD(currentSelectedPayroll.totalRentaRetenida)}
                 </h4>
               </div>
 
-              <div className="p-3.5 rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/50 dark:bg-emerald-950/30 shadow-xs">
-                <span className="text-[11px] text-emerald-700 dark:text-emerald-300 font-bold block">
+              <div className="p-4 rounded-[8px] border border-teal-200 dark:border-teal-900/60 bg-teal-50/40 dark:bg-teal-950/30 shadow-none">
+                <span className="text-[11px] text-[#059669] dark:text-emerald-300 font-semibold block">
                   (=) Líquido Pagado a Personal
                 </span>
-                <h4 className="text-lg font-black text-emerald-600 mt-0.5 font-mono">
+                <h4 className="text-[20px] font-semibold text-[#059669] mt-1 [font-variant-numeric:tabular-nums]">
                   {formatCurrencyUSD(currentSelectedPayroll.totalLiquido)}
                 </h4>
               </div>
@@ -520,63 +564,63 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
           </div>
 
           {/* KPI Row 2: COSTOS PATRONALES QUE PAGA EL EMPRESARIO */}
-          <div className="p-4 rounded-2xl bg-gradient-to-r from-rose-50/80 via-white to-amber-50/60 dark:from-slate-900 dark:via-slate-900 dark:to-rose-950/20 border border-rose-200 dark:border-rose-900/50 shadow-xs space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-rose-100 dark:border-rose-900/30 pb-2">
+          <div className="p-4 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 shadow-none space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E3E8E6] dark:border-slate-800 pb-2">
               <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-rose-600 text-white flex items-center justify-center font-bold text-xs">
+                <div className="w-6 h-6 rounded-[4px] bg-teal-50 dark:bg-teal-950 text-[#0F766E] flex items-center justify-center font-bold text-xs border border-teal-200 dark:border-teal-800">
                   <Briefcase className="w-3.5 h-3.5" />
                 </div>
-                <h3 className="text-xs font-black uppercase tracking-wider text-rose-900 dark:text-rose-200">
-                  2. Costos y Carga Patronal que Paga el Empresario (Fuera del Sueldo)
+                <h3 className="text-[12px] font-semibold text-[#111827] dark:text-white">
+                  2. Costos y Carga Patronal que Paga el Empleador (Fuera del Sueldo)
                 </h3>
               </div>
-              <span className="text-[11px] font-semibold text-rose-700 dark:text-rose-300">
+              <span className="text-[11px] font-medium text-[#6B7280]">
                 Aportes Patronales + Provisiones Legales
               </span>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              <div className="p-3 rounded-xl bg-white dark:bg-slate-800 border border-rose-100 dark:border-slate-700">
-                <span className="text-[10px] text-slate-500 font-semibold block">
+              <div className="p-3 rounded-[6px] bg-[#F6F8F7] dark:bg-slate-800 border border-[#E3E8E6] dark:border-slate-700">
+                <span className="text-[10px] text-[#6B7280] font-medium block">
                   ISSS Patronal ({fiscalConfig.isssPatronalRate * 100}%)
                 </span>
-                <h5 className="text-base font-black text-rose-600 mt-0.5 font-mono">
+                <h5 className="text-[15px] font-semibold text-[#111827] dark:text-white mt-0.5 [font-variant-numeric:tabular-nums]">
                   +{formatCurrencyUSD(currentSelectedPayroll.totalIsssPatronal)}
                 </h5>
               </div>
 
-              <div className="p-3 rounded-xl bg-white dark:bg-slate-800 border border-rose-100 dark:border-slate-700">
-                <span className="text-[10px] text-slate-500 font-semibold block">
+              <div className="p-3 rounded-[6px] bg-[#F6F8F7] dark:bg-slate-800 border border-[#E3E8E6] dark:border-slate-700">
+                <span className="text-[10px] text-[#6B7280] font-medium block">
                   AFP Patronal ({fiscalConfig.afpPatronalRate * 100}%)
                 </span>
-                <h5 className="text-base font-black text-rose-600 mt-0.5 font-mono">
+                <h5 className="text-[15px] font-semibold text-[#111827] dark:text-white mt-0.5 [font-variant-numeric:tabular-nums]">
                   +{formatCurrencyUSD(currentSelectedPayroll.totalAfpPatronal)}
                 </h5>
               </div>
 
-              <div className="p-3 rounded-xl bg-white dark:bg-slate-800 border border-rose-100 dark:border-slate-700">
-                <span className="text-[10px] text-slate-500 font-semibold block">
+              <div className="p-3 rounded-[6px] bg-[#F6F8F7] dark:bg-slate-800 border border-[#E3E8E6] dark:border-slate-700">
+                <span className="text-[10px] text-[#6B7280] font-medium block">
                   INSAFORP ({fiscalConfig.insaforpPatronalRate * 100}%)
                 </span>
-                <h5 className="text-base font-black text-rose-600 mt-0.5 font-mono">
+                <h5 className="text-[15px] font-semibold text-[#111827] dark:text-white mt-0.5 [font-variant-numeric:tabular-nums]">
                   +{formatCurrencyUSD(currentSelectedPayroll.totalInsaforpPatronal)}
                 </h5>
               </div>
 
-              <div className="p-3 rounded-xl bg-white dark:bg-slate-800 border border-rose-100 dark:border-slate-700">
-                <span className="text-[10px] text-slate-500 font-semibold block">
+              <div className="p-3 rounded-[6px] bg-[#F6F8F7] dark:bg-slate-800 border border-[#E3E8E6] dark:border-slate-700">
+                <span className="text-[10px] text-[#6B7280] font-medium block">
                   Provisiones (Aguinaldo/Vac)
                 </span>
-                <h5 className="text-base font-black text-amber-600 mt-0.5 font-mono">
+                <h5 className="text-[15px] font-semibold text-amber-700 dark:text-amber-400 mt-0.5 [font-variant-numeric:tabular-nums]">
                   +{formatCurrencyUSD(currentSelectedPayroll.totalProvisiones)}
                 </h5>
               </div>
 
-              <div className="p-3 rounded-xl bg-rose-100/70 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800">
-                <span className="text-[10px] text-rose-900 dark:text-rose-200 font-bold block">
+              <div className="p-3 rounded-[6px] bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800">
+                <span className="text-[10px] text-rose-700 dark:text-rose-300 font-semibold block">
                   Carga Patronal Total
                 </span>
-                <h5 className="text-base font-black text-rose-700 dark:text-rose-300 mt-0.5 font-mono">
+                <h5 className="text-[15px] font-semibold text-rose-700 dark:text-rose-300 mt-0.5 [font-variant-numeric:tabular-nums]">
                   +
                   {formatCurrencyUSD(
                     currentSelectedPayroll.totalIsssPatronal +
@@ -587,11 +631,11 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
                 </h5>
               </div>
 
-              <div className="p-3 rounded-xl bg-slate-900 text-white border border-slate-800 shadow-sm">
-                <span className="text-[10px] text-rose-300 font-bold block">
+              <div className="p-3 rounded-[6px] bg-[#111827] text-white border border-slate-800 shadow-none">
+                <span className="text-[10px] text-teal-300 font-semibold block">
                   COSTO REAL EMPRESA TOTAL
                 </span>
-                <h5 className="text-base font-black text-white mt-0.5 font-mono">
+                <h5 className="text-[15px] font-semibold text-white mt-0.5 [font-variant-numeric:tabular-nums]">
                   {formatCurrencyUSD(currentSelectedPayroll.costoTotalEmpresa)}
                 </h5>
               </div>
@@ -639,12 +683,13 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
           </div>
 
           {/* Payroll Detailed Table */}
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+          <div className="rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 bg-white dark:bg-slate-900 shadow-none overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs font-mono">
-                <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-500 uppercase text-[10px] font-bold border-b border-slate-200 dark:border-slate-800">
+                <thead className="bg-[#F6F8F7] dark:bg-slate-800/80 text-[#6B7280] dark:text-slate-400 uppercase text-[10px] font-bold border-b border-[#E3E8E6] dark:border-slate-800">
                   <tr>
                     <th className="p-3 font-sans">Colaborador / Cargo</th>
+                    <th className="p-3 text-center font-sans">Asistencia & Tardanzas</th>
                     <th className="p-3 text-right">Salario Nominal</th>
                     {payrollTableViewMode !== 'employer' && (
                       <>
@@ -686,6 +731,47 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
                           <p className="text-[10px] text-slate-400">
                             {d.position} • DUI: {d.dui}
                           </p>
+                        </td>
+                        <td className="p-3 text-center font-sans">
+                          {(() => {
+                            const { punchCount, lateCount, lateMins } = getEmployeePayrollAttendance(d.employeeId, currentSelectedPayroll);
+                            if (lateCount > 0) {
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedAttendanceEmployeeId(d.employeeId)}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/80 text-[11px] font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/60 transition cursor-pointer"
+                                  title="Ver registro de marcaciones y tardanzas del colaborador en la quincena"
+                                >
+                                  <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
+                                  <span>⚠️ {lateCount} tardanza{lateCount > 1 ? 's' : ''} ({lateMins} min)</span>
+                                </button>
+                              );
+                            }
+                            if (punchCount > 0) {
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedAttendanceEmployeeId(d.employeeId)}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700/80 text-[11px] font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition cursor-pointer"
+                                  title="Ver marcaciones de asistencia"
+                                >
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                                  <span>✓ {punchCount} d. puntual</span>
+                                </button>
+                              );
+                            }
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedAttendanceEmployeeId(d.employeeId)}
+                                className="text-[10px] text-slate-400 hover:text-[#0F766E] font-mono underline cursor-pointer"
+                                title="Ver historial de marcaciones"
+                              >
+                                Ver marcas
+                              </button>
+                            );
+                          })()}
                         </td>
                         <td className="p-3 text-right text-slate-700 dark:text-slate-300 font-bold">
                           {formatCurrencyUSD(d.baseSalary)}
@@ -762,16 +848,16 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
       {/* Tab 2: Colaboradores & Costo Real Empresa */}
       {activeTab === 'employees' && (
         <div className="space-y-4">
-          <div className="p-4 rounded-2xl bg-indigo-50/70 dark:bg-slate-900 border border-indigo-100 dark:border-indigo-900/50 flex items-center justify-between">
+          <div className="p-4 rounded-[8px] bg-white dark:bg-slate-900 border border-[#E3E8E6] dark:border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold">
+              <div className="w-8 h-8 rounded-[6px] bg-[#0F766E] text-white flex items-center justify-center font-bold">
                 <Users className="w-4 h-4" />
               </div>
               <div>
-                <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                <h4 className="text-xs font-bold text-[#111827] dark:text-white">
                   Expediente de Colaboradores & Costo Real de Contratación
                 </h4>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[11px] text-[#6B7280]">
                   Cada salario nominal genera un costo adicional de ~34% por ISSS Patronal (7.5%), AFP Patronal (8.75%), INSAFORP (1%) y provisiones.
                 </p>
               </div>
@@ -785,7 +871,7 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
               value={employeeSearch}
               onChange={(e) => setEmployeeSearch(e.target.value)}
               placeholder="Buscar colaborador por nombre, cargo, DUI o departamento..."
-              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+              className="w-full pl-9 pr-3 py-2 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-[#111827] dark:text-white outline-none"
             />
           </div>
 
@@ -802,11 +888,11 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
               return (
                 <div
                   key={e.id}
-                  className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm space-y-3"
+                  className="p-4 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 bg-white dark:bg-slate-900 shadow-none space-y-3"
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <span className="text-[10px] font-mono font-bold text-purple-600">{e.code}</span>
+                      <span className="text-[10px] font-mono font-bold text-[#0F766E]">{e.code}</span>
                       <h3 className="font-bold text-slate-900 dark:text-white text-sm">
                         {e.firstName} {e.lastName}
                       </h3>
@@ -821,7 +907,7 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
                     </span>
                   </div>
 
-                  <div className="space-y-1 text-xs text-slate-600 dark:text-slate-300 pt-2 border-t border-slate-100 dark:border-slate-800 font-mono">
+                  <div className="space-y-1 text-xs text-slate-600 dark:text-slate-300 pt-2 border-t border-[#E3E8E6] dark:border-slate-800 font-mono">
                     <p>
                       <span className="font-sans text-slate-400">DUI:</span> {e.dui}
                     </p>
@@ -835,7 +921,7 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
                   </div>
 
                   {/* Employer Cost Breakdown for this employee */}
-                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/60 space-y-1.5 text-xs">
+                  <div className="p-3 rounded-[6px] bg-[#F6F8F7] dark:bg-slate-800/80 border border-[#E3E8E6] dark:border-slate-700/60 space-y-1.5 text-xs">
                     <div className="flex justify-between items-center">
                       <span className="text-slate-500 font-medium">Salario Nominal:</span>
                       <span className="font-bold text-slate-900 dark:text-white font-mono">
@@ -850,7 +936,7 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
                       <span>(+) Provisiones (Aguinaldo + Vacación + Indem):</span>
                       <span className="font-mono">+{formatCurrencyUSD(provs)}</span>
                     </div>
-                    <div className="flex justify-between items-center pt-1 border-t border-slate-200 dark:border-slate-700 font-bold">
+                    <div className="flex justify-between items-center pt-1 border-t border-[#E3E8E6] dark:border-slate-700 font-bold">
                       <span className="text-rose-700 dark:text-rose-300">Costo Real Mensual Empresa:</span>
                       <span className="font-black text-rose-600 dark:text-rose-400 font-mono text-sm">
                         {formatCurrencyUSD(totalCost)}
@@ -859,18 +945,18 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
                   </div>
 
                   {/* Kiosk PIN and Edit Button Footer */}
-                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                  <div className="pt-2 border-t border-[#E3E8E6] dark:border-slate-800 flex items-center justify-between">
                     <div className="flex items-center gap-1.5 text-[11px] font-mono">
-                      <Lock className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+                      <Lock className="w-3.5 h-3.5 text-[#0F766E]" />
                       <span className="text-slate-500 font-sans">PIN Tablet:</span>
-                      <span className="font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
+                      <span className="font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-[4px] border border-[#E3E8E6] dark:border-slate-700">
                         {e.pinCode || 'Sin PIN'}
                       </span>
                     </div>
                     <button
                       type="button"
                       onClick={() => handleOpenEditEmployee(e)}
-                      className="px-3 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-bold text-xs flex items-center gap-1 transition cursor-pointer"
+                      className="px-2.5 py-1 rounded-[6px] bg-[#0F766E]/10 hover:bg-[#0F766E]/20 text-[#0F766E] dark:text-teal-400 font-medium text-xs flex items-center gap-1 transition cursor-pointer"
                     >
                       <Edit3 className="w-3 h-3" />
                       <span>Editar & PIN</span>
@@ -887,12 +973,12 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
       {activeTab === 'calculator' && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
           {/* Inputs */}
-          <div className="p-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm space-y-4">
-            <h3 className="font-black text-base text-slate-900 dark:text-white flex items-center gap-2">
-              <Calculator className="w-5 h-5 text-purple-600" />
+          <div className="p-5 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 bg-white dark:bg-slate-900 shadow-none space-y-4">
+            <h3 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+              <Calculator className="w-5 h-5 text-[#0F766E]" />
               <span>Simulador de Descuentos & Costo Patronal</span>
             </h3>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-[#6B7280]">
               Calcula simultáneamente lo que recibe el empleado y el desembolso total que asume la empresa.
             </p>
 
@@ -903,8 +989,8 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
                   <button
                     type="button"
                     onClick={() => setCalcPeriod('quincenal')}
-                    className={`p-2 rounded-lg font-bold transition cursor-pointer ${
-                      calcPeriod === 'quincenal' ? 'bg-purple-600 text-white' : 'border border-slate-200 dark:border-slate-700'
+                    className={`p-2 rounded-[6px] font-semibold transition cursor-pointer ${
+                      calcPeriod === 'quincenal' ? 'bg-[#0F766E] text-white' : 'border border-[#E3E8E6] dark:border-slate-700'
                     }`}
                   >
                     Quincenal
@@ -912,8 +998,8 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
                   <button
                     type="button"
                     onClick={() => setCalcPeriod('mensual')}
-                    className={`p-2 rounded-lg font-bold transition cursor-pointer ${
-                      calcPeriod === 'mensual' ? 'bg-purple-600 text-white' : 'border border-slate-200 dark:border-slate-700'
+                    className={`p-2 rounded-[6px] font-semibold transition cursor-pointer ${
+                      calcPeriod === 'mensual' ? 'bg-[#0F766E] text-white' : 'border border-[#E3E8E6] dark:border-slate-700'
                     }`}
                   >
                     Mensual
@@ -928,7 +1014,7 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
                   step="10"
                   value={calcSalary}
                   onChange={(e) => setCalcSalary(parseFloat(e.target.value) || 0)}
-                  className="w-full p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-base font-black font-mono text-slate-900 dark:text-white"
+                  className="w-full p-2.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-[#F6F8F7] dark:bg-slate-800 text-base font-bold font-mono text-slate-900 dark:text-white outline-none"
                 />
               </div>
 
@@ -939,15 +1025,15 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
                   step="5"
                   value={calcOvertime}
                   onChange={(e) => setCalcOvertime(parseFloat(e.target.value) || 0)}
-                  className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  className="w-full p-2 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none"
                 />
               </div>
             </div>
           </div>
 
           {/* Results Breakdown */}
-          <div className="p-6 rounded-2xl border border-purple-200 dark:border-purple-900 bg-purple-50/40 dark:bg-purple-950/20 shadow-sm space-y-4 text-xs font-mono">
-            <h4 className="font-black text-sm text-purple-950 dark:text-purple-200 uppercase tracking-wider font-sans">
+          <div className="p-5 rounded-[8px] border border-teal-200 dark:border-teal-900/60 bg-teal-50/40 dark:bg-teal-950/20 shadow-none space-y-4 text-xs font-mono">
+            <h4 className="font-bold text-sm text-[#0F766E] dark:text-teal-300 uppercase tracking-wider font-sans">
               Desglose Tributario, Laboral & Patronal
             </h4>
 
@@ -1015,7 +1101,7 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
       {/* MODAL: Generar Planilla */}
       {isNewPayrollModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-6 space-y-4 text-xs">
+          <div className="w-full max-w-md rounded-[8px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-6 space-y-4 text-xs">
             <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                 Generar Planilla Automatizada
@@ -1125,7 +1211,7 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
       {/* MODAL: Nuevo Colaborador */}
       {isNewEmployeeModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-          <div className="w-full max-w-lg my-8 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-6 space-y-4 text-xs">
+          <div className="w-full max-w-lg my-8 rounded-[8px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-6 space-y-4 text-xs">
             <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                 Registrar Nuevo Colaborador
@@ -1324,7 +1410,7 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
       {/* MODAL: Editar Colaborador & PIN */}
       {isEditEmployeeModalOpen && editingEmployee && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in">
-          <div className="w-full max-w-lg my-8 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-6 space-y-4 text-xs">
+          <div className="w-full max-w-lg my-8 rounded-[8px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-6 space-y-4 text-xs">
             <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -1534,6 +1620,149 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
         isOpen={isKioskModalOpen}
         onClose={() => setIsKioskModalOpen(false)}
       />
+
+      {/* MODAL: Dashboard de Asistencia y Marcación por Colaborador */}
+      {selectedAttendanceEmployeeId && currentSelectedPayroll && (() => {
+        const selectedEmp = employees.find((e) => e.id === selectedAttendanceEmployeeId) ||
+          currentSelectedPayroll.details.find((d) => d.employeeId === selectedAttendanceEmployeeId);
+        const { punchCount, lateCount, lateMins, records } = getEmployeePayrollAttendance(selectedAttendanceEmployeeId, currentSelectedPayroll);
+        const tolerance = attendanceConfig?.toleranceMinutes || 10;
+        const employeeDisplayName = (selectedEmp as any)?.firstName
+          ? `${(selectedEmp as any).firstName} ${(selectedEmp as any).lastName}`
+          : (selectedEmp as any)?.employeeName || 'Colaborador';
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+            <div className="w-full max-w-2xl my-8 rounded-[8px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-5 sm:p-6 space-y-4 text-xs">
+              <div className="flex items-start justify-between border-b pb-3 border-[#E3E8E6] dark:border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-[6px] bg-[#0F766E] flex items-center justify-center text-white">
+                    <Clock className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-[#111827] dark:text-white">
+                      Dashboard de Asistencia en Planilla
+                    </h3>
+                    <p className="text-[11px] text-[#6B7280]">
+                      Colaborador: <strong className="text-slate-800 dark:text-slate-200">{employeeDisplayName}</strong> • Período: {currentSelectedPayroll.startDate} al {currentSelectedPayroll.endDate}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedAttendanceEmployeeId(null)}
+                  className="p-1 rounded-[6px] text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* KPI Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div className="p-3 rounded-[6px] bg-[#F6F8F7] dark:bg-slate-800 border border-[#E3E8E6] dark:border-slate-700">
+                  <span className="text-[10px] text-[#6B7280] font-medium block">Días Marcados</span>
+                  <span className="text-base font-bold text-[#111827] dark:text-white font-mono mt-0.5 block">{punchCount}</span>
+                </div>
+                <div className={`p-3 rounded-[6px] border ${lateCount > 0 ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800' : 'bg-[#F6F8F7] dark:bg-slate-800 border-[#E3E8E6] dark:border-slate-700'}`}>
+                  <span className={`text-[10px] font-medium block ${lateCount > 0 ? 'text-amber-800 dark:text-amber-300' : 'text-[#6B7280]'}`}>Tardanzas en Quincena</span>
+                  <span className={`text-base font-bold font-mono mt-0.5 block ${lateCount > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-[#111827] dark:text-white'}`}>{lateCount} días</span>
+                </div>
+                <div className="p-3 rounded-[6px] bg-[#F6F8F7] dark:bg-slate-800 border border-[#E3E8E6] dark:border-slate-700">
+                  <span className="text-[10px] text-[#6B7280] font-medium block">Minutos Excedidos</span>
+                  <span className="text-base font-bold text-[#111827] dark:text-white font-mono mt-0.5 block">{lateMins} min</span>
+                </div>
+                <div className="p-3 rounded-[6px] bg-[#F6F8F7] dark:bg-slate-800 border border-[#E3E8E6] dark:border-slate-700">
+                  <span className="text-[10px] text-[#6B7280] font-medium block">Tolerancia de Ley</span>
+                  <span className="text-base font-bold text-emerald-600 dark:text-emerald-400 font-mono mt-0.5 block">{tolerance} min</span>
+                </div>
+              </div>
+
+              {/* Policy Explanation Box */}
+              <div className="p-3 rounded-[6px] bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 text-[11px] text-[#0F766E] dark:text-teal-300 space-y-1">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <ShieldCheck className="w-4 h-4 text-[#0F766E] shrink-0" />
+                  <span>Política Empresarial: Notificación y Aviso de Tardanzas</span>
+                </div>
+                <p className="text-slate-600 dark:text-slate-300">
+                  El sistema registra los marcajes biométricos por PIN y contabiliza las llegadas posteriores a los <strong>{tolerance} minutos de tolerancia</strong>. En el modo estándar de la empresa, esto funciona como <strong>aviso informativo de puntualidad</strong> para evaluar la disciplina laboral y no realiza descuentos arbitrarios salvo que el reglamento interno lo estipule.
+                </p>
+              </div>
+
+              {/* Table of Punches in this Period */}
+              <div className="space-y-1.5">
+                <h4 className="text-xs font-bold text-[#111827] dark:text-white">
+                  Detalle de Marcaciones Registradas en el Kiosko Tablet:
+                </h4>
+                {records.length === 0 ? (
+                  <div className="p-4 rounded-[6px] border border-dashed border-[#E3E8E6] text-center text-[#6B7280]">
+                    No se registran marcajes biométricos en este rango de fechas para este colaborador.
+                  </div>
+                ) : (
+                  <div className="rounded-[6px] border border-[#E3E8E6] dark:border-slate-800 overflow-hidden max-h-56 overflow-y-auto">
+                    <table className="w-full text-left text-xs font-mono">
+                      <thead className="bg-[#F6F8F7] dark:bg-slate-800 text-[#6B7280] dark:text-slate-400 text-[10px] uppercase font-bold border-b border-[#E3E8E6] dark:border-slate-700 sticky top-0">
+                        <tr>
+                          <th className="p-2.5 font-sans">Fecha</th>
+                          <th className="p-2.5 text-center">Entrada Marcada</th>
+                          <th className="p-2.5 text-center">Horario Base</th>
+                          <th className="p-2.5 text-center">Almuerzo</th>
+                          <th className="p-2.5 text-center">Salida</th>
+                          <th className="p-2.5 text-right font-sans">Condición</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {records.map((r) => {
+                          const isLate = r.status === 'tardanza' || (r.minutesLate && r.minutesLate > (r.toleranceApplied || tolerance));
+                          return (
+                            <tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-850">
+                              <td className="p-2.5 font-sans font-medium text-slate-900 dark:text-white">
+                                {r.date}
+                              </td>
+                              <td className="p-2.5 text-center font-bold text-slate-800 dark:text-slate-200">
+                                {r.checkInTime || '-'}
+                              </td>
+                              <td className="p-2.5 text-center text-slate-500">
+                                {r.scheduledStartTime || '08:00'}
+                              </td>
+                              <td className="p-2.5 text-center text-slate-500 text-[11px]">
+                                {r.lunchStartTime && r.lunchEndTime ? `${r.lunchStartTime.slice(0,5)} - ${r.lunchEndTime.slice(0,5)}` : '-'}
+                              </td>
+                              <td className="p-2.5 text-center text-slate-500">
+                                {r.checkOutTime || '-'}
+                              </td>
+                              <td className="p-2.5 text-right font-sans">
+                                {isLate ? (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">
+                                    ⚠️ Tardanza (+{r.minutesLate || 5} min)
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">
+                                    ✓ Puntual
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setSelectedAttendanceEmployeeId(null)}
+                  className="px-4 py-1.5 rounded-[6px] bg-[#0F766E] hover:bg-[#115E59] text-white font-medium text-xs cursor-pointer"
+                >
+                  Cerrar Detalle
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

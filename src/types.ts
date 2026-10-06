@@ -585,6 +585,9 @@ export interface PayrollDetail {
   nightHours?: number; // Nocturnidad ordinaria (+25%)
   nightHoursAmount?: number;
   tardinessDiscount?: number; // Descuento llegadas tardías / faltas
+  attendanceLateDays?: number; // Días que llegó tarde en el período
+  attendanceTotalLateMinutes?: number; // Minutos tarde acumulados en el período
+  attendancePresentDays?: number; // Días que marcó asistencia en el período
   advancesOrLoansDiscount?: number; // Anticipos o cuotas préstamo
   isIncluded?: boolean; // Marcar/desmarcar de planilla
   

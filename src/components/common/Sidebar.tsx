@@ -40,6 +40,34 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
     setIsCloudUserManagerOpen,
   } = useERP();
 
+  // Prevent background scrolling when mobile sidebar is open
+  React.useEffect(() => {
+    if (isOpenMobile) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isOpenMobile]);
+
+  // Close drawer on Escape key press
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpenMobile) {
+        onCloseMobile();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpenMobile, onCloseMobile]);
+
+  const handleSelectModule = (moduleId: string) => {
+    setActiveModule(moduleId);
+    onCloseMobile();
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  };
+
   const erpOperationalItems = [
     {
       id: 'dashboard',
@@ -196,13 +224,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
       {isOpenMobile && (
         <div
           onClick={onCloseMobile}
-          className="fixed inset-0 bg-slate-900/60 z-40 lg:hidden backdrop-blur-xs transition-opacity"
+          className="fixed inset-0 bg-slate-900/60 z-[95] lg:hidden backdrop-blur-xs transition-opacity"
         />
       )}
 
       {/* Main Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] lg:w-68 lg:sticky lg:top-0 lg:h-screen flex flex-col justify-between border-r border-[#0b3b36] bg-[#0F4C45] text-white transition-transform duration-200 ease-in-out ${
+        className={`fixed inset-y-0 left-0 z-[100] w-72 max-w-[85vw] lg:w-68 lg:sticky lg:top-0 lg:h-screen flex flex-col justify-between border-r border-[#0b3b36] bg-[#0F4C45] text-white transition-transform duration-200 ease-in-out ${
           isOpenMobile ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'
         }`}
       >
@@ -248,10 +276,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
                 <button
                   key={item.id}
                   id={`nav-${item.id}`}
-                  onClick={() => {
-                    setActiveModule(item.id);
-                    onCloseMobile();
-                  }}
+                  onClick={() => handleSelectModule(item.id)}
                   className={`w-full flex items-center justify-between p-2 rounded-[6px] text-left transition-colors cursor-pointer select-none ${
                     isActive
                       ? 'bg-white/15 text-white font-semibold border-l-2 border-white'
@@ -306,10 +331,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
                       <button
                         key={item.id}
                         id={`nav-${item.id}`}
-                        onClick={() => {
-                          setActiveModule(item.id);
-                          onCloseMobile();
-                        }}
+                        onClick={() => handleSelectModule(item.id)}
                         className={`w-full flex items-center justify-between p-2 rounded-[6px] text-left transition-colors cursor-pointer select-none ${
                           isActive
                             ? 'bg-white/15 text-white font-semibold border-l-2 border-white'
@@ -372,7 +394,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
             <button
               type="button"
               id="sidebar-open-terms-btn"
-              onClick={() => setIsTermsModalOpen(true)}
+              onClick={() => {
+                onCloseMobile();
+                setIsTermsModalOpen(true);
+              }}
               className="flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-[6px] bg-teal-900/60 border border-teal-700/60 text-white hover:bg-teal-900 transition-all text-[11px] font-semibold cursor-pointer"
               title="Ver Objetivos de Proyecto, Lean Startup y Términos FinaPyme"
             >

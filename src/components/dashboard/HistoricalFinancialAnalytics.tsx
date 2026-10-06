@@ -471,31 +471,31 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
   const metricConfig = {
     comparativa: {
       name: 'Evolución de 4 Variables (Integral)',
-      color: '#10b981',
+      color: '#0F766E',
       badge: 'Multivariable',
       desc: 'Correlación simultánea de Ventas, Egresos Totales, Utilidad Neta y Flujo Neto de Caja.',
     },
     ventas: {
       name: 'Ventas Facturadas (DTE & Consumidor)',
-      color: '#10b981',
+      color: '#0F766E',
       badge: 'Ingresos Operativos',
       desc: 'Ingresos netos por ventas gravadas, exentas y no sujetas emitidas.',
     },
     egresos: {
       name: 'Egresos Totales (Compras + Nómina + Gastos + MH)',
-      color: '#f43f5e',
+      color: '#64748B',
       badge: 'Desembolsos & Costos',
       desc: 'Suma de compras de mercadería, nómina patronal SV, gastos fijos y tributos.',
     },
     utilidad_neta: {
       name: 'Utilidad Neta Final (Rentabilidad)',
-      color: '#2f855f',
+      color: '#059669',
       badge: 'Ganancia Líquida',
       desc: 'Resultado neto positivo después de cubrir todos los costos, nómina y obligaciones fiscales.',
     },
     flujo_neto: {
       name: 'Flujo Neto de Caja',
-      color: '#0ea5e9',
+      color: '#0F766E',
       badge: 'Saldo de Caja',
       desc: 'Flujo de efectivo real resultante de Ingresos Totales menos Egresos Totales.',
     },
@@ -781,10 +781,10 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
                   }}
                 />
                 <Legend verticalAlign="top" height={36} />
-                <Bar dataKey="ventas" name="1. Ventas Facturadas" fill="#10b981" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="egresosTotales" name="2. Egresos Totales" fill="#f43f5e" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="utilidadNeta" name="3. Utilidad Neta Final" fill="#2f855f" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="flujoNeto" name="4. Flujo Neto de Caja" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="ventas" name="1. Ventas Facturadas" fill="#0F766E" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="egresosTotales" name="2. Egresos Totales" fill="#64748B" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="utilidadNeta" name="3. Utilidad Neta Final" fill="#059669" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="flujoNeto" name="4. Flujo Neto de Caja" fill="#0D9488" radius={[4, 4, 0, 0]} />
               </BarChart>
             ) : chartType === 'lines' ? (
               <LineChart
@@ -793,7 +793,7 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
                 onClick={handleChartDrilldown}
                 className={granularity === 'meses' && selectedMasterMonth === 'all' ? 'cursor-pointer' : ''}
               >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E3E8E6" />
                 <XAxis
                   dataKey="shortLabel"
                   tick={{ fontSize: 10 }}
@@ -815,14 +815,14 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
                   }}
                 />
                 <Legend verticalAlign="top" height={36} />
-                <Line type="monotone" dataKey="ventas" name="1. Ventas Facturadas" stroke="#10b981" strokeWidth={3} dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="egresosTotales" name="2. Egresos Totales" stroke="#f43f5e" strokeWidth={3} dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="utilidadNeta" name="3. Utilidad Neta Final" stroke="#2f855f" strokeWidth={3} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="ventas" name="1. Ventas Facturadas" stroke="#0F766E" strokeWidth={3} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="egresosTotales" name="2. Egresos Totales" stroke="#64748B" strokeWidth={3} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="utilidadNeta" name="3. Utilidad Neta Final" stroke="#059669" strokeWidth={3} dot={{ r: 4 }} />
                 <Line
                   type="monotone"
                   dataKey="flujoNeto"
                   name="4. Flujo Neto de Caja"
-                  stroke="#0ea5e9"
+                  stroke="#0D9488"
                   strokeWidth={2}
                   strokeDasharray="4 4"
                   dot={{ r: 3 }}
@@ -835,7 +835,7 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
                 onClick={handleChartDrilldown}
                 className={granularity === 'meses' && selectedMasterMonth === 'all' ? 'cursor-pointer' : ''}
               >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E3E8E6" />
                 <XAxis
                   dataKey="shortLabel"
                   tick={{ fontSize: 10 }}
@@ -857,10 +857,10 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
                   }}
                 />
                 <Legend verticalAlign="top" height={36} />
-                <Area type="monotone" dataKey="ventas" name="Ventas" stroke="#10b981" fill="#10b981" fillOpacity={0.2} />
-                <Area type="monotone" dataKey="egresosTotales" name="Egresos" stroke="#f43f5e" fill="#f43f5e" fillOpacity={0.15} />
-                <Area type="monotone" dataKey="utilidadNeta" name="Utilidad Neta" stroke="#2f855f" fill="#2f855f" fillOpacity={0.25} />
-                <Area type="monotone" dataKey="flujoNeto" name="Flujo Neto" stroke="#0ea5e9" fill="#0ea5e9" fillOpacity={0.15} />
+                <Area type="monotone" dataKey="ventas" name="Ventas" stroke="#0F766E" fill="#0F766E" fillOpacity={0.2} />
+                <Area type="monotone" dataKey="egresosTotales" name="Egresos" stroke="#64748B" fill="#64748B" fillOpacity={0.15} />
+                <Area type="monotone" dataKey="utilidadNeta" name="Utilidad Neta" stroke="#059669" fill="#059669" fillOpacity={0.25} />
+                <Area type="monotone" dataKey="flujoNeto" name="Flujo Neto" stroke="#0D9488" fill="#0D9488" fillOpacity={0.15} />
               </AreaChart>
             )
           ) : chartType === 'bars' ? (
@@ -870,7 +870,7 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
               onClick={handleChartDrilldown}
               className={granularity === 'meses' && selectedMasterMonth === 'all' ? 'cursor-pointer' : ''}
             >
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E3E8E6" />
               <XAxis
                 dataKey="shortLabel"
                 tick={{ fontSize: 10 }}
@@ -914,7 +914,7 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
               onClick={handleChartDrilldown}
               className={granularity === 'meses' && selectedMasterMonth === 'all' ? 'cursor-pointer' : ''}
             >
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E3E8E6" />
               <XAxis
                 dataKey="shortLabel"
                 tick={{ fontSize: 10 }}
@@ -967,7 +967,7 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
                   <stop offset="95%" stopColor={metricConfig.color} stopOpacity={0.0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E3E8E6" />
               <XAxis
                 dataKey="shortLabel"
                 tick={{ fontSize: 10 }}
@@ -1013,14 +1013,14 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
 
       {/* Sub-chart navigation helper note */}
       {granularity === 'meses' && (
-        <div className="flex items-center justify-between text-xs text-slate-500 bg-emerald-50/40 dark:bg-slate-800/60 px-3.5 py-2.5 rounded-xl border border-emerald-100 dark:border-slate-800">
+        <div className="flex items-center justify-between text-[12px] text-[#6B7280] bg-teal-50/50 dark:bg-slate-800/60 px-3.5 py-2.5 rounded-[6px] border border-teal-100 dark:border-slate-800">
           {selectedMasterMonth === 'all' ? (
             <span>
               💡 <strong>Interactivo:</strong> Haz clic en la barra de cualquier mes para ver su desglose semanal en {selectedMasterYear}.
             </span>
           ) : (
             <span className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-[#0F766E] animate-pulse" />
               <span>
                 Visualizando desglose de <strong>{selectedMonthInfo?.name} {selectedMasterYear}</strong> (Semanas 1-4 y cortes quincenales).
               </span>
@@ -1030,7 +1030,7 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
           {selectedMasterMonth !== 'all' && (
             <button
               onClick={() => handleMonthChange('all')}
-              className="text-emerald-700 dark:text-emerald-300 font-bold hover:underline cursor-pointer ml-2 shrink-0"
+              className="text-[#0F766E] dark:text-teal-300 font-semibold hover:underline cursor-pointer ml-2 shrink-0"
             >
               ⬅ Volver a los 12 Meses
             </button>
@@ -1040,59 +1040,59 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
 
       {/* DATA TABLE (TOGGLEABLE) */}
       {showTable && (
-        <div className="pt-4 border-t border-slate-100 dark:border-slate-800 animate-fade-in space-y-3">
+        <div className="pt-4 border-t border-[#E3E8E6] dark:border-slate-800 animate-fade-in space-y-3">
           <div className="flex items-center justify-between">
-            <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+            <h4 className="text-[13px] font-semibold text-[#111827] dark:text-slate-200">
               Desglose Numérico por {granularity === 'meses' ? 'Mes' : 'Año'} (Dólares USD)
             </h4>
-            <span className="text-[11px] text-slate-400">Total {currentDataset.length} períodos registrados</span>
+            <span className="text-[11px] text-[#6B7280]">Total {currentDataset.length} períodos registrados</span>
           </div>
 
-          <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 uppercase text-[10px] font-bold border-b border-slate-200 dark:border-slate-800">
+          <div className="overflow-x-auto rounded-[6px] border border-[#E3E8E6] dark:border-slate-800">
+            <table className="w-full text-left text-[12px]">
+              <thead className="bg-[#F6F8F7] dark:bg-slate-800 text-[#6B7280] dark:text-slate-300 uppercase text-[10px] font-semibold border-b border-[#E3E8E6] dark:border-slate-800">
                 <tr>
                   <th className="p-3">Período</th>
                   <th className="p-3 text-right">Ventas</th>
                   <th className="p-3 text-right">Otros Ing.</th>
-                  <th className="p-3 text-right font-bold text-emerald-600">Ingresos Tot.</th>
+                  <th className="p-3 text-right font-semibold text-[#0F766E]">Ingresos Tot.</th>
                   <th className="p-3 text-right">Compras</th>
                   <th className="p-3 text-right">Planilla</th>
                   <th className="p-3 text-right">Gastos Op.</th>
                   <th className="p-3 text-right">Tributos MH</th>
-                  <th className="p-3 text-right font-bold text-rose-600">Egresos Tot.</th>
-                  <th className="p-3 text-right font-bold text-slate-800 dark:text-white">Utilidad Neta</th>
-                  <th className="p-3 text-right font-bold text-sky-600">Flujo Neto</th>
+                  <th className="p-3 text-right font-semibold text-[#64748B]">Egresos Tot.</th>
+                  <th className="p-3 text-right font-semibold text-[#111827] dark:text-white">Utilidad Neta</th>
+                  <th className="p-3 text-right font-semibold text-[#0D9488]">Flujo Neto</th>
                   <th className="p-3 text-right">Margen %</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              <tbody className="divide-y divide-[#E3E8E6] dark:divide-slate-800">
                 {currentDataset.map((row) => (
-                  <tr key={row.periodKey} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
-                    <td className="p-3 font-semibold text-slate-900 dark:text-white">{row.label}</td>
+                  <tr key={row.periodKey} className="hover:bg-[#F6F8F7]/60 dark:hover:bg-slate-800/40 transition">
+                    <td className="p-3 font-semibold text-[#111827] dark:text-white">{row.label}</td>
                     <td className="p-3 text-right font-mono">{formatCurrencyUSD(row.ventas)}</td>
-                    <td className="p-3 text-right font-mono text-slate-500">{formatCurrencyUSD(row.otrosIngresos)}</td>
-                    <td className="p-3 text-right font-mono font-bold text-emerald-600">{formatCurrencyUSD(row.ingresosTotales)}</td>
+                    <td className="p-3 text-right font-mono text-[#6B7280]">{formatCurrencyUSD(row.otrosIngresos)}</td>
+                    <td className="p-3 text-right font-mono font-semibold text-[#0F766E]">{formatCurrencyUSD(row.ingresosTotales)}</td>
                     <td className="p-3 text-right font-mono">{formatCurrencyUSD(row.compras)}</td>
                     <td className="p-3 text-right font-mono">{formatCurrencyUSD(row.nomina)}</td>
                     <td className="p-3 text-right font-mono">{formatCurrencyUSD(row.gastosOperativos)}</td>
-                    <td className="p-3 text-right font-mono text-slate-500">{formatCurrencyUSD(row.impuestosMH)}</td>
-                    <td className="p-3 text-right font-mono font-bold text-rose-600">{formatCurrencyUSD(row.egresosTotales)}</td>
+                    <td className="p-3 text-right font-mono text-[#6B7280]">{formatCurrencyUSD(row.impuestosMH)}</td>
+                    <td className="p-3 text-right font-mono font-semibold text-[#64748B]">{formatCurrencyUSD(row.egresosTotales)}</td>
                     <td
-                      className={`p-3 text-right font-mono font-bold ${
-                        row.utilidadNeta >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'
+                      className={`p-3 text-right font-mono font-semibold ${
+                        row.utilidadNeta >= 0 ? 'text-[#059669] dark:text-emerald-400' : 'text-rose-600'
                       }`}
                     >
                       {formatCurrencyUSD(row.utilidadNeta)}
                     </td>
                     <td
-                      className={`p-3 text-right font-mono font-bold ${
-                        row.flujoNeto >= 0 ? 'text-sky-600 dark:text-sky-400' : 'text-rose-600'
+                      className={`p-3 text-right font-mono font-semibold ${
+                        row.flujoNeto >= 0 ? 'text-[#0D9488]' : 'text-rose-600'
                       }`}
                     >
                       {formatCurrencyUSD(row.flujoNeto)}
                     </td>
-                    <td className="p-3 text-right font-mono text-slate-500">{row.margenNetoPct.toFixed(1)}%</td>
+                    <td className="p-3 text-right font-mono text-[#6B7280]">{row.margenNetoPct.toFixed(1)}%</td>
                   </tr>
                 ))}
               </tbody>

@@ -1302,7 +1302,7 @@ export const MarketingDashboard: React.FC = () => {
       {/* ==================================================== */}
       {/* 4. SECCIÓN: GRÁFICO AUTÓNOMO DE LAS 4 VARIABLES FINANCIERAS */}
       {/* ==================================================== */}
-      <div className="rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-none transition-all duration-150 hover:shadow-xs space-y-4">
+      <section id="mkt-multivariable" className="rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-none transition-all duration-150 hover:shadow-xs space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#E3E8E6] dark:border-slate-800 pb-4">
           <div>
             <div className="flex items-center gap-2">
@@ -1351,15 +1351,15 @@ export const MarketingDashboard: React.FC = () => {
               : branches.find((b) => b.id === chartBranchId)?.name || 'Sucursal Seleccionada'
           }
         />
-      </div>
+      </section>
 
       {/* ==================================================== */}
       {/* 5. CANALES DE CAPTACIÓN & RENDIMIENTO DE PAUTA (ROAS) */}
       {/* ==================================================== */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <section id="mkt-canales" className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Gráfico Comparativo de Canales */}
         <div className="lg:col-span-7 bg-white dark:bg-slate-900 p-6 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 shadow-none transition-all duration-150 hover:shadow-xs space-y-4">
-          <div className="flex items-center justify-between pb-2 border-b border-[#E3E8E6] dark:border-slate-800">
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[#E3E8E6] dark:border-slate-800">
             <div>
               <h3 className="text-[15px] font-semibold text-[#111827] dark:text-white">
                 Rendimiento por canal de marketing
@@ -1368,30 +1368,112 @@ export const MarketingDashboard: React.FC = () => {
                 Inversión en pauta publicitaria vs Ingresos por ventas generadas ($ USD)
               </p>
             </div>
-            <span className="text-[11px] font-medium px-2 py-0.5 rounded bg-[#F6F8F7] dark:bg-slate-800 border border-[#E3E8E6] text-[#6B7280]">
-              Canales activos
-            </span>
+
+            {/* Selector de visualización: Barras / Líneas / Área */}
+            <div className="flex items-center gap-1 p-0.5 rounded-[6px] bg-[#F6F8F7] dark:bg-slate-800 border border-[#E3E8E6] dark:border-slate-700">
+              <button
+                type="button"
+                onClick={() => setChannelChartType('bars')}
+                className={`px-2.5 py-1 text-[11px] font-medium rounded transition cursor-pointer ${
+                  channelChartType === 'bars'
+                    ? 'bg-white dark:bg-slate-700 text-[#0F766E] dark:text-white shadow-2xs font-semibold'
+                    : 'text-[#6B7280] hover:text-[#111827]'
+                }`}
+              >
+                Barras
+              </button>
+              <button
+                type="button"
+                onClick={() => setChannelChartType('lines')}
+                className={`px-2.5 py-1 text-[11px] font-medium rounded transition cursor-pointer ${
+                  channelChartType === 'lines'
+                    ? 'bg-white dark:bg-slate-700 text-[#0F766E] dark:text-white shadow-2xs font-semibold'
+                    : 'text-[#6B7280] hover:text-[#111827]'
+                }`}
+              >
+                Líneas
+              </button>
+              <button
+                type="button"
+                onClick={() => setChannelChartType('area')}
+                className={`px-2.5 py-1 text-[11px] font-medium rounded transition cursor-pointer ${
+                  channelChartType === 'area'
+                    ? 'bg-white dark:bg-slate-700 text-[#0F766E] dark:text-white shadow-2xs font-semibold'
+                    : 'text-[#6B7280] hover:text-[#111827]'
+                }`}
+              >
+                Área
+              </button>
+            </div>
           </div>
 
           <div className="h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={channelsData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E3E8E6" opacity={0.6} />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6B7280' }} stroke="#E3E8E6" />
-                <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} stroke="#E3E8E6" tickFormatter={(v) => `$${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`} />
-                <Tooltip
-                  formatter={(val: any, name: any) => [
-                    `$${Number(val).toLocaleString()}`,
-                    name === 'sales' ? 'Ventas Generadas' : 'Inversión en Pauta',
-                  ]}
-                />
-                <Legend
-                  wrapperStyle={{ fontSize: 12, color: '#6B7280' }}
-                  formatter={(value) => (value === 'sales' ? 'Ventas Generadas ($)' : 'Inversión en Pauta ($)')}
-                />
-                <Bar dataKey="sales" fill="#0F766E" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="spend" fill="#64748B" radius={[4, 4, 0, 0]} />
-              </BarChart>
+              {channelChartType === 'bars' ? (
+                <BarChart data={channelsData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E3E8E6" opacity={0.6} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6B7280' }} stroke="#E3E8E6" />
+                  <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} stroke="#E3E8E6" tickFormatter={(v) => `$${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`} />
+                  <Tooltip
+                    formatter={(val: any, name: any) => [
+                      `$${Number(val).toLocaleString()}`,
+                      name === 'sales' ? 'Ventas Generadas' : 'Inversión en Pauta',
+                    ]}
+                  />
+                  <Legend
+                    wrapperStyle={{ fontSize: 12, color: '#6B7280' }}
+                    formatter={(value) => (value === 'sales' ? 'Ventas Generadas ($)' : 'Inversión en Pauta ($)')}
+                  />
+                  <Bar dataKey="sales" name="sales" fill="#0F766E" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="spend" name="spend" fill="#64748B" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              ) : channelChartType === 'lines' ? (
+                <LineChart data={channelsData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E3E8E6" opacity={0.6} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6B7280' }} stroke="#E3E8E6" />
+                  <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} stroke="#E3E8E6" tickFormatter={(v) => `$${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`} />
+                  <Tooltip
+                    formatter={(val: any, name: any) => [
+                      `$${Number(val).toLocaleString()}`,
+                      name === 'sales' ? 'Ventas Generadas' : 'Inversión en Pauta',
+                    ]}
+                  />
+                  <Legend
+                    wrapperStyle={{ fontSize: 12, color: '#6B7280' }}
+                    formatter={(value) => (value === 'sales' ? 'Ventas Generadas ($)' : 'Inversión en Pauta ($)')}
+                  />
+                  <Line type="monotone" dataKey="sales" name="sales" stroke="#0F766E" strokeWidth={2.5} dot={{ r: 4, fill: '#0F766E' }} />
+                  <Line type="monotone" dataKey="spend" name="spend" stroke="#64748B" strokeWidth={2.5} dot={{ r: 4, fill: '#64748B' }} />
+                </LineChart>
+              ) : (
+                <AreaChart data={channelsData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorMktSales" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#0F766E" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="#0F766E" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="colorMktSpend" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#64748B" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#64748B" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E3E8E6" opacity={0.6} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6B7280' }} stroke="#E3E8E6" />
+                  <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} stroke="#E3E8E6" tickFormatter={(v) => `$${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`} />
+                  <Tooltip
+                    formatter={(val: any, name: any) => [
+                      `$${Number(val).toLocaleString()}`,
+                      name === 'sales' ? 'Ventas Generadas' : 'Inversión en Pauta',
+                    ]}
+                  />
+                  <Legend
+                    wrapperStyle={{ fontSize: 12, color: '#6B7280' }}
+                    formatter={(value) => (value === 'sales' ? 'Ventas Generadas ($)' : 'Inversión en Pauta ($)')}
+                  />
+                  <Area type="monotone" dataKey="sales" name="sales" stroke="#0F766E" fillOpacity={1} fill="url(#colorMktSales)" strokeWidth={2} />
+                  <Area type="monotone" dataKey="spend" name="spend" stroke="#64748B" fillOpacity={1} fill="url(#colorMktSpend)" strokeWidth={2} />
+                </AreaChart>
+              )}
             </ResponsiveContainer>
           </div>
         </div>
@@ -1440,12 +1522,12 @@ export const MarketingDashboard: React.FC = () => {
             <span className="font-semibold text-[#0F766E]">Prioritario</span>
           </div>
         </div>
-      </div>
+      </section>
 
       {/* ==================================================== */}
       {/* 6. TOP 10 CLIENTES VIP & SEGMENTACIÓN COMERCIAL */}
       {/* ==================================================== */}
-      <div className="bg-white dark:bg-slate-900 p-6 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 shadow-none transition-all duration-150 hover:shadow-xs space-y-4">
+      <section id="mkt-vip" className="bg-white dark:bg-slate-900 p-6 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 shadow-none transition-all duration-150 hover:shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#E3E8E6] dark:border-slate-800">
           <div>
             <h3 className="text-[16px] font-semibold text-[#111827] dark:text-white">
@@ -1504,7 +1586,7 @@ export const MarketingDashboard: React.FC = () => {
                       <span
                         className={`px-2 py-0.5 rounded text-[11px] font-medium border ${
                           c.isCorp
-                            ? 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border-blue-200'
+                            ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                             : 'bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border-teal-200'
                         }`}
                       >
@@ -1536,12 +1618,12 @@ export const MarketingDashboard: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
 
       {/* ==================================================== */}
       {/* 7. PRODUCTOS ESTRELLA (MARGEN) & HÁBITOS DE COMPRA SEMANALES */}
       {/* ==================================================== */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <section id="mkt-productos" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top Productos por Margen Comercial */}
         <div className="bg-white dark:bg-slate-900 p-6 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 shadow-none transition-all duration-150 hover:shadow-xs space-y-4">
           <div className="flex items-center justify-between pb-2 border-b border-[#E3E8E6] dark:border-slate-800">
@@ -1633,12 +1715,12 @@ export const MarketingDashboard: React.FC = () => {
             </strong>. Se recomienda pautar 24 horas antes para calentar audiencia.
           </div>
         </div>
-      </div>
+      </section>
 
       {/* ==================================================== */}
       {/* 8. RETENCIÓN & SEMÁFORO DE CHURN + SEGMENTACIÓN CRM */}
       {/* ==================================================== */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <section id="mkt-retencion" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Semáforo de Retención / Churn */}
         <div className="bg-white dark:bg-slate-900 p-6 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 shadow-none transition-all duration-150 hover:shadow-xs space-y-4">
           <div className="flex items-center justify-between pb-2 border-b border-[#E3E8E6] dark:border-slate-800">
@@ -1743,7 +1825,7 @@ export const MarketingDashboard: React.FC = () => {
             ))}
           </div>
         </div>
-      </div>
+      </section>
 
       {/* Modal para Crear Gráficos Dinámicos Personalizados */}
       <DynamicChartBuilderModal

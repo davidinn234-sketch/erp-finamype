@@ -277,53 +277,55 @@ export const TabletAttendanceKioskModal: React.FC<Props> = ({ isOpen, onClose })
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/95 backdrop-blur-md animate-fade-in select-none">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-4xl max-h-[96vh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-slate-900 border border-slate-800 rounded-[8px] w-full max-w-4xl max-h-[96vh] flex flex-col shadow-2xl overflow-hidden">
         {/* Top Header / Kiosk Navigation */}
-        <div className="px-6 py-4 border-b border-slate-800/80 flex items-center justify-between bg-slate-950/70">
+        <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-950">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-cyan-600 to-indigo-600 flex items-center justify-center text-white shadow-md">
-              <Clock className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-[6px] bg-[#0F766E] flex items-center justify-center text-white shadow-xs">
+              <Clock className="w-4 h-4 stroke-[2]" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-black text-white tracking-tight">
-                  Terminal de Asistencia Kiosko
+                <h2 className="text-[15px] font-semibold text-white tracking-tight">
+                  Terminal de Asistencia Kiosko Tablet
                 </h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-950 text-cyan-400 border border-cyan-800/60">
+                <span className="px-2 py-0.5 rounded-[4px] text-[10px] font-semibold bg-teal-950 text-teal-300 border border-teal-800/80">
                   {currentCompany.tradeName || currentCompany.name}
                 </span>
               </div>
-              <p className="text-xs text-slate-400 font-medium">
-                Control de Asistencia Digital con PIN Personal Confidencial
+              <p className="text-[11px] text-slate-400">
+                Marcaje biométrico digital por PIN de 4 dígitos • Tolerancia: {attendanceConfig.toleranceMinutes || 10} min
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={toggleFullscreen}
-              className="p-2.5 rounded-xl border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+              className="p-2 rounded-[6px] border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
               title="Pantalla Completa para Tablet"
             >
               {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
             </button>
             <button
+              type="button"
               onClick={onClose}
-              className="px-3.5 py-2 rounded-xl border border-slate-800 hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-1.5 rounded-[6px] border border-slate-800 hover:bg-rose-950/40 text-slate-400 hover:text-rose-400 text-[12px] font-medium transition flex items-center gap-1.5 cursor-pointer"
               title="Salir del Modo Kiosko"
             >
               <X className="w-4 h-4" />
-              <span className="hidden sm:inline">Cerrar Terminal</span>
+              <span className="hidden sm:inline">Cerrar Kiosko</span>
             </button>
           </div>
         </div>
 
         {/* Center Live Clock & Date */}
-        <div className="px-6 py-3.5 text-center border-b border-slate-800/60 bg-gradient-to-b from-slate-950/80 to-slate-900">
-          <div className="text-4xl sm:text-5xl lg:text-6xl font-black font-mono tracking-tight text-white drop-shadow-md">
+        <div className="px-6 py-4 text-center border-b border-slate-800/60 bg-slate-900/90">
+          <div className="text-4xl sm:text-5xl font-black font-mono tracking-tight text-white drop-shadow-sm [font-variant-numeric:tabular-nums]">
             {formattedTimeStr}
           </div>
-          <p className="text-xs sm:text-sm text-cyan-400 font-bold uppercase tracking-wider mt-1 capitalize">
+          <p className="text-[12px] text-teal-400 font-medium uppercase tracking-wider mt-0.5 capitalize">
             {formattedDateStr}
           </p>
         </div>
@@ -380,15 +382,15 @@ export const TabletAttendanceKioskModal: React.FC<Props> = ({ isOpen, onClose })
             </div>
           ) : matchedEmployee ? (
             /* STATE 2: EMPLOYEE IDENTIFIED - PUNCH ACTION BUTTONS */
-            <div className="w-full max-w-xl bg-slate-800/90 border border-slate-700 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl animate-in fade-in duration-150">
+            <div className="w-full max-w-xl bg-slate-800/95 border border-slate-700/80 rounded-[8px] p-6 space-y-5 shadow-2xl animate-in fade-in duration-150">
               {/* Employee Banner */}
-              <div className="flex items-center gap-4 border-b border-slate-700/80 pb-5">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-cyan-500 to-indigo-600 text-white font-black text-2xl flex items-center justify-center shadow-lg">
+              <div className="flex items-center gap-4 border-b border-slate-700/80 pb-4">
+                <div className="w-14 h-14 rounded-[6px] bg-[#0F766E] text-white font-semibold text-xl flex items-center justify-center shadow-xs">
                   {matchedEmployee.firstName.charAt(0)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-cyan-950 text-cyan-300 border border-cyan-800">
+                    <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-[4px] bg-teal-950 text-teal-300 border border-teal-800">
                       {matchedEmployee.code}
                     </span>
                     <span className="text-[11px] text-slate-400 font-medium truncate">
@@ -397,97 +399,102 @@ export const TabletAttendanceKioskModal: React.FC<Props> = ({ isOpen, onClose })
                         : (matchedEmployee.department as any)?.name || 'General'}
                     </span>
                   </div>
-                  <h3 className="text-xl sm:text-2xl font-black text-white truncate">
+                  <h3 className="text-lg sm:text-xl font-semibold text-white truncate">
                     ¡Hola, {matchedEmployee.firstName} {matchedEmployee.lastName}!
                   </h3>
-                  <p className="text-xs text-slate-300">{matchedEmployee.position}</p>
+                  <p className="text-[12px] text-slate-300">{matchedEmployee.position}</p>
                 </div>
               </div>
 
               {/* Schedule Info */}
-              <div className="grid grid-cols-2 gap-3 text-xs bg-slate-900/80 p-3.5 rounded-2xl border border-slate-700/60">
+              <div className="grid grid-cols-2 gap-3 text-[12px] bg-slate-900/90 p-3 rounded-[6px] border border-slate-700/60">
                 <div>
-                  <span className="text-[10px] text-slate-400 block font-bold uppercase">Hora Entrada Oficial:</span>
-                  <span className="font-mono font-black text-cyan-300 text-sm">
+                  <span className="text-[10px] text-slate-400 block font-medium uppercase">Hora Entrada Oficial:</span>
+                  <span className="font-mono font-semibold text-teal-300">
                     {matchedEmployee.workSchedule?.startTime || attendanceConfig.defaultStartTime || '08:00 AM'}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 block font-bold uppercase">Tolerancia Permitida:</span>
-                  <span className="font-mono font-black text-emerald-400 text-sm">
+                  <span className="text-[10px] text-slate-400 block font-medium uppercase">Tolerancia Permitida:</span>
+                  <span className="font-mono font-semibold text-emerald-400">
                     {matchedEmployee.workSchedule?.toleranceMinutes || attendanceConfig.toleranceMinutes || 10} minutos
                   </span>
                 </div>
               </div>
 
               {/* 4 Touch Action Buttons */}
-              <div className="space-y-3">
-                <span className="text-xs font-bold text-slate-300 block uppercase tracking-wider">
-                  Toca para registrar tu marcaje de hoy:
+              <div className="space-y-2.5">
+                <span className="text-[12px] font-medium text-slate-300 block">
+                  Selecciona la acción a registrar en tu marcaje:
                 </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <button
+                    type="button"
                     onClick={() => handleRecord('check_in')}
-                    className="p-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-sm flex items-center justify-center gap-2.5 shadow-lg shadow-emerald-950/50 cursor-pointer transition"
+                    className="p-3.5 rounded-[6px] bg-[#059669] hover:bg-[#047857] active:scale-98 text-white font-semibold text-[13px] flex items-center justify-center gap-2 transition cursor-pointer shadow-xs"
                   >
-                    <LogIn className="w-5 h-5" />
+                    <LogIn className="w-4 h-4" />
                     <span>MARCAR ENTRADA</span>
                   </button>
 
                   <button
+                    type="button"
                     onClick={() => handleRecord('check_out')}
-                    className="p-4 rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-black text-sm flex items-center justify-center gap-2.5 shadow-lg shadow-rose-950/50 cursor-pointer transition"
+                    className="p-3.5 rounded-[6px] bg-rose-600 hover:bg-rose-700 active:scale-98 text-white font-semibold text-[13px] flex items-center justify-center gap-2 transition cursor-pointer shadow-xs"
                   >
-                    <LogOut className="w-5 h-5" />
+                    <LogOut className="w-4 h-4" />
                     <span>MARCAR SALIDA</span>
                   </button>
 
                   <button
+                    type="button"
                     onClick={() => handleRecord('lunch_start')}
-                    className="p-3.5 rounded-2xl bg-amber-600 hover:bg-amber-500 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-2 shadow cursor-pointer transition"
+                    className="p-3 rounded-[6px] bg-amber-600 hover:bg-amber-700 active:scale-98 text-white font-medium text-[12px] flex items-center justify-center gap-2 transition cursor-pointer shadow-xs"
                   >
-                    <Utensils className="w-4 h-4" />
+                    <Utensils className="w-3.5 h-3.5" />
                     <span>Salida a Almuerzo</span>
                   </button>
 
                   <button
+                    type="button"
                     onClick={() => handleRecord('lunch_end')}
-                    className="p-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold text-xs flex items-center justify-center gap-2 shadow cursor-pointer transition"
+                    className="p-3 rounded-[6px] bg-teal-700 hover:bg-teal-800 active:scale-98 text-white font-medium text-[12px] flex items-center justify-center gap-2 transition cursor-pointer shadow-xs"
                   >
-                    <Coffee className="w-4 h-4" />
-                    <span>Retorno Almuerzo</span>
+                    <Coffee className="w-3.5 h-3.5" />
+                    <span>Retorno de Almuerzo</span>
                   </button>
                 </div>
               </div>
 
-              <div className="flex justify-between items-center pt-2 border-t border-slate-700/60">
+              <div className="flex justify-between items-center pt-2 border-t border-slate-700/60 text-[11px]">
                 <button
+                  type="button"
                   onClick={resetState}
-                  className="text-xs text-slate-400 hover:text-white underline cursor-pointer"
+                  className="text-slate-400 hover:text-white underline cursor-pointer"
                 >
                   ← No soy yo / Cancelar
                 </button>
-                <span className="text-[11px] text-slate-500 font-mono">
+                <span className="text-slate-400 font-mono">
                   Confirmación táctil de alta seguridad
                 </span>
               </div>
             </div>
           ) : (
             /* STATE 3: CLEAN SECURE NUMERIC KEYPAD (NO PINS DISPLAYED TO PREVENT FRAUD) */
-            <div className="w-full max-w-sm flex flex-col items-center space-y-5 animate-in fade-in">
-              <div className="text-center space-y-1.5">
-                <div className="w-12 h-12 rounded-2xl bg-slate-800 text-cyan-400 mx-auto flex items-center justify-center border border-slate-700 shadow-inner">
-                  <Lock className="w-6 h-6" />
+            <div className="w-full max-w-sm flex flex-col items-center space-y-4 animate-in fade-in">
+              <div className="text-center space-y-1">
+                <div className="w-10 h-10 rounded-[6px] bg-slate-800 text-teal-400 mx-auto flex items-center justify-center border border-slate-700 shadow-inner">
+                  <Lock className="w-5 h-5 stroke-[1.75]" />
                 </div>
-                <h3 className="text-lg font-black text-white">Ingresa tu PIN Confidencial</h3>
-                <p className="text-xs text-slate-400 max-w-xs">
-                  Digita tus 4 dígitos asignados en el teclado de abajo para registrar tu entrada o salida.
+                <h3 className="text-[16px] font-semibold text-white">Ingresa tu PIN Confidencial</h3>
+                <p className="text-[12px] text-slate-400 max-w-xs">
+                  Digita tus 4 dígitos asignados en el teclado numérico para registrar tu asistencia.
                 </p>
               </div>
 
               {/* PIN Indicator Dots */}
               <div
-                className={`bg-slate-950 p-4 rounded-2xl border text-center flex items-center justify-center gap-4 h-16 w-full shadow-inner transition-all ${
+                className={`bg-slate-950 p-3 rounded-[6px] border text-center flex items-center justify-center gap-4 h-14 w-full shadow-inner transition-all ${
                   isShaking
                     ? 'border-rose-500 bg-rose-950/30 animate-pulse'
                     : 'border-slate-800'
@@ -496,9 +503,9 @@ export const TabletAttendanceKioskModal: React.FC<Props> = ({ isOpen, onClose })
                 {Array.from({ length: 4 }).map((_, i) => (
                   <span
                     key={i}
-                    className={`w-4 h-4 rounded-full transition-all duration-150 ${
+                    className={`w-3.5 h-3.5 rounded-full transition-all duration-150 ${
                       i < pin.length
-                        ? 'bg-cyan-400 scale-125 shadow-md shadow-cyan-400/50'
+                        ? 'bg-teal-400 scale-125 shadow-xs shadow-teal-400/50'
                         : 'bg-slate-800 border border-slate-700'
                     }`}
                   />
@@ -507,20 +514,20 @@ export const TabletAttendanceKioskModal: React.FC<Props> = ({ isOpen, onClose })
 
               {/* Error message under PIN */}
               {pinError && (
-                <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-800 text-rose-300 text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+                <div className="p-2.5 rounded-[6px] bg-rose-950/60 border border-rose-800 text-rose-300 text-[11px] font-medium flex items-center gap-2 animate-in fade-in">
                   <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
                   <span>{pinError}</span>
                 </div>
               )}
 
               {/* Numeric Touch Keypad Grid 3x4 */}
-              <div className="grid grid-cols-3 gap-3 w-full">
+              <div className="grid grid-cols-3 gap-2.5 w-full">
                 {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
                   <button
                     key={digit}
                     type="button"
                     onClick={() => handleKeyPress(digit)}
-                    className="h-16 rounded-2xl bg-slate-800 hover:bg-slate-750 active:bg-cyan-600 active:text-white border border-slate-700/80 text-white font-mono font-black text-2xl shadow-md transition active:scale-95 flex items-center justify-center cursor-pointer select-none"
+                    className="h-14 rounded-[6px] bg-slate-800 hover:bg-slate-750 active:bg-[#0F766E] active:text-white border border-slate-700/80 text-white font-mono font-semibold text-xl shadow-xs transition active:scale-95 flex items-center justify-center cursor-pointer select-none"
                   >
                     {digit}
                   </button>
@@ -529,7 +536,7 @@ export const TabletAttendanceKioskModal: React.FC<Props> = ({ isOpen, onClose })
                 <button
                   type="button"
                   onClick={handleClear}
-                  className="h-16 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-400 hover:text-white font-bold text-xs uppercase shadow transition active:scale-95 flex items-center justify-center cursor-pointer select-none"
+                  className="h-14 rounded-[6px] bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-400 hover:text-white font-medium text-[11px] uppercase shadow-xs transition active:scale-95 flex items-center justify-center cursor-pointer select-none"
                 >
                   Borrar
                 </button>
@@ -537,7 +544,7 @@ export const TabletAttendanceKioskModal: React.FC<Props> = ({ isOpen, onClose })
                 <button
                   type="button"
                   onClick={() => handleKeyPress('0')}
-                  className="h-16 rounded-2xl bg-slate-800 hover:bg-slate-750 active:bg-cyan-600 active:text-white border border-slate-700/80 text-white font-mono font-black text-2xl shadow-md transition active:scale-95 flex items-center justify-center cursor-pointer select-none"
+                  className="h-14 rounded-[6px] bg-slate-800 hover:bg-slate-750 active:bg-[#0F766E] active:text-white border border-slate-700/80 text-white font-mono font-semibold text-xl shadow-xs transition active:scale-95 flex items-center justify-center cursor-pointer select-none"
                 >
                   0
                 </button>
@@ -545,10 +552,10 @@ export const TabletAttendanceKioskModal: React.FC<Props> = ({ isOpen, onClose })
                 <button
                   type="button"
                   onClick={handleBackspace}
-                  className="h-16 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-400 hover:text-white font-bold shadow transition active:scale-95 flex items-center justify-center cursor-pointer select-none"
+                  className="h-14 rounded-[6px] bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-400 hover:text-white font-medium shadow-xs transition active:scale-95 flex items-center justify-center cursor-pointer select-none"
                   title="Borrar último dígito"
                 >
-                  <Delete className="w-6 h-6" />
+                  <Delete className="w-5 h-5" />
                 </button>
               </div>
 
