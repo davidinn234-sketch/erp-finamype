@@ -4,6 +4,7 @@ import { db } from '../../lib/firebase';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { UserProfile, SystemArchetype, UserRole, Company, Branch } from '../../types';
 import { DEFAULT_FISCAL_CONFIG } from '../../utils/salvadoranTax';
+import { AccessCredentialsDialog, AssignPasswordButton } from './UserAccessControls';
 import {
   Users,
   UserPlus,
@@ -48,7 +49,7 @@ const AVAILABLE_SERVICES = [
 ];
 
 export const AdminProfilesManagerModule: React.FC = () => {
-  const { users, createUser, deleteUser, updateUser, login, addNotification, currentUser, createCompany, createBranch } = useERP();
+  const { users, createUser, deleteUser, updateUser, login, addNotification, currentUser, createCompanyWithAdmin, enterSupportMode } = useERP();
 
   // Form State for New User
   const [name, setName] = useState('');
@@ -74,6 +75,7 @@ export const AdminProfilesManagerModule: React.FC = () => {
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [createdAccess, setCreatedAccess] = useState<{ name: string; email: string; password: string } | null>(null);
 
   // Sync archetype changes to default services
   const handleArchetypeSelect = (arch: SystemArchetype) => {
@@ -85,10 +87,10 @@ export const AdminProfilesManagerModule: React.FC = () => {
       setSelectedRole('gerente');
       setSelectedServices(['pos_terminal', 'inventory', 'sales_crm', 'purchases', 'payroll', 'treasury', 'accounting', 'iva_books']);
     } else if (arch === 'negocio_transicion') {
-      setSelectedRole('admin_maestro');
+      setSelectedRole('gerente');
       setSelectedServices(['inventory', 'sales_crm', 'purchases', 'payroll', 'treasury', 'accounting', 'iva_books']);
     } else if (arch === 'empresa_consolidada_dte') {
-      setSelectedRole('admin_maestro');
+      setSelectedRole('gerente');
       setSelectedServices([
         'pos_terminal',
         'inventory',
@@ -171,7 +173,7 @@ export const AdminProfilesManagerModule: React.FC = () => {
       companyId: companyId,
       name: name.trim(),
       email: email.trim().toLowerCase(),
-      password: password.trim(),
+      password,
       phone: phone.trim() || undefined,
       role: selectedArchetype === 'finanzas_personales' ? 'gerente' : selectedRole,
       systemArchetype: selectedArchetype,
@@ -182,37 +184,18 @@ export const AdminProfilesManagerModule: React.FC = () => {
     };
 
     try {
-      // Guardar en Firestore
-      await setDoc(doc(db, 'companies', companyId), newCompany);
-      await setDoc(doc(db, 'branches', initialBranch.id), initialBranch);
-      await setDoc(doc(db, 'users', userId), newProfile);
-
-      // Guardar en contexto local
-      createCompany(newCompany);
-      createBranch(initialBranch);
-      createUser(newProfile);
-
-      addNotification(
-        'success',
-        '¡Perfil y Empresa Creados en Firebase!',
-        `La cuenta ${newProfile.name} está lista. Al iniciar sesión por primera vez, completará su formulario de sucursales.`
-      );
-
-      // Reset form
-      setName('');
-      setEmail('');
-      setPhone('');
-      setPassword('123456');
-    } catch (err: any) {
-      console.error('Firebase save error:', err);
-      // Fallback local save
-      createCompany(newCompany);
-      createBranch(initialBranch);
-      createUser(newProfile);
-      addNotification('warning', 'Guardado Localmente', 'La cuenta y empresa se guardaron de inmediato en memoria.');
-    } finally {
-      setIsSaving(false);
-    }
+      if (selectedArchetype === 'finanzas_personales') {
+        const { companyId, id, ...personal } = newProfile;
+        await createUser({ ...personal, role: 'gerente', isConfigured: true });
+      } else {
+        const { id, primaryAdminUserId, ...company } = newCompany;
+        await createCompanyWithAdmin(company, { name: name.trim(), email, password, phone });
+      }
+      setCreatedAccess({ name: name.trim(), email: email.trim().toLowerCase(), password });
+      setName(''); setEmail(''); setPhone(''); setPassword('');
+    } catch (error) {
+      addNotification('error', 'No se creó la cuenta', error instanceof Error ? error.message : 'Comprueba la conexión.');
+    } finally { setIsSaving(false); }
   };
 
   const handleCopyCredentials = (u: UserProfile) => {
@@ -225,7 +208,7 @@ export const AdminProfilesManagerModule: React.FC = () => {
         ? 'Empresa Formal sin DTE (Libros de IVA & Planilla)'
         : 'Empresa Formal con Facturación Electrónica DTE MH';
 
-    const text = `👋 ¡Hola ${u.name}! Ya está creada tu cuenta en FINAMIPE SV:\n\n🌐 Plataforma: https://ais-dev-zt5ox4j3ww7wbwalmkdubu-128537300182.us-east1.run.app\n📧 Correo: ${u.email}\n🔑 Contraseña: ${u.password || 'admin'}\n📦 Servicio Activado: ${serviceName}\n\n¡Cualquier duda quedo a la orden!`;
+    const text = `👋 ¡Hola ${u.name}! Ya está creada tu cuenta en FINAMIPE SV:\n\n🌐 Plataforma: ${window.location.origin}\n📧 Correo: ${u.email}\n🔑 Contraseña: ${'Protegida por Firebase'}\n📦 Servicio Activado: ${serviceName}\n\n¡Cualquier duda quedo a la orden!`;
 
     navigator.clipboard.writeText(text);
     setCopiedUserId(u.id);
@@ -234,21 +217,11 @@ export const AdminProfilesManagerModule: React.FC = () => {
   };
 
   const handleTestLogin = (u: UserProfile) => {
-    login(u.email, u.password || 'admin');
+    if (u.companyId) enterSupportMode(u.companyId);
+    else addNotification('info', 'Finanzas privadas', 'Las finanzas personales solo son accesibles por su propietario.');
   };
-
   const handleDeleteUser = async (u: UserProfile) => {
-    if (u.id === currentUser.id || u.email === 'davidinn234@gmail.com') {
-      addNotification('error', 'Acción Denegada', 'No puedes eliminar tu propia cuenta de Administrador Maestro.');
-      return;
-    }
-    if (window.confirm(`¿Estás seguro de eliminar el perfil de ${u.name} (${u.email})?`)) {
-      try {
-        await deleteDoc(doc(db, 'users', u.id));
-      } catch (e) {}
-      deleteUser(u.id);
-      addNotification('info', 'Usuario Eliminado', `El perfil de ${u.name} fue removido.`);
-    }
+    if (window.confirm('¿Revocar el acceso de ' + u.name + '?')) await deleteUser(u.id);
   };
 
   // Filtered list
@@ -263,6 +236,7 @@ export const AdminProfilesManagerModule: React.FC = () => {
 
   return (
     <div id="admin-profiles-manager" className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-fadeIn">
+      <AccessCredentialsDialog access={createdAccess} onClose={() => setCreatedAccess(null)} />
       {/* Top Banner */}
       <div className="bg-gradient-to-r from-indigo-900 via-indigo-950 to-slate-900 border border-indigo-500/30 rounded-2xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -719,7 +693,7 @@ export const AdminProfilesManagerModule: React.FC = () => {
 
                           <span className="flex items-center gap-1 font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[11px]">
                             <Lock className="w-3 h-3 text-slate-400" />
-                            {showPassword ? u.password || 'admin' : '••••••••'}
+                            {showPassword ? 'Protegida por Firebase' : '••••••••'}
                             <button
                               type="button"
                               onClick={() =>
@@ -747,6 +721,7 @@ export const AdminProfilesManagerModule: React.FC = () => {
 
                     {/* Quick Actions */}
                     <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
+                      <AssignPasswordButton user={u} />
                       <button
                         type="button"
                         onClick={() => handleCopyCredentials(u)}

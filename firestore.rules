@@ -1,133 +1,105 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    function isAuthenticated() {
-      return request.auth != null;
+    function signedIn() { return request.auth != null; }
+    function platformAdmin() { return signedIn() && request.auth.token.get('platformAdmin', false) == true; }
+    function profile() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function member(companyId) {
+      return signedIn() && companyId is string && exists(/databases/$(database)/documents/companies/$(companyId))
+        && (platformAdmin() || profile().get('companyId', '') == companyId);
     }
-
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+    function manager(companyId) { return member(companyId) && (platformAdmin() || profile().role == 'gerente'); }
+    function accountant(companyId) { return member(companyId) && (platformAdmin() || profile().role in ['gerente', 'contador']); }
+    function cleanProfile(data, userId) {
+      return data.id == userId && data.email is string && data.name is string
+        && data.role in ['gerente', 'contador', 'cajero', 'vendedor', 'kiosko_asistencia']
+        && !data.keys().hasAny(['password', 'platformAdmin']);
     }
-
-    // Connection test document
-    match /test/{docId} {
-      allow read, write: if true;
+    function publicProfile(data, userId) {
+      return signedIn() && request.auth.uid == userId && cleanProfile(data, userId)
+        && data.email == request.auth.token.email && data.role == 'gerente'
+        && (data.get('companyId', '') == ''
+          || getAfter(/databases/$(database)/documents/companies/$(data.companyId)).data.primaryAdminUserId == userId);
     }
-
-    // Global ERP cloud snapshot
-    match /system_state/{docId} {
-      allow read, write: if true;
-    }
-
-    // Users and logins collection
     match /users/{userId} {
-      allow read, write: if true;
-
-      match /personalRecords/{recordId} {
-        allow read, write: if true;
-      }
+      allow get: if signedIn() && (request.auth.uid == userId || platformAdmin() || manager(resource.data.get('companyId', '')));
+      allow list: if platformAdmin() || manager(resource.data.get('companyId', ''));
+      allow create: if cleanProfile(request.resource.data, userId)
+        && (publicProfile(request.resource.data, userId) || platformAdmin() || manager(request.resource.data.get('companyId', '')));
+      allow update: if cleanProfile(request.resource.data, userId)
+        && request.resource.data.id == resource.data.id && request.resource.data.email == resource.data.email
+        && request.resource.data.get('companyId', '') == resource.data.get('companyId', '')
+        && (platformAdmin() || (manager(resource.data.get('companyId', '')) && userId != request.auth.uid)
+          || (signedIn() && request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'permissions', 'companyId', 'enabledServices'])));
+      allow delete: if signedIn() && userId != request.auth.uid && (platformAdmin()
+        || (manager(resource.data.get('companyId', '')) && get(/databases/$(database)/documents/companies/$(resource.data.companyId)).data.primaryAdminUserId != userId));
     }
-
-    match /logins/{loginId} {
-      allow read, write: if true;
-    }
-
-    // Companies and branches
     match /companies/{companyId} {
-      allow read, write: if true;
-
-      match /{allSubcollections=**} {
-        allow read, write: if true;
-      }
+      allow get: if member(companyId);
+      allow list: if platformAdmin();
+      allow create: if signedIn() && request.resource.data.id == companyId
+        && !request.resource.data.keys().hasAny(['dtePrivateKey', 'dteApiPassword'])
+        && (platformAdmin() || (request.resource.data.primaryAdminUserId == request.auth.uid
+          && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == companyId));
+      allow update: if manager(companyId) && request.resource.data.id == companyId
+        && request.resource.data.get('primaryAdminUserId', '') == resource.data.get('primaryAdminUserId', '')
+        && !request.resource.data.keys().hasAny(['dtePrivateKey', 'dteApiPassword']);
+      allow delete: if platformAdmin();
     }
-
-    match /branches/{branchId} {
-      allow read, write: if true;
+    match /personal_finances/{recordId} {
+      allow read, delete: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid
+        && request.resource.data.id == recordId && request.resource.data.amount is number && request.resource.data.amount > 0;
+      allow update: if signedIn() && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.id == recordId && request.resource.data.amount is number && request.resource.data.amount > 0;
     }
-
-    // CRM, Ventas & Inventario
-    match /products/{productId} {
-      allow read, write: if true;
+    match /personal_finance_meta/{userId} {
+      allow read, delete: if signedIn() && request.auth.uid == userId;
+      allow create, update: if signedIn() && request.auth.uid == userId && request.resource.data.userId == userId;
     }
-
-    match /customers/{customerId} {
-      allow read, write: if true;
+    match /company_settings/{companyId} {
+      allow read: if accountant(companyId);
+      allow create, update: if accountant(companyId) && request.resource.data.companyId == companyId;
+      allow delete: if manager(companyId);
     }
-
-    match /invoices/{invoiceId} {
-      allow read, write: if true;
+    match /attendance_directory/{employeeId} {
+      allow read: if member(resource.data.companyId);
+      allow create: if accountant(request.resource.data.companyId) && request.resource.data.id == employeeId
+        && request.resource.data.keys().hasOnly(['id', 'companyId', 'firstName', 'lastName', 'position', 'pinCode', 'isActive', 'branchId', 'branchName', 'avatar']);
+      allow update: if accountant(resource.data.companyId) && request.resource.data.companyId == resource.data.companyId && request.resource.data.id == employeeId
+        && request.resource.data.keys().hasOnly(['id', 'companyId', 'firstName', 'lastName', 'position', 'pinCode', 'isActive', 'branchId', 'branchName', 'avatar']);
+      allow delete: if manager(resource.data.companyId);
     }
-
-    match /customer_payments/{paymentId} {
-      allow read, write: if true;
+    function operational(name) {
+      return name in ['branches', 'products', 'customers', 'invoices', 'customer_payments', 'suppliers', 'purchases', 'supplier_payments', 'kardex_movements', 'employees', 'payrolls', 'professional_services', 'candidate_folders', 'candidates', 'attendance', 'leave_requests', 'bank_accounts', 'treasury_movements', 'other_incomes', 'journal_entries', 'dynamic_widgets'];
     }
-
-    // Proveedores & Compras
-    match /suppliers/{supplierId} {
-      allow read, write: if true;
+    function canRead(name, companyId) {
+      return member(companyId) && (accountant(companyId)
+        || (profile().role in ['cajero', 'vendedor'] && name in ['branches', 'products', 'customers', 'invoices', 'customer_payments', 'bank_accounts', 'treasury_movements', 'kardex_movements'])
+        || (profile().role == 'kiosko_asistencia' && name in ['attendance', 'branches']));
     }
-
-    match /purchases/{purchaseId} {
-      allow read, write: if true;
+    function canWrite(name, companyId) {
+      return member(companyId) && (accountant(companyId)
+        || (profile().role in ['cajero', 'vendedor'] && name in ['customers', 'invoices', 'customer_payments', 'products', 'bank_accounts', 'treasury_movements', 'kardex_movements', 'journal_entries'])
+        || (profile().role == 'kiosko_asistencia' && name == 'attendance'));
     }
-
-    match /supplier_payments/{paymentId} {
-      allow read, write: if true;
+    function newOwnerBranch(companyId) {
+      return signedIn() && getAfter(/databases/$(database)/documents/companies/$(companyId)).data.primaryAdminUserId == request.auth.uid
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == companyId;
     }
-
-    // Tesorería & Bancos
-    match /bank_accounts/{accountId} {
-      allow read, write: if true;
+    match /{name}/{recordId} {
+      allow read: if operational(name) && canRead(name, resource.data.companyId);
+      allow create: if operational(name) && request.resource.data.id == recordId
+        && (canWrite(name, request.resource.data.companyId)
+          || (name == 'branches' && newOwnerBranch(request.resource.data.companyId))
+          || (name == 'bank_accounts' && request.resource.data.accountType == 'caja_general'
+            && request.resource.data.currentBalance == 0 && request.resource.data.initialBalance == 0
+            && newOwnerBranch(request.resource.data.companyId)));
+      allow update: if operational(name) && canWrite(name, resource.data.companyId)
+        && request.resource.data.companyId == resource.data.companyId && request.resource.data.id == recordId;
+      allow delete: if operational(name) && manager(resource.data.companyId);
     }
-
-    match /treasury_movements/{movementId} {
-      allow read, write: if true;
-    }
-
-    // RRHH & Planilla Legal SV
-    match /employees/{employeeId} {
-      allow read, write: if true;
-    }
-
-    match /payrolls/{payrollId} {
-      allow read, write: if true;
-    }
-
-    match /candidates/{candidateId} {
-      allow read, write: if true;
-    }
-
-    match /candidate_folders/{folderId} {
-      allow read, write: if true;
-    }
-
-    match /professional_services/{serviceId} {
-      allow read, write: if true;
-    }
-
-    // Finanzas Personales & Metas
-    match /personal_finances/{docId} {
-      allow read, write: if true;
-    }
-
-    match /personal_finance_meta/{docId} {
-      allow read, write: if true;
-    }
-
-    // Kardex & Otros Ingresos
-    match /kardex_movements/{docId} {
-      allow read, write: if true;
-    }
-
-    match /other_incomes/{docId} {
-      allow read, write: if true;
-    }
-
-    // Comodín global para futuras colecciones operativas
-    match /{document=**} {
-      allow read, write: if true;
-    }
+    // All unlisted collections, including the old shared snapshot, are denied.
   }
 }

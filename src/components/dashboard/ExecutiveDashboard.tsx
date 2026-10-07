@@ -1,3 +1,6 @@
+import { FinancialEvolutionChart } from './FinancialEvolutionChart';
+import { buildAccountingReports, money } from '../../lib/accountingReports';
+import { authenticatedFetch } from '../../lib/authenticatedFetch';
 import React, { useState, useMemo } from 'react';
 import { useERP } from '../../context/ERPContext';
 import {
@@ -98,6 +101,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   onOpenNewPayroll,
 }) => {
   const {
+    journalEntries, chartOfAccounts,
     currentCompany,
     customers,
     invoices,
@@ -115,7 +119,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   // ----------------------------------------------------
   // BARRA DE FILTROS (ZONA A: SUCURSAL, AÑO, MES, DÍA)
   // ----------------------------------------------------
-  const [opFilterYear, setOpFilterYear] = useState<number>(2026);
+  const [opFilterYear, setOpFilterYear] = useState<number>(new Date().getFullYear());
   const [opFilterMonth, setOpFilterMonth] = useState<string>('all'); // 'all' o '01'..'12'
   const [opFilterDay, setOpFilterDay] = useState<string>('all'); // 'all' o '1'..'31'
   const [flowChartType, setFlowChartType] = useState<'bars' | 'area' | 'lines'>('bars');
@@ -133,7 +137,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   const [isDayPickerOpen, setIsDayPickerOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'resumen' | 'evolucion' | 'fiscal' | 'desglose' | 'sucursales' | 'tesoreria'>('resumen');
 
-  const OP_YEARS = [2026, 2025, 2024, 2023, 2022];
+  const OP_YEARS = [...new Set([new Date().getFullYear(), ...invoices.map(i => Number(i.date.slice(0, 4))), ...purchases.map(p => Number(p.date.slice(0, 4)))])].filter(Number.isFinite).sort((a,b) => b-a);
   const OP_MONTHS = [
     { key: 'all', short: 'Todo el Año', name: 'Todo el Año' },
     { key: '01', short: 'Ene', name: 'Enero' },
@@ -281,183 +285,20 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   // ----------------------------------------------------
   // SECCIÓN 1: FÓRMULAS EXACTAS DE RESUMEN FINANCIERO (ZONA A)
   // ----------------------------------------------------
+  const accountingSummary = (start: string, end: string) => {
+    const report = buildAccountingReports(chartOfAccounts, journalEntries, bankAccounts, start, end);
+    const payroll = report.period.filter(entry => entry.sourceModule === 'planilla').flatMap(entry => entry.lines).filter(line => chartOfAccounts.find(account => account.code === line.accountCode)?.category === 'gastos').reduce((sum, line) => sum + line.debit - line.credit, 0);
+    const ingresosTotales = report.revenue, egresosTotales = money(report.costs + report.expenses), ventas = report.revenue;
+    const utilidadBruta = money(ventas - report.costs);
+    return { ventas, otrosIngresos: 0, ingresosTotales, costoVentas: report.costs, payrollProrated: money(payroll), opExpensesProrated: money(report.expenses - payroll), impuestosPagados: 0, egresosTotales, flujoNeto: report.netCash, utilidadNeta: report.profit, utilidadBruta, margenBruto: ventas ? utilidadBruta / ventas * 100 : 0, margenOperativo: ventas ? report.profit / ventas * 100 : 0, margenNeto: ventas ? report.profit / ventas * 100 : 0 };
+  };
   const financialSummary = useMemo(() => {
-    // 1. Ventas facturadas (sin anuladas)
-    const ventas = filteredSalesInvoices.reduce((sum, i) => {
-      const sumas = (i.sumasGravadas || 0) + (i.sumasExentas || 0) + (i.sumasNoSujetas || 0);
-      return sum + (sumas > 0 ? sumas : i.totalPagar || 0);
-    }, 0);
-
-    // 2. Otros ingresos
-    const otrosIngresos = filteredOtherIncomes.reduce((sum, o) => sum + (o.amount || 0), 0);
-
-    // Ingresos totales = ventas facturadas (sin anuladas) + otros ingresos
-    const ingresosTotales = ventas + otrosIngresos;
-
-    // Costo de ventas / compras
-    const costoVentas = filteredPurchases.reduce((sum, p) => sum + (p.totalPagar || 0), 0);
-
-    // Planilla mensual activa (~34% cargas patronales ISSS, AFP, INSAFORP)
-    const monthlyActivePayroll = (employees || [])
-      .filter((e) => e && e.isActive)
-      .reduce((acc, e) => acc + (e.baseSalary || 0) * 1.34, 0);
-
-    // Proporción temporal de nómina y gastos fijos según si es día, mes o año
-    let payrollProrated = 0;
-    let opExpensesProrated = 0;
-
-    if (opFilterMonth === 'all') {
-      // Todo el año (hasta el mes actual o 12 meses)
-      const monthsFactor = opFilterYear === 2026 ? (new Date().getMonth() + 1) : 12;
-      payrollProrated = monthlyActivePayroll * monthsFactor;
-      opExpensesProrated = 1500 * monthsFactor;
-    } else if (opFilterDay === 'all') {
-      // Un mes completo
-      payrollProrated = monthlyActivePayroll;
-      opExpensesProrated = 1500;
-    } else {
-      // Un solo día específico
-      payrollProrated = monthlyActivePayroll / 30;
-      opExpensesProrated = 1500 / 30;
-    }
-
-    // Si no hay ventas ni compras registradas en el período, no inflar gastos ficticios
-    if (ventas === 0 && costoVentas === 0 && otrosIngresos === 0) {
-      payrollProrated = 0;
-      opExpensesProrated = 0;
-    }
-
-    // Impuestos pagados F-07 (IVA neto + Pago a Cuenta 1.75%)
-    const ivaNeto = Math.max(0, (ventas * 0.13) - (costoVentas * 0.13));
-    const pagoCuenta = ventas * (fiscalConfig?.pagoCuentaRate || 0.0175);
-    const impuestosPagados = ivaNeto + pagoCuenta;
-
-    // Egresos totales = costo de ventas/compras + planilla y cargas patronales + gastos operativos + impuestos pagados
-    const egresosTotales = costoVentas + payrollProrated + opExpensesProrated + impuestosPagados;
-
-    // Flujo neto = Ingresos - Egresos
-    const flujoNeto = ingresosTotales - egresosTotales;
-
-    // Utilidad neta = Ingresos - Egresos
-    const utilidadNeta = ingresosTotales - egresosTotales;
-
-    // Utilidad bruta = ventas - costo de ventas
-    const utilidadBruta = ventas - costoVentas;
-
-    // Margen bruto = ventas > 0 ? (utilidad bruta / ventas) * 100 : 0
-    const margenBruto = ventas > 0 ? (utilidadBruta / ventas) * 100 : 0;
-
-    // Margen operativo = ventas > 0 ? ((utilidad bruta - gastos operativos - planilla) / ventas) * 100 : 0
-    const margenOperativo = ventas > 0 ? ((utilidadBruta - opExpensesProrated - payrollProrated) / ventas) * 100 : 0;
-
-    // Margen neto = ingresos > 0 ? (utilidad neta / ingresos) * 100 : 0
-    const margenNeto = ingresosTotales > 0 ? (utilidadNeta / ingresosTotales) * 100 : 0;
-
-    return {
-      ventas,
-      otrosIngresos,
-      ingresosTotales,
-      costoVentas,
-      payrollProrated,
-      opExpensesProrated,
-      impuestosPagados,
-      egresosTotales,
-      flujoNeto,
-      utilidadNeta,
-      utilidadBruta,
-      margenBruto,
-      margenOperativo,
-      margenNeto,
-    };
-  }, [
-    filteredSalesInvoices,
-    filteredPurchases,
-    filteredOtherIncomes,
-    employees,
-    fiscalConfig,
-    opFilterYear,
-    opFilterMonth,
-    opFilterDay,
-  ]);
-
-  // Resumen acumulado del mes completo (para dar contexto comparativo cuando se filtra por día u 'Hoy')
-  const monthFinancialSummary = useMemo(() => {
-    if (opFilterMonth === 'all') return null;
-
-    const mInvoices = (invoices || []).filter((i) => {
-      if (!i || i.status === 'anulada') return false;
-      if (selectedBranchId && selectedBranchId !== 'all') {
-        const isMatch = i.branchId === selectedBranchId || (!i.branchId && branches.find((b) => b.id === selectedBranchId)?.isMain);
-        if (!isMatch) return false;
-      }
-      return i.date?.startsWith(`${opFilterYear}-${opFilterMonth}`);
-    });
-
-    const mPurchases = (purchases || []).filter((p) => {
-      if (!p || p.status === 'anulada') return false;
-      if (selectedBranchId && selectedBranchId !== 'all') {
-        const isMatch = p.branchId === selectedBranchId || (!p.branchId && branches.find((b) => b.id === selectedBranchId)?.isMain);
-        if (!isMatch) return false;
-      }
-      return p.date?.startsWith(`${opFilterYear}-${opFilterMonth}`);
-    });
-
-    const mOtherIncomes = (otherIncomes || []).filter((o) => {
-      if (!o) return false;
-      if (selectedBranchId && selectedBranchId !== 'all') {
-        const isMatch = o.branchId === selectedBranchId || (!o.branchId && branches.find((b) => b.id === selectedBranchId)?.isMain);
-        if (!isMatch) return false;
-      }
-      return o.date?.startsWith(`${opFilterYear}-${opFilterMonth}`);
-    });
-
-    const ventas = mInvoices.reduce((sum, i) => {
-      const sumas = (i.sumasGravadas || 0) + (i.sumasExentas || 0) + (i.sumasNoSujetas || 0);
-      return sum + (sumas > 0 ? sumas : i.totalPagar || 0);
-    }, 0);
-    const otrosIngresos = mOtherIncomes.reduce((sum, o) => sum + (o.amount || 0), 0);
-    const ingresosTotales = ventas + otrosIngresos;
-    const costoVentas = mPurchases.reduce((sum, p) => sum + (p.totalPagar || 0), 0);
-
-    const monthlyActivePayroll = (employees || [])
-      .filter((e) => e && e.isActive)
-      .reduce((acc, e) => acc + (e.baseSalary || 0) * 1.34, 0);
-
-    let payrollProrated = monthlyActivePayroll;
-    let opExpensesProrated = 1500;
-    if (ventas === 0 && costoVentas === 0 && otrosIngresos === 0) {
-      payrollProrated = 0;
-      opExpensesProrated = 0;
-    }
-
-    const ivaNeto = Math.max(0, (ventas * 0.13) - (costoVentas * 0.13));
-    const pagoCuenta = ventas * (fiscalConfig?.pagoCuentaRate || 0.0175);
-    const impuestosPagados = ivaNeto + pagoCuenta;
-    const egresosTotales = costoVentas + payrollProrated + opExpensesProrated + impuestosPagados;
-    const flujoNeto = ingresosTotales - egresosTotales;
-    const utilidadNeta = ingresosTotales - egresosTotales;
-    const utilidadBruta = ventas - costoVentas;
-    const margenBruto = ventas > 0 ? (utilidadBruta / ventas) * 100 : 0;
-    const margenOperativo = ventas > 0 ? ((utilidadBruta - opExpensesProrated - payrollProrated) / ventas) * 100 : 0;
-    const margenNeto = ingresosTotales > 0 ? (utilidadNeta / ingresosTotales) * 100 : 0;
-
-    return {
-      ventas,
-      otrosIngresos,
-      ingresosTotales,
-      costoVentas,
-      payrollProrated,
-      opExpensesProrated,
-      impuestosPagados,
-      egresosTotales,
-      flujoNeto,
-      utilidadNeta,
-      utilidadBruta,
-      margenBruto,
-      margenOperativo,
-      margenNeto,
-    };
-  }, [invoices, purchases, otherIncomes, employees, fiscalConfig, selectedBranchId, branches, opFilterYear, opFilterMonth]);
+    const prefix = opFilterMonth === 'all' ? String(opFilterYear) : opFilterYear + '-' + opFilterMonth;
+    const start = opFilterDay !== 'all' && opFilterMonth !== 'all' ? prefix + '-' + opFilterDay.padStart(2, '0') : prefix + (opFilterMonth === 'all' ? '-01-01' : '-01');
+    const end = opFilterDay !== 'all' && opFilterMonth !== 'all' ? start : prefix + (opFilterMonth === 'all' ? '-12-31' : '-31');
+    return accountingSummary(start, end);
+  }, [journalEntries, chartOfAccounts, bankAccounts, opFilterYear, opFilterMonth, opFilterDay]);
+  const monthFinancialSummary = useMemo(() => opFilterMonth === 'all' ? null : accountingSummary(opFilterYear + '-' + opFilterMonth + '-01', opFilterYear + '-' + opFilterMonth + '-31'), [journalEntries, chartOfAccounts, bankAccounts, opFilterYear, opFilterMonth]);
 
   // ----------------------------------------------------
   // SECCIÓN 2: DE DÓNDE VIENEN Y A DÓNDE VAN (GRÁFICOS)
@@ -497,7 +338,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   const expenseByConceptData = useMemo(() => {
     const data = [
       {
-        name: 'Compras a Proveedores',
+        name: 'Costo de productos vendidos',
         value: financialSummary.costoVentas,
         color: '#ef4444',
       },
@@ -524,106 +365,9 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   // c) Ingresos vs Egresos vs Flujo Neto (Barras agrupadas)
   // por mes si el filtro es un año; por día si es un mes; con un día elegido solo tarjetas del día
   const flowEvolutionData = useMemo(() => {
-    if (opFilterMonth === 'all') {
-      // 12 Meses del año
-      return OP_MONTHS.filter((m) => m.key !== 'all').map((m) => {
-        const mInvs = (invoices || []).filter((i) => {
-          if (!i || i.status === 'anulada') return false;
-          if (selectedBranchId && selectedBranchId !== 'all') {
-            const isMatch = i.branchId === selectedBranchId || (!i.branchId && branches.find((b) => b.id === selectedBranchId)?.isMain);
-            if (!isMatch) return false;
-          }
-          return (i.date || '').startsWith(`${opFilterYear}-${m.key}`);
-        });
-
-        const mPurs = (purchases || []).filter((p) => {
-          if (!p || p.status === 'anulada') return false;
-          if (selectedBranchId && selectedBranchId !== 'all') {
-            const isMatch = p.branchId === selectedBranchId || (!p.branchId && branches.find((b) => b.id === selectedBranchId)?.isMain);
-            if (!isMatch) return false;
-          }
-          return (p.date || '').startsWith(`${opFilterYear}-${m.key}`);
-        });
-
-        const mOthers = (otherIncomes || []).filter((o) => {
-          if (!o) return false;
-          if (selectedBranchId && selectedBranchId !== 'all') {
-            const isMatch = o.branchId === selectedBranchId || (!o.branchId && branches.find((b) => b.id === selectedBranchId)?.isMain);
-            if (!isMatch) return false;
-          }
-          return (o.date || '').startsWith(`${opFilterYear}-${m.key}`);
-        });
-
-        const ing = mInvs.reduce((sum, i) => sum + (i.totalPagar || 0), 0) + mOthers.reduce((sum, o) => sum + (o.amount || 0), 0);
-        const egr = mPurs.reduce((sum, p) => sum + (p.totalPagar || 0), 0) + (ing > 0 ? 1200 : 0);
-        const flujo = ing - egr;
-        const utilidadNeta = ing - egr;
-
-        return {
-          label: m.short,
-          fullLabel: m.name,
-          ingresos: Math.round(ing),
-          egresos: Math.round(egr),
-          utilidadNeta: Math.round(utilidadNeta),
-          flujo: Math.round(flujo),
-        };
-      });
-    }
-
-    // Días del mes (1..N) - Siempre visibles en el mes seleccionado
-    const daysCount = daysInSelectedMonth;
-    const daysArr = [];
-
-    for (let day = 1; day <= daysCount; day++) {
-      const dayFormatted = String(day).padStart(2, '0');
-      const targetDate = `${opFilterYear}-${opFilterMonth}-${dayFormatted}`;
-
-      const dInvs = (invoices || []).filter((i) => {
-        if (!i || i.status === 'anulada') return false;
-        if (selectedBranchId && selectedBranchId !== 'all') {
-          const isMatch = i.branchId === selectedBranchId || (!i.branchId && branches.find((b) => b.id === selectedBranchId)?.isMain);
-          if (!isMatch) return false;
-        }
-        return i.date === targetDate;
-      });
-
-      const dPurs = (purchases || []).filter((p) => {
-        if (!p || p.status === 'anulada') return false;
-        if (selectedBranchId && selectedBranchId !== 'all') {
-          const isMatch = p.branchId === selectedBranchId || (!p.branchId && branches.find((b) => b.id === selectedBranchId)?.isMain);
-          if (!isMatch) return false;
-        }
-        return p.date === targetDate;
-      });
-
-      const dOthers = (otherIncomes || []).filter((o) => {
-        if (!o) return false;
-        if (selectedBranchId && selectedBranchId !== 'all') {
-          const isMatch = o.branchId === selectedBranchId || (!o.branchId && branches.find((b) => b.id === selectedBranchId)?.isMain);
-          if (!isMatch) return false;
-        }
-        return o.date === targetDate;
-      });
-
-      const ing = dInvs.reduce((sum, i) => sum + (i.totalPagar || 0), 0) + dOthers.reduce((sum, o) => sum + (o.amount || 0), 0);
-      const egr = dPurs.reduce((sum, p) => sum + (p.totalPagar || 0), 0);
-      const flujo = ing - egr;
-      const utilidadNeta = ing - egr;
-
-      daysArr.push({
-        label: `D${day}`,
-        dayNumber: day,
-        fullLabel: `Día ${day} de ${OP_MONTHS.find((m) => m.key === opFilterMonth)?.name}`,
-        ingresos: Math.round(ing),
-        egresos: Math.round(egr),
-        utilidadNeta: Math.round(utilidadNeta),
-        flujo: Math.round(flujo),
-        isSelectedDay: opFilterDay === String(day),
-      });
-    }
-
-    return daysArr;
-  }, [invoices, purchases, otherIncomes, selectedBranchId, branches, opFilterYear, opFilterMonth, opFilterDay, daysInSelectedMonth]);
+    const periods = opFilterMonth === 'all' ? OP_MONTHS.slice(1).map(month => ({ label: month.short, fullLabel: month.name, start: opFilterYear + '-' + month.key + '-01', end: opFilterYear + '-' + month.key + '-31' })) : Array.from({length: daysInSelectedMonth}, (_, index) => { const date = opFilterYear + '-' + opFilterMonth + '-' + String(index + 1).padStart(2, '0'); return {label: String(index + 1), fullLabel: date, start: date, end: date}; });
+    return periods.map(period => { const report = buildAccountingReports(chartOfAccounts, journalEntries, bankAccounts, period.start, period.end); return { label: period.label, fullLabel: period.fullLabel, ingresos: report.revenue, egresos: money(report.costs + report.expenses), utilidadNeta: report.profit, flujo: report.netCash }; });
+  }, [journalEntries, chartOfAccounts, bankAccounts, opFilterYear, opFilterMonth, daysInSelectedMonth]);
 
   // ----------------------------------------------------
   // HELPERS PARA REDISEÑO SOBRIO, KPIS, SPARKLINES Y PREVIEWS
@@ -632,57 +376,9 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
     return (financialSummary.ingresosTotales || 0) > 0 || (financialSummary.egresosTotales || 0) > 0;
   }, [financialSummary]);
 
-  const kpiSparklines = useMemo(() => {
-    const pts = (flowEvolutionData || []).slice(-6);
-    const hasData = pts.some((p) => p.ingresos > 0 || p.egresos > 0);
-
-    if (hasData && pts.length >= 2) {
-      return {
-        ingresos: pts.map((p) => ({ val: p.ingresos })),
-        egresos: pts.map((p) => ({ val: p.egresos })),
-        utilidad: pts.map((p) => ({ val: p.utilidadNeta })),
-        iva: pts.map((p) => ({ val: Math.max(0, Math.round(p.ingresos * 0.13 - p.egresos * 0.13)) })),
-      };
-    }
-
-    return {
-      ingresos: [{ val: 2400 }, { val: 3100 }, { val: 2900 }, { val: 4200 }, { val: 3800 }, { val: 4900 }],
-      egresos: [{ val: 1800 }, { val: 2200 }, { val: 2100 }, { val: 2900 }, { val: 2600 }, { val: 3200 }],
-      utilidad: [{ val: 600 }, { val: 900 }, { val: 800 }, { val: 1300 }, { val: 1200 }, { val: 1700 }],
-      iva: [{ val: 110 }, { val: 145 }, { val: 130 }, { val: 195 }, { val: 170 }, { val: 240 }],
-    };
-  }, [flowEvolutionData]);
-
-  const sampleMonthlyChartData = [
-    { label: 'Ene', ingresos: 4200, egresos: 2800, utilidadNeta: 1400 },
-    { label: 'Feb', ingresos: 5100, egresos: 3200, utilidadNeta: 1900 },
-    { label: 'Mar', ingresos: 4800, egresos: 3000, utilidadNeta: 1800 },
-    { label: 'Abr', ingresos: 6200, egresos: 3900, utilidadNeta: 2300 },
-    { label: 'May', ingresos: 5900, egresos: 3600, utilidadNeta: 2300 },
-    { label: 'Jun', ingresos: 7400, egresos: 4400, utilidadNeta: 3000 },
-  ];
-
-  const sampleExpenseDonutData = [
-    { name: 'Compras a Proveedores', value: 2450, color: '#0F766E' },
-    { name: 'Planilla & Patronal', value: 1200, color: '#64748B' },
-    { name: 'Gastos Operativos', value: 650, color: '#D97706' },
-    { name: 'Impuestos MH (IVA)', value: 410, color: '#0D9488' },
-  ];
-
-  const displayMonthlyChartData = hasRealFinancialData
-    ? flowEvolutionData.map((d) => ({
-        label: d.label,
-        fullLabel: d.fullLabel,
-        ingresos: d.ingresos,
-        egresos: d.egresos,
-        utilidadNeta: d.utilidadNeta,
-      }))
-    : sampleMonthlyChartData;
-
-  const displayExpenseDonutData =
-    hasRealFinancialData && expenseByConceptData.length > 0
-      ? expenseByConceptData
-      : sampleExpenseDonutData;
+  const kpiSparklines = useMemo(() => ({ ingresos: flowEvolutionData.map(p => ({val:p.ingresos})), egresos: flowEvolutionData.map(p => ({val:p.egresos})), utilidad: flowEvolutionData.map(p => ({val:p.utilidadNeta})), iva: flowEvolutionData.map(() => ({val:0})) }), [flowEvolutionData]);
+  const displayMonthlyChartData = flowEvolutionData;
+  const displayExpenseDonutData = expenseByConceptData;
 
   const step1CatalogDone = purchases.length > 0;
   const step2SaleDone = invoices.length > 0;
@@ -823,53 +519,12 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   }, [purchases, today]);
 
   // Mini-gráficos comparativos de CxC y CxP
-  const cxcChartData = useMemo(() => {
-    const currentMonthNum = today.getMonth() + 1;
-    if (cxcPeriodSelector === '5m') {
-      return [
-        { month: 'Abr', value: 1200, isCurrent: false },
-        { month: 'May', value: 1800, isCurrent: false },
-        { month: 'Jun', value: 1400, isCurrent: false },
-        { month: 'Jul', value: 2100, isCurrent: false },
-        { month: 'Ago (Actual)', value: cxcRealTime.total || 1950, isCurrent: true },
-      ];
-    }
-    if (cxcPeriodSelector === '12m') {
-      return OP_MONTHS.filter((m) => m.key !== 'all').map((m) => ({
-        month: m.short,
-        value: parseInt(m.key, 10) === currentMonthNum ? (cxcRealTime.total || 1950) : Math.round(1500 * (1 + parseInt(m.key, 10) * 0.05)),
-        isCurrent: parseInt(m.key, 10) === currentMonthNum,
-      }));
-    }
-    return [
-      { month: 'Año 2025', value: 24500, isCurrent: false },
-      { month: 'Año 2026 (En Curso)', value: (cxcRealTime.total * 6) || 18400, isCurrent: true },
-    ];
-  }, [cxcPeriodSelector, cxcRealTime, today]);
-
-  const cxpChartData = useMemo(() => {
-    const currentMonthNum = today.getMonth() + 1;
-    if (cxpPeriodSelector === '5m') {
-      return [
-        { month: 'Abr', value: 950, isCurrent: false },
-        { month: 'May', value: 1100, isCurrent: false },
-        { month: 'Jun', value: 1300, isCurrent: false },
-        { month: 'Jul', value: 1050, isCurrent: false },
-        { month: 'Ago (Actual)', value: cxpRealTime.total || 1420, isCurrent: true },
-      ];
-    }
-    if (cxpPeriodSelector === '12m') {
-      return OP_MONTHS.filter((m) => m.key !== 'all').map((m) => ({
-        month: m.short,
-        value: parseInt(m.key, 10) === currentMonthNum ? (cxpRealTime.total || 1420) : Math.round(1100 * (1 + parseInt(m.key, 10) * 0.04)),
-        isCurrent: parseInt(m.key, 10) === currentMonthNum,
-      }));
-    }
-    return [
-      { month: 'Año 2025', value: 16800, isCurrent: false },
-      { month: 'Año 2026 (En Curso)', value: (cxpRealTime.total * 6) || 12600, isCurrent: true },
-    ];
-  }, [cxpPeriodSelector, cxpRealTime, today]);
+  const debtHistory = (code: string, selector: string) => {
+    const dates = selector === 'yoy' ? [new Date(today.getFullYear()-1,11,31), today] : Array.from({length: selector === '5m' ? 5 : 12}, (_,index) => new Date(today.getFullYear(),today.getMonth() - (selector === '5m' ? 4 : 11) + index + 1,0));
+    return dates.map((date,index) => { const end = date.getFullYear() + '-' + String(date.getMonth()+1).padStart(2,'0') + '-' + String(date.getDate()).padStart(2,'0'); const report=buildAccountingReports(chartOfAccounts,journalEntries,bankAccounts,'0001-01-01',end); return {month: selector==='yoy' ? String(date.getFullYear()) : date.toLocaleDateString('es-SV',{month:'short',year:'2-digit'}),value: money(report.rows.filter(row=>row.code===code||row.code.startsWith(code+'-')).reduce((sum,row)=>sum+row.naturalClosing,0)),isCurrent:index===dates.length-1}; });
+  };
+  const cxcChartData = useMemo(()=>debtHistory('1103',cxcPeriodSelector),[journalEntries,chartOfAccounts,bankAccounts,cxcPeriodSelector,today]);
+  const cxpChartData = useMemo(()=>debtHistory('2101',cxpPeriodSelector),[journalEntries,chartOfAccounts,bankAccounts,cxpPeriodSelector,today]);
 
   // ----------------------------------------------------
   // ZONA B (TIEMPO REAL): SECCIÓN 5. CUMPLIMIENTO TRIBUTARIO
@@ -886,13 +541,13 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
       (p) => p && p.status !== 'anulada' && (p.date || '').startsWith(`${currentYear}-${currentMonthKey}`)
     );
 
-    const debitoFiscal = curMonthInvs.reduce((sum, i) => sum + (i.iva13 || 0), 0);
-    const creditoFiscal = curMonthPurs.reduce((sum, p) => sum + (p.ivaCreditoFiscal || 0), 0);
+    const debitoFiscal = curMonthInvs.reduce((sum, i) => sum + (i.type === 'nota_credito' ? -1 : 1) * (i.iva13 || 0), 0);
+    const creditoFiscal = curMonthPurs.reduce((sum, p) => sum + (p.docType === 'nota_credito_compra' ? -1 : 1) * (p.ivaCreditoFiscal || 0), 0);
 
     const ivaNetoPagar = Math.max(0, debitoFiscal - creditoFiscal);
     const remanenteFavor = Math.max(0, creditoFiscal - debitoFiscal);
 
-    const salesTotal = curMonthInvs.reduce((sum, i) => sum + (i.totalPagar || 0), 0);
+    const salesTotal = curMonthInvs.reduce((sum, i) => sum + (i.type === 'nota_credito' ? -1 : 1) * (i.sumasGravadas + i.sumasExentas + i.sumasNoSujetas), 0);
     const pagoCuenta = salesTotal * (fiscalConfig?.pagoCuentaRate || 0.0175);
     const retencionRenta = curMonthPurs.reduce((sum, p) => sum + (p.retencionRenta10 || 0), 0);
 
@@ -935,7 +590,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   const handleRunDiagnosis = async () => {
     setIsDiagnosing(true);
     try {
-      const response = await fetch('/api/ai/financial-diagnosis', {
+      const response = await authenticatedFetch('/api/ai/financial-diagnosis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1441,7 +1096,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
       {/* ---------------------------------------------------- */}
       {/* FILA DE 4 KPIS: Ingresos, Egresos, Utilidad, IVA por pagar */}
       {/* ---------------------------------------------------- */}
-      <section id="sec-kpis" className="space-y-3">
+      <section id="sec-kpis" className="space-y-3"><p className="text-xs text-slate-500">Los indicadores contables consolidan toda la empresa. Ventas, cartera y compras por sucursal se consultan en sus módulos.</p>
         <div className="flex items-center justify-between">
           <h2 className="text-[16px] font-semibold text-[#111827] dark:text-white">
             Indicadores financieros clave (KPIs)
@@ -1621,7 +1276,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
             <div className="flex items-center gap-2 self-start sm:self-auto">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] bg-[#F6F8F7] dark:bg-slate-800 text-[12px] text-[#6B7280] dark:text-slate-400 font-medium border border-[#E3E8E6] dark:border-slate-700">
                 <AlertCircle className="w-3.5 h-3.5 text-[#6B7280]" />
-                <span>Datos de ejemplo</span>
+                <span>Sin movimientos registrados</span>
               </span>
               <button
                 type="button"
@@ -1685,58 +1340,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
               </div>
             </div>
 
-            <div className="h-80 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                {flowChartType === 'bars' ? (
-                  <ComposedChart data={displayMonthlyChartData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E3E8E6" opacity={0.6} />
-                    <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#6B7280' }} stroke="#E3E8E6" />
-                    <YAxis tick={{ fontSize: 12, fill: '#6B7280' }} stroke="#E3E8E6" tickFormatter={(v) => `$${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`} />
-                    <Tooltip formatter={(v: any, name: any) => [`$${Number(v).toLocaleString()}`, name === 'ingresos' ? 'Ingresos' : name === 'egresos' ? 'Egresos' : 'Utilidad Neta']} />
-                    <Legend verticalAlign="top" height={32} wrapperStyle={{ fontSize: 12, color: '#6B7280' }} />
-                    <Bar dataKey="ingresos" name="Ingresos" fill="#0F766E" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="egresos" name="Egresos" fill="#64748B" radius={[4, 4, 0, 0]} />
-                    <Line type="monotone" dataKey="utilidadNeta" name="Utilidad Neta" stroke="#059669" strokeWidth={2.5} dot={{ r: 4, fill: '#059669' }} />
-                  </ComposedChart>
-                ) : flowChartType === 'lines' ? (
-                  <LineChart data={displayMonthlyChartData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E3E8E6" opacity={0.6} />
-                    <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#6B7280' }} stroke="#E3E8E6" />
-                    <YAxis tick={{ fontSize: 12, fill: '#6B7280' }} stroke="#E3E8E6" tickFormatter={(v) => `$${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`} />
-                    <Tooltip formatter={(v: any, name: any) => [`$${Number(v).toLocaleString()}`, name === 'ingresos' ? 'Ingresos' : name === 'egresos' ? 'Egresos' : 'Utilidad Neta']} />
-                    <Legend verticalAlign="top" height={32} wrapperStyle={{ fontSize: 12, color: '#6B7280' }} />
-                    <Line type="monotone" dataKey="ingresos" name="Ingresos" stroke="#0F766E" strokeWidth={2.5} dot={{ r: 4, fill: '#0F766E' }} />
-                    <Line type="monotone" dataKey="egresos" name="Egresos" stroke="#64748B" strokeWidth={2.5} dot={{ r: 4, fill: '#64748B' }} />
-                    <Line type="monotone" dataKey="utilidadNeta" name="Utilidad Neta" stroke="#059669" strokeWidth={2.5} dot={{ r: 4, fill: '#059669' }} />
-                  </LineChart>
-                ) : (
-                  <AreaChart data={displayMonthlyChartData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorIng" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#0F766E" stopOpacity={0.25} />
-                        <stop offset="95%" stopColor="#0F766E" stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="colorEgr" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#64748B" stopOpacity={0.2} />
-                        <stop offset="95%" stopColor="#64748B" stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="colorUtil" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#059669" stopOpacity={0.25} />
-                        <stop offset="95%" stopColor="#059669" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E3E8E6" opacity={0.6} />
-                    <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#6B7280' }} stroke="#E3E8E6" />
-                    <YAxis tick={{ fontSize: 12, fill: '#6B7280' }} stroke="#E3E8E6" tickFormatter={(v) => `$${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`} />
-                    <Tooltip formatter={(v: any, name: any) => [`$${Number(v).toLocaleString()}`, name === 'ingresos' ? 'Ingresos' : name === 'egresos' ? 'Egresos' : 'Utilidad Neta']} />
-                    <Legend verticalAlign="top" height={32} wrapperStyle={{ fontSize: 12, color: '#6B7280' }} />
-                    <Area type="monotone" dataKey="ingresos" name="Ingresos" stroke="#0F766E" fillOpacity={1} fill="url(#colorIng)" strokeWidth={2} />
-                    <Area type="monotone" dataKey="egresos" name="Egresos" stroke="#64748B" fillOpacity={1} fill="url(#colorEgr)" strokeWidth={2} />
-                    <Area type="monotone" dataKey="utilidadNeta" name="Utilidad Neta" stroke="#059669" fillOpacity={1} fill="url(#colorUtil)" strokeWidth={2} />
-                  </AreaChart>
-                )}
-              </ResponsiveContainer>
-            </div>
+            <p className="text-xs text-slate-500">Contabilidad consolidada de la empresa: ingresos, costos y gastos asentados. El efectivo se consulta en Flujo de efectivo.</p><FinancialEvolutionChart data={displayMonthlyChartData} type={flowChartType} />
           </div>
 
           {/* Dona de Gastos por Categoría (5/12) */}
@@ -1746,7 +1350,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                 Gastos por categoría
               </span>
               <span className="text-[12px] text-[#6B7280]">
-                {hasRealFinancialData ? 'Distribución del período' : 'Estructura proyectada'}
+                {hasRealFinancialData ? 'Distribución del período' : 'Sin gastos registrados'}
               </span>
             </div>
 

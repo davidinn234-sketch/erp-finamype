@@ -133,7 +133,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
     {
       id: 'forecasting',
       label: 'Pronósticos & Proyecciones',
-      subtitle: 'Ventas, Flujo, Costos & OLS',
+      subtitle: 'Ventas, Compras y Escenarios de Efectivo',
       icon: TrendingUp,
       roles: ['admin_maestro', 'contador', 'gerente'],
       badge: 'Predictivo',

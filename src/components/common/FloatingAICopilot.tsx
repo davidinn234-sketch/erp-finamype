@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../../lib/authenticatedFetch';
 import React, { useState, useRef, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
 import {
@@ -164,7 +165,7 @@ Puedo realizar acciones reales en tu empresa con solo pedírmelo:
         customersCount: customers.length,
       };
 
-      const res = await fetch('/api/ai/copilot', {
+      const res = await authenticatedFetch('/api/ai/copilot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: query, companyContext }),
@@ -178,116 +179,8 @@ Puedo realizar acciones reales en tu empresa con solo pedírmelo:
 
       let executed = false;
 
-      // AUTOMATIC ACTION EXECUTION
-      if (data.actionType === 'REGISTER_SALE' && data.saleData) {
-        try {
-          const totalVal = data.saleData.total || 100;
-          const gravada = Number((totalVal / 1.13).toFixed(2));
-          const ivaVal = Number((totalVal - gravada).toFixed(2));
-          createInvoice({
-            customerId: customers[0]?.id || 'cust_gen',
-            customerName: data.saleData.customerName || 'Cliente General',
-            customerNit: data.saleData.customerDuiNit || data.saleData.customerNit || '05123456-7',
-            type: (data.saleData.docType === '03' ? 'credito_fiscal' : 'factura_consumidor_final'),
-            correlativeNumber: `DTE-01-M001-${Math.floor(10000000 + Math.random() * 90000000)}`,
-            items: [
-              {
-                id: `item_${Date.now()}`,
-                productId: products[0]?.id || 'prod_gen',
-                productCode: products[0]?.code || 'SERV-01',
-                description: 'Venta comercial registrada por IA',
-                quantity: 1,
-                unitPrice: totalVal,
-                total: totalVal,
-                unitCost: Number((gravada * 0.6).toFixed(2)),
-              },
-            ],
-            customerIsGranContribuyente: false,
-            sumasGravadas: gravada,
-            sumasExentas: 0,
-            sumasNoSujetas: 0,
-            iva13: ivaVal,
-            ivaRetenido1: 0,
-            ivaPercibido1: 0,
-            totalPagar: totalVal,
-            paymentCondition: (data.saleData.paymentCondition as any) || 'contado',
-            saldoPendiente: data.saleData.paymentCondition === 'credito_30' ? totalVal : 0,
-            date: new Date().toISOString().split('T')[0],
-            dueDate: new Date().toISOString().split('T')[0],
-            status: data.saleData.paymentCondition === 'credito_30' ? 'emitida' : 'pagada',
-            branchId: branches[0]?.id || 'br_central',
-            branchName: branches[0]?.name || 'Sucursal Central',
-          });
-          executed = true;
-          addNotification('success', 'Venta Registrada por IA', `Factura por $${(data.saleData.total || 0).toFixed(2)} emitida con éxito.`);
-        } catch (e) {
-          console.error('Error al ejecutar venta por IA:', e);
-        }
-      }
-
-      if (data.actionType === 'REGISTER_PURCHASE' && data.purchaseData) {
-        try {
-          const totalPur = data.purchaseData.total || 50;
-          const gravadaPur = Number((totalPur / 1.13).toFixed(2));
-          const ivaPur = Number((totalPur - gravadaPur).toFixed(2));
-          createPurchase({
-            supplierId: suppliers[0]?.id || 'sup_central',
-            supplierName: data.purchaseData.supplierName || 'Distribuidora Central SV',
-            supplierNrc: suppliers[0]?.nrc || '123456-7',
-            supplierNit: suppliers[0]?.nit || '0614-010190-101-1',
-            supplierIsGranContribuyente: false,
-            documentNumber: data.purchaseData.documentNumber || `CCF-${Math.floor(100000 + Math.random() * 900000)}`,
-            docType: 'ccf_compra',
-            items: [
-              {
-                id: `pitem_${Date.now()}`,
-                productId: products[0]?.id || 'prod_gen',
-                description: data.purchaseData.category || 'Gasto Operativo',
-                quantity: 1,
-                unitCost: gravadaPur,
-                total: gravadaPur,
-              },
-            ],
-            comprasGravadas: gravadaPur,
-            comprasExentas: 0,
-            comprasSujetoExcluido: 0,
-            ivaCreditoFiscal: ivaPur,
-            retencionRenta10: 0,
-            retencionIva1: 0,
-            percepcionIva1: 0,
-            totalPagar: totalPur,
-            saldoPendiente: data.purchaseData.paymentCondition === 'credito_30' ? totalPur : 0,
-            status: data.purchaseData.paymentCondition === 'credito_30' ? 'registrada' : 'pagada',
-            date: new Date().toISOString().split('T')[0],
-            dueDate: new Date().toISOString().split('T')[0],
-          });
-          executed = true;
-          addNotification('success', 'Gasto/Compra Registrado por IA', `Desembolso por $${(data.purchaseData.total || 0).toFixed(2)} registrado correctamente.`);
-        } catch (e) {
-          console.error('Error al ejecutar compra por IA:', e);
-        }
-      }
-
-      if (data.actionType === 'REGISTER_CUSTOMER' && data.customerData) {
-        try {
-          createCustomer({
-            name: data.customerData.name || 'Nuevo Cliente SV',
-            nit: data.customerData.nit || '0614-120590-101-2',
-            nrc: data.customerData.nrc || '',
-            email: data.customerData.email || 'contacto@empresa.sv',
-            phone: data.customerData.phone || '2200-0000',
-            address: data.customerData.address || 'San Salvador, El Salvador',
-            department: data.customerData.department || 'San Salvador',
-            municipality: data.customerData.municipality || 'San Salvador Centro',
-            isGranContribuyente: false,
-            creditLimit: 1000,
-            paymentTermDays: 30,
-          });
-          executed = true;
-          addNotification('success', 'Cliente Agregado por IA', `"${data.customerData.name}" ya está disponible en tu cartera CRM.`);
-        } catch (e) {
-          console.error('Error al registrar cliente por IA:', e);
-        }
+      if (['REGISTER_SALE', 'REGISTER_PURCHASE', 'REGISTER_CUSTOMER'].includes(data.actionType)) {
+        data.replyText = 'Esta es una propuesta del asistente. Revisa el cliente, los productos y los montos en el módulo correspondiente antes de registrar la operación.\n\n' + data.replyText;
       }
 
       const assistantMsg: ChatMessage = {

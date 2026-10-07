@@ -1,0 +1,11 @@
+{
+  "firestore": [
+    { "database": "ai-studio-nexuserpsalvador-619c5a84-1f5d-4833-aee7-65b2a99f4a3b", "rules": "firestore.rules" }
+  ],
+  "emulators": {
+    "auth": { "port": 9099 },
+    "firestore": { "port": 8080 },
+    "ui": { "enabled": false },
+    "singleProjectMode": true
+  }
+}

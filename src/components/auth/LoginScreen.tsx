@@ -19,7 +19,7 @@ import {
 import { FinaPymeTermsAndProjectModal } from '../common/FinaPymeTermsAndProjectModal';
 
 export const LoginScreen: React.FC = () => {
-  const { login, createCompanyWithAdmin, createUser } = useERP();
+  const { login, createCompanyWithAdmin, registerPersonalAccount, resetPassword, authError } = useERP();
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
 
   // Login form state
@@ -32,7 +32,7 @@ export const LoginScreen: React.FC = () => {
 
   // Registration form state
   const [regAccountType, setRegAccountType] = useState<
-    'emprendedor' | 'empresa_dte' | 'finanzas_personales'
+    'emprendedor' | 'empresa_sin_dte' | 'empresa_dte' | 'finanzas_personales'
   >('emprendedor');
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
@@ -78,10 +78,10 @@ export const LoginScreen: React.FC = () => {
     try {
       if (regAccountType === 'finanzas_personales') {
         // Create isolated personal finance profile
-        createUser({
+        await registerPersonalAccount({
           name: regName.trim(),
           email: regEmail.trim().toLowerCase(),
-          password: regPassword.trim(),
+          password: regPassword,
           phone: regPhone.trim() || undefined,
           role: 'gerente',
           systemArchetype: 'finanzas_personales',
@@ -90,19 +90,18 @@ export const LoginScreen: React.FC = () => {
           storedInCloud: true,
         });
 
-        // Automatically log in
-        await login(regEmail.trim().toLowerCase(), regPassword.trim());
       } else {
         // Business account (Emprendedor or Empresa DTE)
         const businessTitle = regBusinessName.trim() || `Negocio de ${regName.trim()}`;
         const isDte = regAccountType === 'empresa_dte';
+        const isContributor = isDte || regAccountType === 'empresa_sin_dte';
 
         await createCompanyWithAdmin(
           {
             name: businessTitle,
             tradeName: businessTitle,
-            nit: '0614-010190-101-1',
-            nrc: isDte ? '280192-3' : '',
+            nit: '',
+            nrc: '',
             giro: 'Comercio al por menor y servicios generales',
             economicActivity: 'Comercio al por menor y servicios generales',
             economicActivityCode: '47110',
@@ -114,14 +113,14 @@ export const LoginScreen: React.FC = () => {
             isGranContribuyente: false,
             currency: 'USD',
             fiscalYear: new Date().getFullYear(),
-            regimeType: isDte ? 'general_tributario' : 'emprendedor_control_interno',
-            systemArchetype: isDte ? 'empresa_consolidada_dte' : 'emprendedor_control_interno',
+            regimeType: isContributor ? 'general_tributario' : 'emprendedor_control_interno',
+            systemArchetype: isDte ? 'empresa_consolidada_dte' : isContributor ? 'negocio_transicion' : 'emprendedor_control_interno',
             dteActive: isDte,
             dteEnvironment: 'pruebas',
             inventoryMethod: 'costo_promedio',
             taxesConfig: {
-              declaIva: isDte,
-              declaPagoCuenta: isDte,
+              declaIva: isContributor,
+              declaPagoCuenta: isContributor,
               declaImpuestosMunicipales: true,
               municipalRateOrFee: 15.0,
               alcaldiaName: 'Alcaldía Municipal de San Salvador Centro',
@@ -130,18 +129,16 @@ export const LoginScreen: React.FC = () => {
           {
             name: regName.trim(),
             email: regEmail.trim().toLowerCase(),
-            password: regPassword.trim(),
+            password: regPassword,
             phone: regPhone.trim(),
           }
         );
 
-        // Automatically log in
-        await login(regEmail.trim().toLowerCase(), regPassword.trim());
       }
       setIsLoading(false);
-    } catch {
+    } catch (error) {
       setIsLoading(false);
-      setError('Error al crear la cuenta. Por favor intente nuevamente.');
+      setError(error instanceof Error ? error.message : 'No se pudo crear la cuenta.');
     }
   };
 
@@ -264,13 +261,13 @@ export const LoginScreen: React.FC = () => {
             </p>
           </div>
 
-          {error && (
+          {(error || authError) && (
             <div
               id="login-error-alert"
               className="p-3 rounded-[8px] bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-start gap-2 animate-in fade-in"
             >
               <div className="w-1.5 h-1.5 rounded-full bg-rose-500 mt-1.5 shrink-0" />
-              <span>{error}</span>
+              <span>{error || authError}</span>
             </div>
           )}
 
@@ -341,18 +338,26 @@ export const LoginScreen: React.FC = () => {
                   </>
                 )}
               </button>
+              <button type="button" className="w-full text-xs text-teal-700 dark:text-teal-400 py-2" onClick={async () => {
+                if (!email.trim()) { setError('Escribe tu correo para restablecer la contraseña.'); return; }
+                try { await resetPassword(email); setError('Si el correo tiene una cuenta, recibirás instrucciones para restablecer tu contraseña.'); }
+                catch (error) { setError(error instanceof Error ? error.message : 'No se pudo enviar el correo.'); }
+              }}>Restablecer contraseña</button>
+              <p className="text-xs text-center text-slate-500">Si tu usuario no tiene un buzón de correo, pide al administrador que te asigne una nueva contraseña.</p>
             </form>
           ) : (
             /* REGISTRATION FORM */
             <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
+              <p className="text-xs text-slate-500">Puedes usar una dirección con formato de correo como usuario, aunque no tenga buzón. Con un correo real también podrás recuperar tu contraseña por email.</p>
               <div>
                 <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                   Modalidad de Cuenta
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {[
                     { id: 'emprendedor', label: 'Negocio Emprendedor', desc: 'Control Interno & POS' },
-                    { id: 'empresa_dte', label: 'Negocio Empresa DTE', desc: 'Facturación Hacienda' },
+                    { id: 'empresa_sin_dte', label: 'Empresa sin DTE', desc: 'Control contable e impuestos' },
+                    { id: 'empresa_dte', label: 'Negocio Empresa DTE', desc: 'Demostración, sin transmisión' },
                     { id: 'finanzas_personales', label: 'Finanzas Personales', desc: 'Solo Gastos Individuales' },
                   ].map((mode) => (
                     <button
@@ -387,6 +392,7 @@ export const LoginScreen: React.FC = () => {
                       <Store className="w-4 h-4" />
                     </div>
                     <input
+                      id="register-business-input"
                       type="text"
                       value={regBusinessName}
                       onChange={(e) => setRegBusinessName(e.target.value)}
@@ -406,6 +412,7 @@ export const LoginScreen: React.FC = () => {
                     <User className="w-4 h-4" />
                   </div>
                   <input
+                    id="register-name-input"
                     type="text"
                     value={regName}
                     onChange={(e) => setRegName(e.target.value)}
@@ -464,8 +471,10 @@ export const LoginScreen: React.FC = () => {
                     <Lock className="w-4 h-4" />
                   </div>
                   <input
+                    id="register-password-input"
                     type="password"
                     value={regPassword}
+                    minLength={6}
                     onChange={(e) => setRegPassword(e.target.value)}
                     placeholder="Mínimo 6 caracteres"
                     className="w-full pl-9 pr-3 py-2 bg-[#F8FAFC] dark:bg-slate-950 border border-[#CBD5E1] dark:border-slate-700 rounded-[8px] text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0F766E]/20 focus:border-[#0F766E]"

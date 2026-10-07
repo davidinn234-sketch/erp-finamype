@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../../lib/authenticatedFetch';
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import {
@@ -56,7 +57,7 @@ export const DynamicChartBuilderModal: React.FC<DynamicChartBuilderModalProps> =
     setErrorMessage('');
 
     try {
-      const response = await fetch('/api/ai/dynamic-chart', {
+      const response = await authenticatedFetch('/api/ai/dynamic-chart', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

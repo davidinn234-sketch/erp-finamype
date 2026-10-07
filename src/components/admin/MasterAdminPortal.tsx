@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Company, SystemArchetype, UserProfile } from '../../types';
+import { AssignPasswordButton } from './UserAccessControls';
 import {
   ShieldCheck,
   Building2,
@@ -113,6 +114,7 @@ export const MasterAdminPortal: React.FC = () => {
   const [createdModalData, setCreatedModalData] = useState<{
     company: Company;
     user: UserProfile;
+    initialPassword: string;
   } | null>(null);
 
   // Delete Confirmation Modal
@@ -207,7 +209,7 @@ export const MasterAdminPortal: React.FC = () => {
       );
 
       // Open success modal with copyable WhatsApp message
-      setCreatedModalData(res);
+      setCreatedModalData({ ...res, initialPassword: formAdminPassword.trim() });
 
       // Reset form
       setFormTradeName('');
@@ -248,9 +250,9 @@ Te damos la bienvenida a *FINAMIPE SV* (El Salvador).
 
 Ya hemos habilitado la cuenta de tu empresa *${comp.tradeName || comp.name}*:
 
-🌐 *Plataforma:* https://ais-dev-zt5ox4j3ww7wbwalmkdubu-128537300182.us-east1.run.app
+🌐 *Plataforma:* ${window.location.origin}
 📧 *Correo de Acceso:* ${adminUser?.email || comp.email}
-🔑 *Contraseña:* ${adminUser?.password || 'admin123'}
+🔑 *Contraseña:* ${createdModalData?.user.id === adminUser?.id ? createdModalData.initialPassword : 'La contraseña que te entregó el administrador. Si la olvidaste, solicita una nueva.'}
 📦 *Plan Activado:* ${serviceName} ($${comp.subscriptionPrice || 14.99}/mes)
 
 ✨ Tu cuenta empieza completamente desde CERO ($0.00) lista para que ingreses tus productos y comiences a registrar tus ventas diarias.
@@ -300,8 +302,8 @@ Ya hemos habilitado la cuenta de tu empresa *${comp.tradeName || comp.name}*:
   // Filter companies
   const filteredCompanies = companies.filter((c) => {
     const matchesSearch =
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.tradeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.tradeName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (c.nit && c.nit.includes(searchQuery)) ||
       (c.contactPerson && c.contactPerson.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (c.email && c.email.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -538,7 +540,7 @@ Ya hemos habilitado la cuenta de tu empresa *${comp.tradeName || comp.name}*:
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-3">
                           <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-indigo-700 to-slate-800 border border-indigo-600/30 flex items-center justify-center text-white font-black text-lg shadow-md shrink-0">
-                            {(comp.tradeName || comp.name).substring(0, 2).toUpperCase()}
+                            {(comp.tradeName || comp.name || 'Empresa').substring(0, 2).toUpperCase()}
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
@@ -1161,13 +1163,13 @@ Ya hemos habilitado la cuenta de tu empresa *${comp.tradeName || comp.name}*:
                   <tbody className="divide-y divide-slate-800/80">
                     {users.map((u) => {
                       const comp = companies.find((c) => c.id === u.companyId);
-                      const isSuper = u.role === 'admin_maestro';
+                      const isSuper = u.id === currentUser.id;
 
                       return (
                         <tr key={u.id} className="hover:bg-slate-800/40 transition">
                           <td className="px-4 py-3 font-medium text-white flex items-center gap-2">
                             <div className="w-7 h-7 rounded-lg bg-indigo-600/30 text-indigo-300 font-bold flex items-center justify-center shrink-0">
-                              {u.name.charAt(0)}
+                              {(u.name || u.email || 'Usuario').charAt(0)}
                             </div>
                             <div>
                               <span>{u.name}</span>
@@ -1188,7 +1190,7 @@ Ya hemos habilitado la cuenta de tu empresa *${comp.tradeName || comp.name}*:
                             </span>
                           </td>
                           <td className="px-4 py-3 font-mono text-slate-400">
-                            {u.password || 'admin'}
+                            <AssignPasswordButton user={u} />
                           </td>
                           <td className="px-4 py-3 text-right space-x-1">
                             {!isSuper && (
@@ -1244,7 +1246,7 @@ Ya hemos habilitado la cuenta de tu empresa *${comp.tradeName || comp.name}*:
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Contraseña:</span>
-                <span className="text-emerald-400 font-bold">{createdModalData.user.password}</span>
+                <span className="text-emerald-400 font-bold">{createdModalData.initialPassword}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Modalidad:</span>

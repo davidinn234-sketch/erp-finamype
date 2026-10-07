@@ -6,3 +6,13 @@ coverage/
 *.log
 .env*
 !.env.example
+.tools/
+test-results/
+playwright-report/
+firebase-debug.log
+firestore-debug.log
+*-debug.log
+.private-backups/
+.server-build/
+.vercel/
+exports/

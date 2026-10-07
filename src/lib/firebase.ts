@@ -1,24 +1,26 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
+import { getAuth, connectAuthEmulator } from 'firebase/auth';
 import { getAnalytics, isSupported } from "firebase/analytics";
-import { initializeFirestore, doc, setDoc, getDocFromServer } from "firebase/firestore";
+import { initializeFirestore, doc, getDocFromServer, connectFirestoreEmulator } from "firebase/firestore";
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 export const firebaseConfig = {
   apiKey: "AIzaSyDZkCTczhrvxTzxGSTsPtENKWztKUdpe_M",
   authDomain: "mi-erp-nube.firebaseapp.com",
-  projectId: "mi-erp-nube",
+  projectId: import.meta.env?.DEV && import.meta.env?.VITE_USE_FIREBASE_EMULATORS === 'true' ? 'demo-fina-pyme' : 'mi-erp-nube',
   storageBucket: "mi-erp-nube.firebasestorage.app",
   messagingSenderId: "96182387469",
   appId: "1:96182387469:web:938520455ea1f073cf6644",
   measurementId: ""
 };
 
-export const firestoreDatabaseId = "ai-studio-nexuserpsalvador-619c5a84-1f5d-4833-aee7-65b2a99f4a3b";
+export const firestoreDatabaseId = import.meta.env?.DEV && import.meta.env?.VITE_USE_FIREBASE_EMULATORS === 'true' ? '(default)' : 'ai-studio-nexuserpsalvador-619c5a84-1f5d-4833-aee7-65b2a99f4a3b';
 
 // Initialize Firebase
 export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const firebaseApp = app;
+export const auth = getAuth(app);
 
 // Initialize Analytics safely for web environments
 export let analytics: ReturnType<typeof getAnalytics> | null = null;
@@ -45,20 +47,16 @@ export const db = initializeFirestore(
   firestoreDatabaseId
 );
 
+if (import.meta.env?.DEV && import.meta.env?.VITE_USE_FIREBASE_EMULATORS === 'true') {
+  connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  connectFirestoreEmulator(db, '127.0.0.1', 8080);
+}
+
 // Connection test helper mandated by Firebase skill
 export async function testFirebaseConnection(): Promise<boolean> {
   try {
-    const testDocRef = doc(db, "test", "connection");
-    await setDoc(
-      testDocRef,
-      {
-        timestamp: new Date().toISOString(),
-        status: "online",
-        project: "mi-erp-nube",
-        source: "FINAMIPE SV Cloud ERP"
-      },
-      { merge: true }
-    );
+    if (!auth.currentUser) return false;
+    const testDocRef = doc(db, 'users', auth.currentUser.uid);
     await getDocFromServer(testDocRef);
     console.log("✓ Firebase Firestore en la nube (mi-erp-nube) conectado exitosamente.");
     return true;

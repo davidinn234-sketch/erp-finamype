@@ -6,6 +6,21 @@ export type SystemArchetype =
   | 'negocio_transicion'
   | 'empresa_consolidada_dte';
 
+export interface FiscalDocumentMetadata {
+  documentClass?: '1' | '2' | '3' | '4';
+  resolution?: string;
+  series?: string;
+  documentNumber?: string;
+  internalControl?: string;
+  receiptSeal?: string;
+  dui?: string;
+  operationType?: string;
+  incomeType?: string;
+  classification?: '1' | '2';
+  sector?: string;
+  costType?: string;
+}
+
 export interface UserProfile {
   id: string;
   name: string;
@@ -245,6 +260,7 @@ export interface InvoiceItem {
 }
 
 export interface Invoice {
+  taxReporting?: FiscalDocumentMetadata;
   id: string;
   companyId: string;
   branchId?: string;
@@ -377,6 +393,7 @@ export interface PurchaseItem {
 }
 
 export interface Purchase {
+  taxReporting?: FiscalDocumentMetadata;
   id: string;
   companyId: string;
   branchId?: string;
@@ -800,6 +817,7 @@ export interface JournalEntryLine {
 }
 
 export interface JournalEntry {
+  cashFlowActivity?: 'operacion' | 'inversion' | 'financiacion';
   id: string;
   companyId: string;
   entryNumber: number; // Correlativo de partida
@@ -820,6 +838,7 @@ export interface JournalEntry {
 // ----------------------------------------------------
 export interface DynamicChartWidget {
   id: string;
+  companyId?: string;
   title: string;
   description: string;
   chartType: 'bar' | 'area' | 'pie' | 'line';

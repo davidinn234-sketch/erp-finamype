@@ -25,6 +25,8 @@ export const UserRoleManagement: React.FC = () => {
     createUser,
     updateUser,
     deleteUser,
+    currentCompany,
+    addNotification,
   } = useERP();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -32,6 +34,7 @@ export const UserRoleManagement: React.FC = () => {
 
   const [formName, setFormName] = useState('');
   const [formEmail, setFormEmail] = useState('');
+  const [formPassword, setFormPassword] = useState('');
   const [formRole, setFormRole] = useState<UserRole>('cajero');
   const [formPermissions, setFormPermissions] = useState<string[]>([
     'pos_sales',
@@ -95,27 +98,34 @@ export const UserRoleManagement: React.FC = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) return;
 
+    try {
     if (editingUserId) {
-      updateUser(editingUserId, {
+      await updateUser(editingUserId, {
         name: formName.trim(),
         email: formEmail.trim() || `${formName.toLowerCase().replace(/\s+/g, '')}@empresa.sv`,
         role: formRole,
         permissions: formPermissions,
       });
     } else {
-      createUser({
+      await createUser({
         name: formName.trim(),
         email: formEmail.trim() || `${formName.toLowerCase().replace(/\s+/g, '')}@empresa.sv`,
         role: formRole,
         permissions: formPermissions,
+        companyId: currentCompany.id,
+        password: formPassword,
+        systemArchetype: currentCompany.systemArchetype,
+        isConfigured: true,
       });
     }
 
     setIsModalOpen(false);
+    setFormPassword('');
+    } catch (error) { addNotification('error', 'No se guardó el acceso', error instanceof Error ? error.message : 'Comprueba tu conexión.'); }
   };
 
   const getRoleBadge = (role: UserRole) => {
@@ -319,6 +329,7 @@ export const UserRoleManagement: React.FC = () => {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              {!editingUserId && <div><label className="block font-semibold mb-1">Contraseña inicial (mínimo 6 caracteres)</label><input type="password" required minLength={6} value={formPassword} onChange={e => setFormPassword(e.target.value)} className="w-full p-2 rounded-lg border bg-white dark:bg-slate-800" /></div>}
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Nombre Completo del Colaborador: *
@@ -358,7 +369,6 @@ export const UserRoleManagement: React.FC = () => {
                   <option value="cajero">Cajero / Vendedor (Punto de Venta únicamente)</option>
                   <option value="gerente">Gerente de Tienda (Ventas, inventario y autorización)</option>
                   <option value="contador">Contador / Administrador Fiscal (Planillas e IVA)</option>
-                  <option value="admin_maestro">Administrador Maestro (Acceso sin restricciones)</option>
                 </select>
               </div>
 

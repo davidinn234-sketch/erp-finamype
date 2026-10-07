@@ -210,7 +210,7 @@ export const TreasuryModule: React.FC = () => {
                 {formatCurrencyUSD(cashFlowProjections[2]?.closingBalance || 0)}
               </h3>
               <p className="text-[11px] text-indigo-700 dark:text-indigo-400 mt-1">
-                Horizonte trimestral con crecimiento sostenido
+                Saldo con cobros y pagos pendientes a 90 días
               </p>
             </div>
           </div>
@@ -221,7 +221,7 @@ export const TreasuryModule: React.FC = () => {
               Comparativa de Entradas vs. Salidas & Saldo Proyectado (USD)
             </h3>
             <p className="text-xs text-slate-500 mb-4">
-              Integración de cuentas por cobrar, pagos a proveedores, planillas con ISSS/AFP y tributos fiscales
+              Estimación según vencimientos de cuentas por cobrar y pagar; incluye atrasos en los primeros 30 días. No añade ventas futuras, planillas ni impuestos sin registrar.
             </p>
 
             <div className="h-72 w-full">
@@ -348,7 +348,7 @@ export const TreasuryModule: React.FC = () => {
                 {treasuryMovements.map((m) => {
                   const acc = bankAccounts.find((b) => b.id === m.bankAccountId);
                   const isIngreso =
-                    m.type === 'ingreso_venta' || m.type === 'abono_cxc' || m.type === 'otro_ingreso';
+                    m.type === 'ingreso_venta' || m.type === 'abono_cxc' || m.type === 'otro_ingreso' || (m.type === 'transferencia_interna' && m.amount < 0);
 
                   return (
                     <tr key={m.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50">
@@ -387,7 +387,7 @@ export const TreasuryModule: React.FC = () => {
                         }`}
                       >
                         {isIngreso ? '+' : '-'}
-                        {formatCurrencyUSD(m.amount)}
+                        {formatCurrencyUSD(Math.abs(m.amount))}
                       </td>
                     </tr>
                   );

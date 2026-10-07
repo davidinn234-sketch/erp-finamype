@@ -38,6 +38,7 @@ const MainLayout: React.FC = () => {
     activeModule,
     isDarkMode,
     isAuthenticated,
+    isAuthLoading,
     currentUser,
     currentCompany,
     isSupportMode,
@@ -72,6 +73,7 @@ const MainLayout: React.FC = () => {
   const [securityModalTab, setSecurityModalTab] = useState<'manifesto' | 'terms' | 'security' | 'team'>('security');
 
   // If user is not authenticated, display login screen
+  if (isAuthLoading) return <div className="min-h-screen flex items-center justify-center text-slate-600 dark:text-slate-300" role="status">Verificando tu sesión…</div>;
   if (!isAuthenticated) {
     return (
       <>

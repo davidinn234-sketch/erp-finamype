@@ -1,3 +1,4 @@
+import { buildAccountingReports, money } from '../lib/accountingReports';
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import {
   Company,
@@ -83,8 +84,15 @@ import {
   calculatePurchaseTaxes,
   formatCurrencyUSD,
 } from '../utils/salvadoranTax';
-import { db, testFirebaseConnection } from '../lib/firebase';
-import { doc, setDoc, getDoc, getDocs, collection, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { auth, db, testFirebaseConnection } from '../lib/firebase';
+import { doc, setDoc, getDoc, getDocs, collection, deleteDoc, onSnapshot, query, where, writeBatch } from 'firebase/firestore';
+import { emptyChart, ensureEngineAccounts } from '../lib/chartDefaults';
+import { recordPayment, moveFunds, settlePayroll, reversePayment } from '../lib/financialOperations';
+import { signOut } from 'firebase/auth';
+import { useAuthSession } from '../lib/useAuthSession';
+import { provisionAccount, loginAccount, authErrorMessage, resetAccountPassword } from '../lib/authService';
+import { useTenantCollection } from '../lib/useTenantCollection';
+import { canReadCompanyCollection, assertTenantRecords, validatePayment, COMPANY_COLLECTIONS } from '../lib/tenantPolicy';
 
 interface ToastNotification {
   id: string;
@@ -96,6 +104,10 @@ interface ToastNotification {
 interface ERPContextType {
   // Multitenancy & Auth & Sucursales
   isAuthenticated: boolean;
+  isAuthLoading: boolean;
+  authError?: string;
+  resetPassword: (email: string) => Promise<void>;
+  registerPersonalAccount: (data: Omit<UserProfile, 'id'>) => Promise<void>;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   
@@ -126,8 +138,8 @@ interface ERPContextType {
   currentUser: UserProfile;
   setCurrentUserId: (id: string) => void;
   userRole: UserRole;
-  createUser: (user: Omit<UserProfile, 'id'>) => void;
-  updateUser: (id: string, updates: Partial<UserProfile>) => void;
+  createUser: (user: Omit<UserProfile, 'id'>) => Promise<UserProfile>;
+  updateUser: (id: string, updates: Partial<UserProfile>) => Promise<void>;
   deleteUser: (id: string) => void;
 
   // Personal Finances Module
@@ -299,91 +311,6 @@ interface ERPContextType {
 }
 
 
-// ---------- Sincronización con la nube (Firestore) ----------
-// Comparación estable (ignora el orden de las llaves y los undefined) para no
-// re-escribir datos que ya son idénticos en la nube.
-const stableStringify = (v: any): string => {
-  if (v === undefined) return '';
-  if (v === null || typeof v !== 'object') return JSON.stringify(v);
-  if (Array.isArray(v)) return '[' + v.map((x) => stableStringify(x) || 'null').join(',') + ']';
-  return '{' + Object.keys(v).sort().filter((k) => v[k] !== undefined).map((k) => JSON.stringify(k) + ':' + stableStringify(v[k])).join(',') + '}';
-};
-
-// Aplica cambios por documento (agregado / modificado / ELIMINADO) sobre una lista local.
-const applyDocChanges = <T extends { id: string }>(prev: T[], upserts: T[], removed: Set<string>): T[] => {
-  const next = removed.size ? prev.filter((x) => !removed.has(x.id)) : [...prev];
-  upserts.forEach((u) => {
-    const i = next.findIndex((x) => x.id === u.id);
-    if (i >= 0) next[i] = { ...next[i], ...u };
-    else next.push(u);
-  });
-  return next;
-};
-
-// Espejo bidireccional lista local <-> colección de Firestore, para datos que se
-// modifican en muchos lugares (kardex, tesorería, otros ingresos) sin tocar cada función.
-function useCloudMirror<T extends { id: string }>(
-  name: string,
-  items: T[],
-  setItems: React.Dispatch<React.SetStateAction<T[]>>,
-  skipIds: Set<string>,
-  onError: (e: any) => void
-) {
-  const known = React.useRef<Map<string, string>>(new Map());
-  const [hydrated, setHydrated] = React.useState(false);
-
-  useEffect(() => {
-    const unsub = onSnapshot(
-      collection(db, name),
-      (snap) => {
-        const upserts: T[] = [];
-        const removed = new Set<string>();
-        snap.docChanges().forEach((ch) => {
-          const data = ch.doc.data() as T;
-          if (ch.type === 'removed') {
-            removed.add(ch.doc.id);
-            known.current.delete(ch.doc.id);
-          } else if (data && data.id) {
-            upserts.push(data);
-            known.current.set(data.id, stableStringify(data));
-          }
-        });
-        if (upserts.length || removed.size) setItems((prev) => applyDocChanges(prev, upserts, removed));
-        setHydrated(true);
-      },
-      (err) => {
-        console.warn(`Sync ${name}:`, err);
-        onError(err);
-      }
-    );
-    return unsub;
-  }, [name]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    const current = new Set(items.map((i) => i.id));
-    items.forEach((it) => {
-      if (skipIds.has(it.id)) return;
-      const sig = stableStringify(it);
-      if (known.current.get(it.id) !== sig) {
-        known.current.set(it.id, sig);
-        setDoc(doc(db, name, it.id), it as any).catch(onError);
-      }
-    });
-    Array.from(known.current.keys()).forEach((id: string) => {
-      if (!current.has(id)) {
-        known.current.delete(id);
-        deleteDoc(doc(db, name, id)).catch(onError);
-      }
-    });
-  }, [items, hydrated]);
-}
-
-
-const STORAGE_KEY = 'sivarflow_sv_erp_state_v3';
-const LEGACY_STORAGE_KEY = 'sivarflow_sv_erp_state_v2';
-const ANCIENT_STORAGE_KEY = 'contatech_sv_erp_state_v1';
-
 const ERPContext = createContext<ERPContextType | undefined>(undefined);
 
 export const cleanDepartmentStr = (val: any): string => {
@@ -440,124 +367,39 @@ export const ensureEmployeesHavePins = (list: Employee[]): Employee[] => {
 };
 
 export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  // Multitenancy & Auth State
-  const [companies, setCompanies] = useState<Company[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY) || localStorage.getItem(ANCIENT_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.companies && Array.isArray(parsed.companies)) {
-          return parsed.companies.map((c: any) => sanitizeCompany(c));
-        }
-      } catch (e) {
-        console.error('Error restoring companies from storage:', e);
-      }
-    }
-    return SAMPLE_COMPANIES.map(sanitizeCompany);
-  });
+  const session = useAuthSession();
+  return <ERPStateProvider key={session.profile?.id || 'guest'} session={session}>{children}</ERPStateProvider>;
+};
 
-  const [currentCompanyId, setCurrentCompanyId] = useState<string>(() => companies[0]?.id || 'comp_1');
-
-  const [rawBranches, setRawBranches] = useState<Branch[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.branches && Array.isArray(parsed.branches)) {
-          return parsed.branches.map((b: any) => sanitizeBranch(b));
-        }
-      } catch (e) {}
-    }
-    return SAMPLE_BRANCHES.map(sanitizeBranch);
-  });
-
-  const [selectedBranchId, setSelectedBranchId] = useState<string>('all');
-
-  const [users, setUsers] = useState<UserProfile[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.users && Array.isArray(parsed.users)) {
-          // Only guarantee the master admin account exists (safety net so the
-          // owner is never locked out). Other demo/sample users are NOT
-          // force-reinjected once the real user has removed them.
-          const merged: UserProfile[] = [...parsed.users];
-          const masterAdmin = SAMPLE_USERS.find((su) => su.id === 'user_david');
-          if (masterAdmin) {
-            const idx = merged.findIndex(
-              (u) => u.id === masterAdmin.id || u.email.toLowerCase() === masterAdmin.email.toLowerCase()
-            );
-            if (idx === -1) merged.push(masterAdmin);
-          }
-          return merged;
-        }
-      } catch (e) {}
-    }
-    return SAMPLE_USERS;
-  });
-
-  const [currentUserId, setCurrentUserId] = useState<string>(() => {
-    try {
-      const savedAuth = localStorage.getItem('sivarflow_auth_user');
-      if (savedAuth && users.some((u) => u.id === savedAuth)) {
-        return savedAuth;
-      }
-    } catch (e) {}
-    return SAMPLE_USERS[0].id;
-  });
-
-  // Auth Login State (Protected App Gate)
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    try {
-      const savedAuth = localStorage.getItem('sivarflow_auth_user');
-      return !!savedAuth;
-    } catch (e) {
-      return false;
-    }
-  });
-
-  // Personal Finances State
-  const defaultPersonalData = useMemo(() => getSamplePersonalFinancesData(), []);
-
-  const [personalTransactions, setPersonalTransactions] = useState<PersonalTransaction[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.personalTransactions && Array.isArray(parsed.personalTransactions) && parsed.personalTransactions.length > 0) {
-          return parsed.personalTransactions;
-        }
-      } catch (e) {}
-    }
-    return getSamplePersonalFinancesData().transactions;
-  });
-
-  const [personalBudgets, setPersonalBudgets] = useState<PersonalBudgetCategory[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.personalBudgets && Array.isArray(parsed.personalBudgets) && parsed.personalBudgets.length > 0) {
-          return parsed.personalBudgets;
-        }
-      } catch (e) {}
-    }
-    return getSamplePersonalFinancesData().budgets;
-  });
-
-  const [personalSavingGoals, setPersonalSavingGoals] = useState<PersonalSavingGoal[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.personalSavingGoals && Array.isArray(parsed.personalSavingGoals) && parsed.personalSavingGoals.length > 0) {
-          return parsed.personalSavingGoals;
-        }
-      } catch (e) {}
-    }
-    return getSamplePersonalFinancesData().goals;
-  });
+const ERPStateProvider: React.FC<{ children: ReactNode; session: ReturnType<typeof useAuthSession> }> = ({ children, session }) => {
+  // Data is memory-only and this provider remounts when the authenticated UID changes.
+  // Legacy localStorage is deliberately never loaded into a new identity.
+  const [notifications, setNotifications] = useState<ToastNotification[]>([]);
+  const reportCloudError = (error: unknown) => {
+    const id = crypto.randomUUID();
+    setNotifications(prev => [...prev, { id, type: 'error', title: 'No se pudo guardar o cargar', message: authErrorMessage(error) }]);
+    setTimeout(() => setNotifications(prev => prev.filter(item => item.id !== id)), 8000);
+  };
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>(session.profile ? [session.profile] : []);
+  const currentUser = session.profile || { id: '', name: '', email: '', role: 'gerente' as UserRole };
+  const currentUserId = currentUser.id;
+  const isAuthenticated = !!session.profile;
+  const [requestedCompanyId, setRequestedCompanyId] = useState(session.profile?.companyId || '');
+  const currentCompanyId = session.platformAdmin ? requestedCompanyId : session.profile?.companyId || '';
+  const setCurrentCompanyId = (id: string) => {
+    if (session.platformAdmin || id === session.profile?.companyId) { setRequestedCompanyId(id); setSelectedBranchId('all'); }
+  };
+  const setCurrentUserId = (id: string) => {
+    if (id !== currentUserId) addNotification('error', 'Acceso protegido', 'Para cambiar de persona, cierra sesión e inicia con su correo y contraseña.');
+  };
+  const [selectedBranchId, setSelectedBranchId] = useState('all');
+  const companyScope = (name: string) => isAuthenticated && currentCompanyId && canReadCompanyCollection(session.profile, name) ? currentCompanyId : null;
+  const [personalTransactions, setPersonalTransactions] = useTenantCollection<PersonalTransaction>('personal_finances', currentUserId || null, reportCloudError, 'userId');
+  const emptyBudgets = getSamplePersonalFinancesData().budgets.map(budget => ({ ...budget, budgetedAmount: 0 }));
+  const [personalBudgets, setPersonalBudgets] = useState<PersonalBudgetCategory[]>(emptyBudgets);
+  const [personalSavingGoals, setPersonalSavingGoals] = useState<PersonalSavingGoal[]>([]);
+  const [personalMetaReady, setPersonalMetaReady] = useState(false);
 
   const [isExhaustiveCustomizationOpen, setIsExhaustiveCustomizationOpen] = useState<boolean>(false);
   const [isCloudUserManagerOpen, setIsCloudUserManagerOpen] = useState<boolean>(false);
@@ -585,290 +427,49 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const [activeModule, setActiveModule] = useState<string>('dashboard');
 
-  // Módulo 1: CRM & Ventas
-  const [rawProducts, setRawProducts] = useState<Product[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.products && Array.isArray(parsed.products)) return parsed.products;
-      } catch (e) {}
-    }
-    return SAMPLE_PRODUCTS;
-  });
-
-  const [rawCustomers, setRawCustomers] = useState<Customer[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.customers && Array.isArray(parsed.customers)) return parsed.customers;
-      } catch (e) {}
-    }
-    return SAMPLE_CUSTOMERS;
-  });
-
-  const [rawInvoices, setRawInvoices] = useState<Invoice[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.invoices && Array.isArray(parsed.invoices)) {
-          return parsed.invoices.map((inv: any) => ({
-            ...inv,
-            saldoPendiente:
-              typeof inv.saldoPendiente === 'number' && !isNaN(inv.saldoPendiente)
-                ? inv.saldoPendiente
-                : inv.status === 'pagada'
-                ? 0
-                : typeof inv.totalPagar === 'number' && !isNaN(inv.totalPagar)
-                ? inv.totalPagar
-                : 0,
-            totalPagar:
-              typeof inv.totalPagar === 'number' && !isNaN(inv.totalPagar)
-                ? inv.totalPagar
-                : typeof inv.saldoPendiente === 'number' && !isNaN(inv.saldoPendiente)
-                ? inv.saldoPendiente
-                : 0,
-          }));
-        }
-      } catch (e) {}
-    }
-    return SAMPLE_INVOICES;
-  });
-
-  const [customerPayments, setCustomerPayments] = useState<CustomerPayment[]>([]);
-
-  // Módulo 2: CRM Proveedores & Compras
-  const [rawSuppliers, setRawSuppliers] = useState<Supplier[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.suppliers && Array.isArray(parsed.suppliers)) return parsed.suppliers;
-      } catch (e) {}
-    }
-    return SAMPLE_SUPPLIERS;
-  });
-
-  const [rawPurchases, setRawPurchases] = useState<Purchase[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.purchases && Array.isArray(parsed.purchases)) {
-          return parsed.purchases.map((pur: any) => ({
-            ...pur,
-            saldoPendiente:
-              typeof pur.saldoPendiente === 'number' && !isNaN(pur.saldoPendiente)
-                ? pur.saldoPendiente
-                : pur.status === 'pagada'
-                ? 0
-                : typeof pur.totalPagar === 'number' && !isNaN(pur.totalPagar)
-                ? pur.totalPagar
-                : 0,
-            totalPagar:
-              typeof pur.totalPagar === 'number' && !isNaN(pur.totalPagar)
-                ? pur.totalPagar
-                : typeof pur.saldoPendiente === 'number' && !isNaN(pur.saldoPendiente)
-                ? pur.saldoPendiente
-                : 0,
-          }));
-        }
-      } catch (e) {}
-    }
-    return SAMPLE_PURCHASES;
-  });
-
-  const [supplierPayments, setSupplierPayments] = useState<SupplierPayment[]>([]);
-
-  const [rawKardexMovements, setRawKardexMovements] = useState<KardexMovement[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.kardexMovements && Array.isArray(parsed.kardexMovements)) return parsed.kardexMovements;
-      } catch (e) {}
-    }
-    return SAMPLE_KARDEX_MOVEMENTS;
-  });
-
-  // Módulo 3: RRHH & Planilla
-  const [rawEmployees, setRawEmployees] = useState<Employee[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.employees && Array.isArray(parsed.employees)) {
-          return ensureEmployeesHavePins(parsed.employees);
-        }
-      } catch (e) {}
-    }
-    return ensureEmployeesHavePins(SAMPLE_EMPLOYEES);
-  });
-
-  const [rawPayrolls, setRawPayrolls] = useState<Payroll[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.payrolls && Array.isArray(parsed.payrolls)) return parsed.payrolls;
-      } catch (e) {}
-    }
-    return SAMPLE_PAYROLLS;
-  });
-
-  // Servicios Profesionales (Art. 156 Código Tributario SV)
-  const [rawProfessionalServices, setRawProfessionalServices] = useState<ProfessionalServiceRecord[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.professionalServices && Array.isArray(parsed.professionalServices)) return parsed.professionalServices;
-      } catch (e) {}
-    }
-    return SAMPLE_PROFESSIONAL_SERVICES;
-  });
-
-  // Bolsa de Trabajo & Base de Currículum Vitae (CV)
-  const [rawCandidateFolders, setRawCandidateFolders] = useState<CandidateFolder[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.candidateFolders && Array.isArray(parsed.candidateFolders)) return parsed.candidateFolders;
-      } catch (e) {}
-    }
-    return SAMPLE_CANDIDATE_FOLDERS;
-  });
-
-  const [rawCandidateApplicants, setRawCandidateApplicants] = useState<CandidateApplicant[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.candidateApplicants && Array.isArray(parsed.candidateApplicants)) return parsed.candidateApplicants;
-      } catch (e) {}
-    }
-    return SAMPLE_CANDIDATE_APPLICANTS;
-  });
-
-  // Control de Asistencia & Horarios (Tablet Kiosk PIN)
-  const [rawAttendanceConfig, setRawAttendanceConfig] = useState<CompanyAttendanceConfig>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.attendanceConfig) return parsed.attendanceConfig;
-      } catch (e) {}
-    }
-    return DEFAULT_ATTENDANCE_CONFIG;
-  });
-
-  const [rawAttendanceRecords, setRawAttendanceRecords] = useState<AttendanceRecord[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.attendanceRecords && Array.isArray(parsed.attendanceRecords)) return parsed.attendanceRecords;
-      } catch (e) {}
-    }
-    return SAMPLE_ATTENDANCE_RECORDS;
-  });
-
-  const [rawLeaveRequests, setRawLeaveRequests] = useState<EmployeeLeaveRequest[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.leaveRequests && Array.isArray(parsed.leaveRequests)) return parsed.leaveRequests;
-      } catch (e) {}
-    }
-    return SAMPLE_LEAVE_REQUESTS;
-  });
-
-  // Módulo 4: Tesorería & Bancos
-  const [rawBankAccounts, setRawBankAccounts] = useState<BankAccount[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.bankAccounts && Array.isArray(parsed.bankAccounts)) return parsed.bankAccounts;
-      } catch (e) {}
-    }
-    return SAMPLE_BANK_ACCOUNTS;
-  });
-
-  const [rawTreasuryMovements, setRawTreasuryMovements] = useState<TreasuryMovement[]>([]);
-
-  const [rawOtherIncomes, setRawOtherIncomes] = useState<OtherIncome[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.otherIncomes && Array.isArray(parsed.otherIncomes)) {
-          return parsed.otherIncomes;
-        }
-      } catch (e) {}
-    }
-    return SAMPLE_OTHER_INCOMES;
-  });
-
-  // Módulo 5: Motor Contable
-  const [chartOfAccounts, setChartOfAccounts] = useState<AccountNode[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.chartOfAccounts && Array.isArray(parsed.chartOfAccounts)) return parsed.chartOfAccounts;
-      } catch (e) {}
-    }
-    return DEFAULT_CHART_OF_ACCOUNTS;
-  });
-
-  const [rawJournalEntries, setRawJournalEntries] = useState<JournalEntry[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.journalEntries && Array.isArray(parsed.journalEntries)) {
-          return parsed.journalEntries;
-        }
-      } catch (e) {}
-    }
-    return SAMPLE_JOURNAL_ENTRIES;
-  });
-
-  // Módulo 6: AI Dynamic Widgets
-  const [dynamicWidgets, setDynamicWidgets] = useState<DynamicChartWidget[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.dynamicWidgets && Array.isArray(parsed.dynamicWidgets)) return parsed.dynamicWidgets;
-      } catch (e) {}
-    }
-    return INITIAL_DYNAMIC_WIDGETS;
-  });
-
-  // Notifications
-  const [notifications, setNotifications] = useState<ToastNotification[]>([]);
+  const [rawBranches, setRawBranches] = useTenantCollection<Branch>('branches', companyScope('branches'), reportCloudError);
+  const [rawProducts, setRawProducts] = useTenantCollection<Product>('products', companyScope('products'), reportCloudError);
+  const [rawCustomers, setRawCustomers] = useTenantCollection<Customer>('customers', companyScope('customers'), reportCloudError);
+  const [rawInvoices, setRawInvoices] = useTenantCollection<Invoice>('invoices', companyScope('invoices'), reportCloudError);
+  const [customerPayments, setCustomerPayments] = useTenantCollection<CustomerPayment>('customer_payments', companyScope('customer_payments'), reportCloudError);
+  const [rawSuppliers, setRawSuppliers] = useTenantCollection<Supplier>('suppliers', companyScope('suppliers'), reportCloudError);
+  const [rawPurchases, setRawPurchases] = useTenantCollection<Purchase>('purchases', companyScope('purchases'), reportCloudError);
+  const [supplierPayments, setSupplierPayments] = useTenantCollection<SupplierPayment>('supplier_payments', companyScope('supplier_payments'), reportCloudError);
+  const [rawKardexMovements, setRawKardexMovements] = useTenantCollection<KardexMovement>('kardex_movements', companyScope('kardex_movements'), reportCloudError);
+  const employeeCollection = currentUser.role === 'kiosko_asistencia' ? 'attendance_directory' : 'employees';
+  const [rawEmployees, setRawEmployees] = useTenantCollection<Employee>(employeeCollection, companyScope(employeeCollection), reportCloudError);
+  const [rawPayrolls, setRawPayrolls] = useTenantCollection<Payroll>('payrolls', companyScope('payrolls'), reportCloudError);
+  const [rawProfessionalServices, setRawProfessionalServices] = useTenantCollection<ProfessionalServiceRecord>('professional_services', companyScope('professional_services'), reportCloudError);
+  const [rawCandidateFolders, setRawCandidateFolders] = useTenantCollection<CandidateFolder>('candidate_folders', companyScope('candidate_folders'), reportCloudError);
+  const [rawCandidateApplicants, setRawCandidateApplicants] = useTenantCollection<CandidateApplicant>('candidates', companyScope('candidates'), reportCloudError);
+  const [rawAttendanceRecords, setRawAttendanceRecords] = useTenantCollection<AttendanceRecord>('attendance', companyScope('attendance'), reportCloudError);
+  const [rawLeaveRequests, setRawLeaveRequests] = useTenantCollection<EmployeeLeaveRequest>('leave_requests', companyScope('leave_requests'), reportCloudError);
+  const [rawBankAccounts, setRawBankAccounts] = useTenantCollection<BankAccount>('bank_accounts', companyScope('bank_accounts'), reportCloudError);
+  const [rawTreasuryMovements, setRawTreasuryMovements] = useTenantCollection<TreasuryMovement>('treasury_movements', companyScope('treasury_movements'), reportCloudError);
+  const [rawOtherIncomes, setRawOtherIncomes] = useTenantCollection<OtherIncome>('other_incomes', companyScope('other_incomes'), reportCloudError);
+  const [rawJournalEntries, setRawJournalEntries] = useTenantCollection<JournalEntry>('journal_entries', companyScope('journal_entries'), reportCloudError);
+  const [dynamicWidgets, setDynamicWidgets] = useTenantCollection<DynamicChartWidget>('dynamic_widgets', companyScope('dynamic_widgets'), reportCloudError);
+  const rawAttendanceConfig = companies.find(company => company.id === currentCompanyId)?.attendanceConfig || DEFAULT_ATTENDANCE_CONFIG;
+  const setRawAttendanceConfig: React.Dispatch<React.SetStateAction<CompanyAttendanceConfig>> = action => {
+    const next = typeof action === 'function' ? action(rawAttendanceConfig) : action;
+    updateCompany(currentCompanyId, { attendanceConfig: next });
+  };
+  const [chartOfAccounts, setChartState] = useState<AccountNode[]>(() => emptyChart(DEFAULT_CHART_OF_ACCOUNTS));
+  const [settingsScope, setSettingsScope] = useState('');
+  const setChartOfAccounts: React.Dispatch<React.SetStateAction<AccountNode[]>> = action => {
+    if (!currentCompanyId || settingsScope !== currentCompanyId) { reportCloudError(new Error('Espera a que cargue el catálogo de esta empresa.')); return; }
+    const next = typeof action === 'function' ? action(chartOfAccounts) : action;
+    setChartState(next);
+    setDoc(doc(db, 'company_settings', currentCompanyId), { companyId: currentCompanyId, chartOfAccounts: next }, { merge: true }).catch(reportCloudError);
+  };
 
   // Selected current Company & User
   const currentCompany = useMemo(() => {
-    return companies.find((c) => c.id === currentCompanyId) || companies[0] || SAMPLE_COMPANIES[0];
+    return companies.find(company => company.id === currentCompanyId) || {
+      ...SAMPLE_COMPANIES[0], id: '', name: '', tradeName: '', primaryAdminUserId: undefined,
+    };
   }, [companies, currentCompanyId]);
-
-  const currentUser = useMemo(() => {
-    const found = (users || []).find((u) => u && u.id === currentUserId);
-    if (found) return found;
-    if (users && users.length > 0 && users[0]) return users[0];
-    return SAMPLE_USERS[0];
-  }, [users, currentUserId]);
-
-  const userRole = currentUser?.role || 'admin_maestro';
-
-  // Support Mode & Multi-Tenancy Isolation
+  const userRole = currentUser.role;
   const [isSupportMode, setIsSupportMode] = useState<boolean>(false);
 
   // Filter collections per currentCompany so new companies start at ZERO ($0.00)
@@ -960,9 +561,17 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const setBankAccounts = setRawBankAccounts;
   const setTreasuryMovements = setRawTreasuryMovements;
   const setOtherIncomes = setRawOtherIncomes;
-  const setJournalEntries = setRawJournalEntries;
+  const setJournalEntries: React.Dispatch<React.SetStateAction<JournalEntry[]>> = action => {
+    if (canReadCompanyCollection(session.profile, 'journal_entries')) { setRawJournalEntries(action); return; }
+    // Sales staff can post generated entries without reading the company's ledger.
+    const entries = typeof action === 'function' ? action([]) : action;
+    entries.forEach(entry => {
+      if (entry.companyId === currentCompanyId) setDoc(doc(db, 'journal_entries', entry.id), entry).catch(reportCloudError);
+    });
+  };
 
   const enterSupportMode = (companyId: string) => {
+    if (!session.platformAdmin || !companies.some(company => company.id === companyId)) return;
     setCurrentCompanyId(companyId);
     setIsSupportMode(true);
     setActiveModule('pos_terminal');
@@ -979,105 +588,51 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     addNotification('info', 'Panel Maestro', 'Has retornado al Centro de Administración Maestro.');
   };
 
-  const resetCompanyDataToZero = (companyId: string) => {
-    setRawInvoices((prev) => prev.filter((i) => i.companyId !== companyId));
-    setRawPurchases((prev) => prev.filter((p) => p.companyId !== companyId));
-    setRawProducts((prev) => prev.filter((p) => p.companyId !== companyId));
-    setRawCustomers((prev) => prev.filter((c) => c.companyId !== companyId));
-    setRawSuppliers((prev) => prev.filter((s) => s.companyId !== companyId));
-    setRawEmployees((prev) => prev.filter((e) => e.companyId !== companyId));
-    setRawPayrolls((prev) => prev.filter((p) => p.companyId !== companyId));
-    setRawProfessionalServices((prev) => prev.filter((s) => s.companyId !== companyId));
-    setRawCandidateFolders((prev) => prev.filter((f) => f.companyId !== companyId));
-    setRawCandidateApplicants((prev) => prev.filter((a) => a.companyId !== companyId));
-    setRawBankAccounts((prev) => prev.filter((b) => b.companyId !== companyId));
-    setRawJournalEntries((prev) => prev.filter((j) => j.companyId !== companyId));
-    setRawTreasuryMovements((prev) => prev.filter((t) => t.companyId !== companyId));
-    setRawKardexMovements((prev) => prev.filter((k) => k.companyId !== companyId));
-    setRawOtherIncomes((prev) => prev.filter((o) => o.companyId !== companyId));
-    addNotification('success', 'Datos en CERO', 'Todas las operaciones de la empresa han sido vaciadas a $0.00.');
+  const resetCompanyDataToZero = async (companyId: string) => {
+    if (!session.platformAdmin && (currentUser.role !== 'gerente' || currentUser.companyId !== companyId)) return;
+    try {
+      const names = [...COMPANY_COLLECTIONS.filter(name => name !== 'branches'), 'attendance_directory'];
+      const snapshots = await Promise.all(names.map(name => getDocs(query(collection(db, name), where('companyId', '==', companyId)))));
+      const documents = snapshots.flatMap(snapshot => snapshot.docs);
+      for (let offset = 0; offset < documents.length; offset += 400) {
+        const batch = writeBatch(db);
+        documents.slice(offset, offset + 400).forEach(document => batch.delete(document.ref));
+        await batch.commit();
+      }
+      addNotification('success', 'Operaciones eliminadas', 'La empresa conserva su perfil, usuarios y sucursales. Sus operaciones se eliminaron en Firebase.');
+    } catch (error) { reportCloudError(error); throw error; }
   };
 
   const deleteCompany = async (companyId: string) => {
-    setCompanies((prev) => prev.filter((c) => c.id !== companyId));
-    setUsers((prev) => prev.filter((u) => u.companyId !== companyId));
-    resetCompanyDataToZero(companyId);
+    if (!session.platformAdmin) return;
+    if (companyId === currentUser.companyId) { reportCloudError(new Error('No puedes revocar la empresa asociada a tu propia cuenta de administrador.')); return; }
     try {
+      // Revoking the company document immediately denies access to its operations.
+      const profiles = await getDocs(query(collection(db, 'users'), where('companyId', '==', companyId)));
+      for (const profile of profiles.docs) await deleteDoc(profile.ref);
       await deleteDoc(doc(db, 'companies', companyId));
-      addNotification('info', 'Empresa Eliminada', 'La empresa y sus cuentas fueron removidas permanentemente.');
-    } catch (e) {
-      console.error('No se pudo eliminar la empresa en la nube:', e);
-      addNotification('error', 'Error al Eliminar', 'Se quitó localmente pero no se pudo borrar en la nube. Puede reaparecer al recargar — revisa tu conexión e inténtalo de nuevo.');
-    }
+      setCompanies(prev => prev.filter(company => company.id !== companyId));
+      setUsers(prev => prev.filter(user => user.companyId !== companyId));
+      addNotification('info', 'Empresa revocada', 'La empresa ya no es accesible. Sus operaciones se conservan para revisión y respaldo.');
+    } catch (error) { reportCloudError(error); }
   };
 
-  const clearAllDemoData = () => {
-    setCompanies((prev) => prev.filter((c) => c.id !== 'comp_1' && c.id !== 'comp_2'));
-    resetCompanyDataToZero('comp_1');
-    resetCompanyDataToZero('comp_2');
-    addNotification('success', 'Datos Demo Depurados', 'Se eliminaron las empresas de prueba.');
-  };
+  const clearAllDemoData = () => addNotification('info', 'Demostración separada', 'Las empresas demo no se cargan automáticamente en esta versión.');
 
   const createCompanyWithAdmin = async (
     companyData: Omit<Company, 'id'>,
     adminData: { name: string; email: string; password?: string; phone?: string }
   ): Promise<{ company: Company; user: UserProfile }> => {
-    const compId = `comp_${Date.now()}`;
-    const newComp: Company = {
-      ...companyData,
-      id: compId,
-      fiscalConfig: { ...DEFAULT_FISCAL_CONFIG },
-      subscriptionPlan: companyData.subscriptionPlan || 'emprendedor',
-      subscriptionStatus: companyData.subscriptionStatus || 'activo',
-      subscriptionPrice: companyData.subscriptionPrice || 14.99,
-      createdAt: new Date().toISOString().split('T')[0],
-    };
-
-    const userId = `usr_${Date.now()}`;
-    const newUser: UserProfile = {
-      id: userId,
-      companyId: compId,
-      name: adminData.name.trim(),
-      email: adminData.email.trim().toLowerCase(),
-      password: adminData.password || 'admin123',
-      phone: adminData.phone || undefined,
-      role: 'gerente',
-      systemArchetype: newComp.systemArchetype || 'emprendedor_control_interno',
-      isConfigured: false, // Permite que en el primer inicio de sesión se abra el Gran Formulario de Sucursales
-      createdAt: new Date().toISOString().split('T')[0],
-      storedInCloud: true,
-    };
-    newComp.primaryAdminUserId = userId;
-
-    // Crear sucursal inicial aislada para la nueva empresa
-    const initialBranch: Branch = {
-      id: `branch_${Date.now()}`,
-      companyId: compId,
-      code: 'SUC-01',
-      name: 'Casa Matriz - Sede Central',
-      address: newComp.address || 'San Salvador, El Salvador',
-      department: newComp.department || 'San Salvador',
-      municipality: newComp.municipality || 'San Salvador Centro',
-      phone: newComp.phone || adminData.phone || '+503 7000-0000',
-      managerName: adminData.name.trim(),
-      isMain: true,
-      isActive: true,
-    };
-
-    setCompanies((prev) => [...prev, newComp]);
-    setUsers((prev) => [...prev, newUser]);
-    setBranches((prev) => [...prev, initialBranch]);
-
-    try {
-      await setDoc(doc(db, 'companies', compId), newComp);
-      await setDoc(doc(db, 'users', userId), newUser);
-      await setDoc(doc(db, 'branches', initialBranch.id), initialBranch);
-    } catch (e) {
-      console.warn('Firestore write note:', e);
+    if (isAuthenticated && !session.platformAdmin) throw new Error('Solo el administrador de la plataforma puede crear otra empresa.');
+    const result = await provisionAccount({
+      ...adminData, role: 'gerente', systemArchetype: companyData.systemArchetype || 'emprendedor_control_interno', isConfigured: false,
+    }, companyData, !isAuthenticated);
+    if (isAuthenticated) {
+      setCompanies(prev => [...prev.filter(company => company.id !== result.company!.id), result.company!]);
+      setUsers(prev => [...prev.filter(user => user.id !== result.user.id), result.user]);
     }
-
-    addNotification('success', 'Empresa Registrada', `"${newComp.tradeName || newComp.name}" creada en cero.`);
-    return { company: newComp, user: newUser };
+    addNotification('success', 'Empresa registrada', 'La cuenta y su empresa se crearon correctamente.');
+    return { company: result.company!, user: result.user };
   };
 
   // Fiscal Config for Current Company
@@ -1107,93 +662,13 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   };
 
-  // Avisa en pantalla cuando algo NO se pudo guardar en la nube (antes fallaba en silencio).
-  const lastCloudErrorRef = React.useRef(0);
-  const reportCloudError = (err: any) => {
-    console.warn('Firestore:', err);
-    const now = Date.now();
-    if (now - lastCloudErrorRef.current > 8000) {
-      lastCloudErrorRef.current = now;
-      const code = err?.code ? ` (${err.code})` : '';
-      addNotification('error', 'No se guardó en la nube', `Revisa tu conexión o las reglas de Firebase${code}. El dato quedó solo en este dispositivo.`);
-    }
-  };
-
-  // Datos que antes solo vivían en el dispositivo (o en un "bloque" general que se pisaba):
-  useCloudMirror<KardexMovement>('kardex_movements', rawKardexMovements, setRawKardexMovements, new Set(SAMPLE_KARDEX_MOVEMENTS.map((k) => k.id)), reportCloudError);
-  useCloudMirror<TreasuryMovement>('treasury_movements', rawTreasuryMovements, setRawTreasuryMovements, new Set<string>(), reportCloudError);
-  useCloudMirror<OtherIncome>('other_incomes', rawOtherIncomes, setRawOtherIncomes, new Set(SAMPLE_OTHER_INCOMES.map((o) => o.id)), reportCloudError);
-
-  // Sync to LocalStorage
-  useEffect(() => {
-    const appState = {
-      companies,
-      branches: rawBranches,
-      users,
-      products: rawProducts,
-      customers: rawCustomers,
-      invoices: rawInvoices,
-      customerPayments,
-      suppliers: rawSuppliers,
-      purchases: rawPurchases,
-      supplierPayments,
-      kardexMovements: rawKardexMovements,
-      employees: rawEmployees,
-      payrolls: rawPayrolls,
-      bankAccounts: rawBankAccounts,
-      treasuryMovements: rawTreasuryMovements,
-      otherIncomes: rawOtherIncomes,
-      chartOfAccounts,
-      journalEntries: rawJournalEntries,
-      dynamicWidgets,
-      personalTransactions,
-      personalBudgets,
-      personalSavingGoals,
-      professionalServices: rawProfessionalServices,
-      candidateFolders: rawCandidateFolders,
-      candidateApplicants: rawCandidateApplicants,
-    };
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
-    } catch (err) {
-      console.error('Failed to persist ERP state in localStorage:', err);
-    }
-  }, [
-    companies,
-    rawBranches,
-    users,
-    rawProducts,
-    rawCustomers,
-    rawInvoices,
-    customerPayments,
-    rawSuppliers,
-    rawPurchases,
-    supplierPayments,
-    rawKardexMovements,
-    rawEmployees,
-    rawPayrolls,
-    rawProfessionalServices,
-    rawCandidateFolders,
-    rawCandidateApplicants,
-    rawBankAccounts,
-    rawTreasuryMovements,
-    rawOtherIncomes,
-    chartOfAccounts,
-    rawJournalEntries,
-    dynamicWidgets,
-    personalTransactions,
-    personalBudgets,
-    personalSavingGoals,
-  ]);
-
-  // (El antiguo bloque único 'system_state' se eliminó: se pisaba entre dispositivos y empresas.)
-
   // Company management
   const createCompany = (companyData: Omit<Company, 'id'>) => {
+    if (!session.platformAdmin) { reportCloudError(new Error('Solo el administrador de la plataforma puede crear empresas.')); return; }
     const sanitized = sanitizeCompany(companyData as any);
     const newComp: Company = {
       ...sanitized,
-      id: `comp_${Date.now()}`,
+      id: `comp_${crypto.randomUUID()}`,
       fiscalConfig: { ...DEFAULT_FISCAL_CONFIG },
       regimeType: companyData.regimeType || 'emprendedor_control_interno',
       dteActive: companyData.dteActive ?? false,
@@ -1207,6 +682,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const updateCompany = (id: string, updates: Partial<Company>) => {
+    if (!id || (!session.platformAdmin && id !== currentUser.companyId)) return;
     const sanitizedUpdates = { ...updates };
     if (sanitizedUpdates.department !== undefined) {
       sanitizedUpdates.department = cleanDepartmentStr(sanitizedUpdates.department);
@@ -1219,720 +695,119 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (e) {}
   };
 
-  // Initial load from Firebase Firestore & Real-time cross-device sync
+  // Metadata only: administrators see company/profile directories. Operations
+  // are always queried for the selected company by useTenantCollection.
   useEffect(() => {
-    async function loadCloudData() {
-      // 0. Verify connection to Firestore in mi-erp-nube
-      testFirebaseConnection().catch(() => {});
+    if (!isAuthenticated) return;
+    let active = true;
+    const stop: (() => void)[] = [];
+    if (session.platformAdmin) {
+      stop.push(onSnapshot(collection(db, 'companies'), snapshot => {
+        if (active) setCompanies(snapshot.docs.map(d => sanitizeCompany({ ...d.data(), id: d.id })));
+      }, reportCloudError));
+      stop.push(onSnapshot(collection(db, 'users'), snapshot => {
+        if (active) setUsers(snapshot.docs.map(d => { const { password, ...data } = d.data(); return { ...data, id: d.id } as UserProfile; }));
+      }, reportCloudError));
+    } else if (currentUser.companyId) {
+      stop.push(onSnapshot(doc(db, 'companies', currentUser.companyId), snapshot => {
+        if (active) setCompanies(snapshot.exists() ? [sanitizeCompany({ ...snapshot.data(), id: snapshot.id })] : []);
+      }, reportCloudError));
+      if (currentUser.role === 'gerente') stop.push(onSnapshot(query(collection(db, 'users'), where('companyId', '==', currentUser.companyId)), snapshot => {
+        if (active) setUsers(snapshot.docs.map(d => { const { password, ...data } = d.data(); return { ...data, id: d.id } as UserProfile; }));
+      }, reportCloudError));
+    } else setCompanies([]);
+    return () => { active = false; stop.forEach(unsubscribe => unsubscribe()); };
+  }, [isAuthenticated, currentUser.companyId, currentUser.role, session.platformAdmin]);
 
-      try {
-        // 2. Query individual collections to ensure 100% cloud accuracy
-        const [
-          companiesSnap,
-          usersSnap,
-          prodSnap,
-          custSnap,
-          invSnap,
-          purSnap,
-          suppSnap,
-          branchSnap,
-          cPaySnap,
-          sPaySnap,
-          bankSnap,
-          empSnap,
-          paySnap,
-          profSnap,
-          foldSnap,
-          candSnap,
-          persSnap,
-        ] = await Promise.all([
-          getDocs(collection(db, 'companies')).catch(() => null),
-          getDocs(collection(db, 'users')).catch(() => null),
-          getDocs(collection(db, 'products')).catch(() => null),
-          getDocs(collection(db, 'customers')).catch(() => null),
-          getDocs(collection(db, 'invoices')).catch(() => null),
-          getDocs(collection(db, 'purchases')).catch(() => null),
-          getDocs(collection(db, 'suppliers')).catch(() => null),
-          getDocs(collection(db, 'branches')).catch(() => null),
-          getDocs(collection(db, 'customer_payments')).catch(() => null),
-          getDocs(collection(db, 'supplier_payments')).catch(() => null),
-          getDocs(collection(db, 'bank_accounts')).catch(() => null),
-          getDocs(collection(db, 'employees')).catch(() => null),
-          getDocs(collection(db, 'payrolls')).catch(() => null),
-          getDocs(collection(db, 'professional_services')).catch(() => null),
-          getDocs(collection(db, 'candidate_folders')).catch(() => null),
-          getDocs(collection(db, 'candidates')).catch(() => null),
-          getDocs(collection(db, 'personal_finances')).catch(() => null),
-        ]);
-
-        // Firestore es la fuente de verdad para companies una vez que ya tiene datos:
-        // se REEMPLAZA el estado local en vez de "solo agregar", para que una empresa
-        // borrada en la nube no reaparezca. Si la colección está vacía (proyecto nuevo
-        // sin datos aún subidos), se respeta el estado local/demo en vez de vaciarlo.
-        if (companiesSnap && !companiesSnap.empty) {
-          const cloudComps: Company[] = [];
-          companiesSnap.forEach((d) => { const item = d.data() as Company; if (item.id && item.name) cloudComps.push(sanitizeCompany(item)); });
-          setCompanies(cloudComps);
-        }
-
-        // Mismo criterio para users: la nube manda, así un usuario eliminado no vuelve.
-        if (usersSnap && !usersSnap.empty) {
-          const cloudUsers: UserProfile[] = [];
-          usersSnap.forEach((d) => {
-            const item = d.data() as UserProfile;
-            if (item.id && item.email) {
-              cloudUsers.push({
-                ...item,
-                role: item.role || 'admin_maestro',
-              });
-            }
-          });
-          if (cloudUsers.length > 0) {
-            setUsers((prev) => {
-              const merged = [...cloudUsers];
-              prev.forEach((pu) => {
-                if (!merged.some((cu) => cu.id === pu.id || (pu.email && cu.email && cu.email.toLowerCase() === pu.email.toLowerCase()))) {
-                  merged.push(pu);
-                }
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (prodSnap && !prodSnap.empty) {
-          const cloudProds: Product[] = [];
-          prodSnap.forEach((d) => { const item = d.data() as Product; if (item.id) cloudProds.push(item); });
-          if (cloudProds.length > 0) {
-            setRawProducts((prev) => {
-              const merged = [...prev];
-              cloudProds.forEach((cp) => {
-                const idx = merged.findIndex((p) => p.id === cp.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...cp };
-                else merged.push(cp);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (custSnap && !custSnap.empty) {
-          const cloudCust: Customer[] = [];
-          custSnap.forEach((d) => { const item = d.data() as Customer; if (item.id) cloudCust.push(item); });
-          if (cloudCust.length > 0) {
-            setRawCustomers((prev) => {
-              const merged = [...prev];
-              cloudCust.forEach((cc) => {
-                const idx = merged.findIndex((c) => c.id === cc.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...cc };
-                else merged.push(cc);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (invSnap && !invSnap.empty) {
-          const cloudInvs: Invoice[] = [];
-          invSnap.forEach((d) => { const item = d.data() as Invoice; if (item.id) cloudInvs.push(item); });
-          if (cloudInvs.length > 0) {
-            setRawInvoices((prev) => {
-              const merged = [...prev];
-              cloudInvs.forEach((ci) => {
-                const idx = merged.findIndex((i) => i.id === ci.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...ci };
-                else merged.push(ci);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (purSnap && !purSnap.empty) {
-          const cloudPurs: Purchase[] = [];
-          purSnap.forEach((d) => { const item = d.data() as Purchase; if (item.id) cloudPurs.push(item); });
-          if (cloudPurs.length > 0) {
-            setRawPurchases((prev) => {
-              const merged = [...prev];
-              cloudPurs.forEach((cp) => {
-                const idx = merged.findIndex((p) => p.id === cp.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...cp };
-                else merged.push(cp);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (suppSnap && !suppSnap.empty) {
-          const cloudSupp: Supplier[] = [];
-          suppSnap.forEach((d) => { const item = d.data() as Supplier; if (item.id) cloudSupp.push(item); });
-          if (cloudSupp.length > 0) {
-            setRawSuppliers((prev) => {
-              const merged = [...prev];
-              cloudSupp.forEach((cs) => {
-                const idx = merged.findIndex((s) => s.id === cs.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...cs };
-                else merged.push(cs);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (branchSnap && !branchSnap.empty) {
-          const cloudBranches: Branch[] = [];
-          branchSnap.forEach((d) => { const item = d.data() as Branch; if (item.id) cloudBranches.push(sanitizeBranch(item)); });
-          if (cloudBranches.length > 0) {
-            setRawBranches((prev) => {
-              const merged = [...prev];
-              cloudBranches.forEach((cb) => {
-                const idx = merged.findIndex((b) => b.id === cb.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...cb };
-                else merged.push(cb);
-              });
-              return merged.map(sanitizeBranch);
-            });
-          }
-        }
-
-        if (cPaySnap && !cPaySnap.empty) {
-          const cloudCPays: CustomerPayment[] = [];
-          cPaySnap.forEach((d) => { const item = d.data() as CustomerPayment; if (item.id) cloudCPays.push(item); });
-          if (cloudCPays.length > 0) {
-            setCustomerPayments((prev) => {
-              const merged = [...prev];
-              cloudCPays.forEach((cp) => {
-                const idx = merged.findIndex((p) => p.id === cp.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...cp };
-                else merged.push(cp);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (sPaySnap && !sPaySnap.empty) {
-          const cloudSPays: SupplierPayment[] = [];
-          sPaySnap.forEach((d) => { const item = d.data() as SupplierPayment; if (item.id) cloudSPays.push(item); });
-          if (cloudSPays.length > 0) {
-            setSupplierPayments((prev) => {
-              const merged = [...prev];
-              cloudSPays.forEach((sp) => {
-                const idx = merged.findIndex((p) => p.id === sp.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...sp };
-                else merged.push(sp);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (bankSnap && !bankSnap.empty) {
-          const cloudBanks: BankAccount[] = [];
-          bankSnap.forEach((d) => { const item = d.data() as BankAccount; if (item.id) cloudBanks.push(item); });
-          if (cloudBanks.length > 0) {
-            setRawBankAccounts((prev) => {
-              const merged = [...prev];
-              cloudBanks.forEach((cb) => {
-                const idx = merged.findIndex((b) => b.id === cb.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...cb };
-                else merged.push(cb);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (empSnap && !empSnap.empty) {
-          const cloudEmps: Employee[] = [];
-          empSnap.forEach((d) => { const item = d.data() as Employee; if (item.id) cloudEmps.push(item); });
-          if (cloudEmps.length > 0) {
-            setRawEmployees((prev) => {
-              const merged = [...prev];
-              cloudEmps.forEach((ce) => {
-                const idx = merged.findIndex((e) => e.id === ce.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...ce };
-                else merged.push(ce);
-              });
-              return ensureEmployeesHavePins(merged);
-            });
-          }
-        }
-
-        if (paySnap && !paySnap.empty) {
-          const cloudPays: Payroll[] = [];
-          paySnap.forEach((d) => { const item = d.data() as Payroll; if (item.id) cloudPays.push(item); });
-          if (cloudPays.length > 0) {
-            setRawPayrolls((prev) => {
-              const merged = [...prev];
-              cloudPays.forEach((cp) => {
-                const idx = merged.findIndex((p) => p.id === cp.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...cp };
-                else merged.push(cp);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (profSnap && !profSnap.empty) {
-          const cloudProf: ProfessionalServiceRecord[] = [];
-          profSnap.forEach((d) => { const item = d.data() as ProfessionalServiceRecord; if (item.id) cloudProf.push(item); });
-          if (cloudProf.length > 0) {
-            setRawProfessionalServices((prev) => {
-              const merged = [...prev];
-              cloudProf.forEach((cp) => {
-                const idx = merged.findIndex((p) => p.id === cp.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...cp };
-                else merged.push(cp);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (foldSnap && !foldSnap.empty) {
-          const cloudFolds: CandidateFolder[] = [];
-          foldSnap.forEach((d) => { const item = d.data() as CandidateFolder; if (item.id) cloudFolds.push(item); });
-          if (cloudFolds.length > 0) {
-            setRawCandidateFolders((prev) => {
-              const merged = [...prev];
-              cloudFolds.forEach((cf) => {
-                const idx = merged.findIndex((f) => f.id === cf.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...cf };
-                else merged.push(cf);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (candSnap && !candSnap.empty) {
-          const cloudCands: CandidateApplicant[] = [];
-          candSnap.forEach((d) => { const item = d.data() as CandidateApplicant; if (item.id) cloudCands.push(item); });
-          if (cloudCands.length > 0) {
-            setRawCandidateApplicants((prev) => {
-              const merged = [...prev];
-              cloudCands.forEach((ca) => {
-                const idx = merged.findIndex((a) => a.id === ca.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...ca };
-                else merged.push(ca);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (persSnap && !persSnap.empty) {
-          const cloudPers: PersonalTransaction[] = [];
-          persSnap.forEach((d) => { const item = d.data() as PersonalTransaction; if (item.id) cloudPers.push(item); });
-          if (cloudPers.length > 0) {
-            setPersonalTransactions((prev) => {
-              const merged = [...prev];
-              cloudPers.forEach((pt) => {
-                const idx = merged.findIndex((p) => p.id === pt.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...pt };
-                else merged.push(pt);
-              });
-              return merged;
-            });
-          }
-        }
-      } catch (e) {
-        console.warn('Firestore initial sync note:', e);
-      }
-    }
-    loadCloudData();
-
-    // Realtime listeners for immediate cross-device sync
-    // Firestore es la fuente de verdad en tiempo real: se reemplaza el estado local
-    // completo con lo que hay en la nube (en vez de solo agregar/actualizar), para
-    // que una empresa o usuario eliminado no vuelva a aparecer al refrescar.
-    const unsubCompanies = onSnapshot(
-      collection(db, 'companies'),
-      (snap) => {
-        const liveComps: Company[] = [];
-        snap.forEach((d) => {
-          const data = d.data() as Company;
-          if (data.id && data.name) liveComps.push(sanitizeCompany(data));
-        });
-        setCompanies(liveComps);
-      },
-      (err) => console.warn('Live companies sync note:', err)
-    );
-
-    const unsubUsers = onSnapshot(
-      collection(db, 'users'),
-      (snap) => {
-        const liveUsers: UserProfile[] = [];
-        snap.forEach((d) => {
-          const data = d.data() as UserProfile;
-          if (data.id && data.email) liveUsers.push(data);
-        });
-        setUsers(liveUsers);
-      },
-      (err) => console.warn('Live users sync note:', err)
-    );
-
-    // Sincronización en tiempo real POR DOCUMENTO: lo nuevo/modificado se aplica y lo
-    // ELIMINADO en cualquier dispositivo también se elimina aquí (antes solo se agregaba).
-    const syncCol = <T extends { id: string }>(name: string, setter: React.Dispatch<React.SetStateAction<T[]>>) =>
-      onSnapshot(
-        collection(db, name),
-        (snap) => {
-          const upserts: T[] = [];
-          const removed = new Set<string>();
-          snap.docChanges().forEach((ch) => {
-            if (ch.type === 'removed') removed.add(ch.doc.id);
-            else {
-              let data = ch.doc.data() as any;
-              if (data && data.id) {
-                if (name === 'branches') data = sanitizeBranch(data);
-                if (name === 'companies') data = sanitizeCompany(data);
-                if (name === 'employees') {
-                  data = {
-                    ...data,
-                    isActive: data.isActive !== false,
-                    department: cleanDepartmentStr(data.department),
-                  };
-                }
-                upserts.push(data);
-              }
-            }
-          });
-          if (upserts.length || removed.size) {
-            setter((prev) => {
-              const res = applyDocChanges(prev, upserts, removed);
-              if (name === 'employees') return ensureEmployeesHavePins(res as any) as any;
-              return res;
-            });
-          }
-        },
-        (err) => {
-          console.warn(`Sync ${name}:`, err);
-          reportCloudError(err);
-        }
-      );
-
-    const unsubCollections = [
-      syncCol<Product>('products', setRawProducts),
-      syncCol<Customer>('customers', setRawCustomers),
-      syncCol<Invoice>('invoices', setRawInvoices),
-      syncCol<Supplier>('suppliers', setRawSuppliers),
-      syncCol<Purchase>('purchases', setRawPurchases),
-      syncCol<CustomerPayment>('customer_payments', setCustomerPayments),
-      syncCol<SupplierPayment>('supplier_payments', setSupplierPayments),
-      syncCol<BankAccount>('bank_accounts', setRawBankAccounts),
-      syncCol<Employee>('employees', setRawEmployees),
-      syncCol<Payroll>('payrolls', setRawPayrolls),
-      syncCol<ProfessionalServiceRecord>('professional_services', setRawProfessionalServices),
-      syncCol<CandidateFolder>('candidate_folders', setRawCandidateFolders),
-      syncCol<CandidateApplicant>('candidates', setRawCandidateApplicants),
-      syncCol<Branch>('branches', setRawBranches),
-    ];
-
-    // Finanzas Personales — Transacciones: fuente de verdad en tiempo real.
-    // Antes dependía del snapshot general (system_state) con retraso, lo que
-    // causaba que al refrescar rápido se restauraran transacciones ya borradas.
-    const unsubPersonalTransactions = onSnapshot(
-      collection(db, 'personal_finances'),
-      (snap) => {
-        const liveTx: PersonalTransaction[] = [];
-        snap.forEach((d) => {
-          const data = d.data() as PersonalTransaction;
-          if (data.id) liveTx.push(data);
-        });
-        setPersonalTransactions(liveTx);
-      },
-      (err) => console.warn('Live personal transactions sync note:', err)
-    );
-
-    // Finanzas Personales — Presupuestos y Metas de Ahorro: documento propio,
-    // ya que antes nunca se guardaban en Firestore (solo quedaban en memoria/localStorage).
-    const unsubPersonalMeta = onSnapshot(
-      doc(db, 'personal_finance_meta', 'data'),
-      (snap) => {
-        if (snap.exists()) {
-          const d = snap.data() as any;
-          setPersonalBudgets(Array.isArray(d.personalBudgets) ? d.personalBudgets : []);
-          setPersonalSavingGoals(Array.isArray(d.personalSavingGoals) ? d.personalSavingGoals : []);
-        } else {
-          setPersonalBudgets([]);
-          setPersonalSavingGoals([]);
-        }
-      },
-      (err) => console.warn('Live personal budgets/goals sync note:', err)
-    );
-
-    return () => {
-      unsubCompanies();
-      unsubUsers();
-      unsubCollections.forEach((u) => u());
-      unsubPersonalTransactions();
-      unsubPersonalMeta();
-    };
-  }, []);
-
-  // Guardado rápido y dedicado de Presupuestos y Metas de Ahorro (0.5s), ya que
-  // antes solo vivían en memoria local y nunca llegaban a Firestore.
   useEffect(() => {
-    const timer = setTimeout(async () => {
-      try {
-        await setDoc(
-          doc(db, 'personal_finance_meta', 'data'),
-          { personalBudgets, personalSavingGoals, updatedAt: new Date().toISOString() },
-          { merge: false }
-        );
-      } catch (err) {
-        console.debug('Autosave de presupuestos/metas personales:', err);
-      }
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [personalBudgets, personalSavingGoals]);
+    let active = true;
+    setPersonalMetaReady(false);
+    setPersonalBudgets(emptyBudgets);
+    setPersonalSavingGoals([]);
+    if (!currentUserId) return;
+    const unsubscribe = onSnapshot(doc(db, 'personal_finance_meta', currentUserId), snapshot => {
+      if (!active) return;
+      const data = snapshot.data();
+      setPersonalBudgets(Array.isArray(data?.personalBudgets) ? data.personalBudgets : emptyBudgets);
+      setPersonalSavingGoals(Array.isArray(data?.personalSavingGoals) ? data.personalSavingGoals : []);
+      setPersonalMetaReady(true);
+    }, reportCloudError);
+    return () => { active = false; unsubscribe(); };
+  }, [currentUserId]);
 
-  // User & Access Management (Admin vs Cajero / Roles)
-  const createUser = (newUserData: Omit<UserProfile, 'id'> & { id?: string }) => {
-    const newUser: UserProfile = {
-      ...newUserData,
-      id: newUserData.id || `usr_${Date.now()}`,
-      createdAt: newUserData.createdAt || new Date().toISOString().split('T')[0],
-    };
-    setUsers((prev) => {
-      const idx = prev.findIndex((u) => u.id === newUser.id || u.email.toLowerCase() === newUser.email.toLowerCase());
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = newUser;
-        return copy;
-      }
-      return [...prev, newUser];
-    });
-
-    // Cloud Firestore Sync
-    try {
-      setDoc(doc(db, 'users', newUser.id), {
-        ...newUser,
-        storedInCloud: true,
-      }).catch((e) => console.warn('Firestore user save warning:', e));
-    } catch (e) {
-      console.warn('Firestore write:', e);
-    }
-
-    addNotification(
-      'success',
-      'Acceso Creado Exitosamente',
-      `Se ha creado el usuario ${newUser.name} con perfil ${newUser.systemArchetype}.`
-    );
+  const savePersonalMeta = (patch: { personalBudgets?: PersonalBudgetCategory[]; personalSavingGoals?: PersonalSavingGoal[] }) => {
+    if (!currentUserId || !personalMetaReady) { reportCloudError(new Error('Espera a que carguen tus presupuestos y metas.')); return; }
+    if (patch.personalBudgets) setPersonalBudgets(patch.personalBudgets);
+    if (patch.personalSavingGoals) setPersonalSavingGoals(patch.personalSavingGoals);
+    setDoc(doc(db, 'personal_finance_meta', currentUserId), { ...patch, userId: currentUserId, updatedAt: new Date().toISOString() }, { merge: true }).catch(reportCloudError);
   };
 
-  const updateUser = (id: string, updates: Partial<UserProfile>) => {
-    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, ...updates } : u)));
-    try {
-      setDoc(doc(db, 'users', id), updates, { merge: true }).catch(reportCloudError);
-    } catch (e) {}
-    addNotification('success', 'Usuario Actualizado', 'Los accesos y datos fueron actualizados correctamente.');
+  useEffect(() => {
+    let active = true;
+    setSettingsScope('');
+    setChartState(emptyChart(DEFAULT_CHART_OF_ACCOUNTS));
+    if (!companyScope('journal_entries')) return;
+    const unsubscribe = onSnapshot(doc(db, 'company_settings', currentCompanyId), snapshot => {
+      if (!active) return;
+      const saved = snapshot.data()?.chartOfAccounts as AccountNode[] | undefined;
+      setChartState(saved ? ensureEngineAccounts(saved) : emptyChart(DEFAULT_CHART_OF_ACCOUNTS));
+      setSettingsScope(currentCompanyId);
+    }, reportCloudError);
+    return () => { active = false; unsubscribe(); };
+  }, [currentCompanyId, isAuthenticated, currentUser.role]);
+
+  // User & Access Management (Admin vs Cajero / Roles)
+  const registerPersonalAccount = async (data: Omit<UserProfile, 'id'>) => {
+    await provisionAccount({ ...data, role: 'gerente', systemArchetype: 'finanzas_personales', isConfigured: true }, undefined, true);
+  };
+
+  const createUser = async (data: Omit<UserProfile, 'id'>): Promise<UserProfile> => {
+    if (!session.platformAdmin && (currentUser.role !== 'gerente' || data.companyId !== currentUser.companyId)) throw new Error('Solo el administrador de esta empresa puede crear sus accesos.');
+    const { user } = await provisionAccount(data);
+    setUsers(prev => [...prev.filter(item => item.id !== user.id), user]);
+    addNotification('success', 'Acceso creado', 'La cuenta está registrada en Firebase Authentication.');
+    return user;
+  };
+
+  const updateUser = async (id: string, updates: Partial<UserProfile>) => {
+    if (updates.password) throw new Error('Usa el botón Asignar contraseña para cambiar el acceso sin enviar un correo.');
+    const { password, id: ignoredId, ...safe } = updates;
+    const target = users.find(user => user.id === id);
+    if (safe.email && safe.email !== target?.email) throw new Error('El cambio de correo requiere actualizar Firebase Authentication.');
+    await setDoc(doc(db, 'users', id), safe, { merge: true });
+    setUsers(prev => prev.map(user => user.id === id ? { ...user, ...safe } : user));
+    addNotification('success', 'Perfil actualizado', 'Los cambios se guardaron correctamente.');
   };
 
   const deleteUser = async (id: string) => {
-    if (users.length <= 1) {
-      addNotification('error', 'Acción Denegada', 'No puedes eliminar el único usuario del sistema.');
-      return;
-    }
-    setUsers((prev) => prev.filter((u) => u.id !== id));
-    if (currentUserId === id) {
-      const fallback = users.find((u) => u.id !== id);
-      if (fallback) setCurrentUserId(fallback.id);
-    }
+    if (id === currentUserId) { addNotification('error', 'Acción denegada', 'No puedes revocar tu propio acceso desde esta pantalla.'); return; }
     try {
       await deleteDoc(doc(db, 'users', id));
-      addNotification('info', 'Acceso Revocado', 'El usuario ha sido eliminado del sistema.');
-    } catch (e) {
-      console.error('No se pudo eliminar el usuario en la nube:', e);
-      addNotification('error', 'Error al Eliminar', 'Se quitó localmente pero no se pudo borrar en la nube. Puede reaparecer al recargar — revisa tu conexión e inténtalo de nuevo.');
-    }
+      setUsers(prev => prev.filter(user => user.id !== id));
+      addNotification('info', 'Acceso revocado', 'El perfil fue eliminado. La identidad de Authentication se conserva para auditoría.');
+    } catch (error) { reportCloudError(error); }
   };
 
-  // Authentication: Login & Logout
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    const trimmedEmail = email.trim().toLowerCase();
-
-    // 1. Direct Master Admin access for David (Super Admin Maestro)
-    if (trimmedEmail === 'davidinn234@gmail.com' || trimmedEmail === 'david') {
-      let davidUser = users.find(
-        (u) => u.email.toLowerCase() === 'davidinn234@gmail.com' || u.id === 'user_david'
-      );
-      if (!davidUser) {
-        // First-ever login for this account: the password typed here becomes
-        // the permanent password (defaults to 'admin' only if left blank).
-        davidUser = {
-          id: 'user_david',
-          name: 'David (Super Admin)',
-          email: 'davidinn234@gmail.com',
-          password: password || 'admin',
-          role: 'admin_maestro',
-          systemArchetype: 'empresa_consolidada_dte',
-          isConfigured: true,
-          jobTitle: 'Super Administrador / Propietario Plataforma',
-          createdAt: new Date().toISOString().split('T')[0],
-          enabledServices: [
-            'finanzas_personales',
-            'emprendedor_pos',
-            'empresa_sin_dte',
-            'empresa_con_dte',
-          ],
-        };
-        setUsers((prev) => [davidUser!, ...prev]);
-      } else {
-        const expectedMasterPassword = davidUser.password || 'admin';
-        if (password !== expectedMasterPassword) {
-          return { success: false, error: 'Contraseña incorrecta. Por favor intente nuevamente.' };
-        }
-      }
-
-      setCurrentUserId(davidUser.id);
-      setIsAuthenticated(true);
-      setIsSupportMode(false);
-      try {
-        localStorage.setItem('sivarflow_auth_user', davidUser.id);
-      } catch (e) {}
-
-      // Save user & login log in Cloud Firestore
-      try {
-        setDoc(doc(db, 'users', davidUser.id), { ...davidUser, storedInCloud: true, lastLoginAt: new Date().toISOString() }, { merge: true }).catch(reportCloudError);
-        setDoc(doc(db, 'logins', `login_${Date.now()}`), {
-          userId: davidUser.id,
-          userName: davidUser.name,
-          userEmail: davidUser.email,
-          role: davidUser.role,
-          loginAt: new Date().toISOString(),
-          status: 'success'
-        }).catch(reportCloudError);
-      } catch (e) {}
-
-      setActiveModule('admin_profiles');
-      addNotification(
-        'success',
-        '¡Bienvenido, David!',
-        'Has ingresado al Portal de Administración Maestro de FINAMIPE SV.'
-      );
-      return { success: true };
-    }
-
-    // 2. Standard user check
-    let foundUser = users.find((u) => u.email.toLowerCase() === trimmedEmail);
-    if (!foundUser || !foundUser.password) {
-      try {
-        const usersSnap = await getDocs(collection(db, 'users'));
-        usersSnap.forEach((d) => {
-          const uData = d.data() as UserProfile;
-          if (uData.email && uData.email.toLowerCase() === trimmedEmail) {
-            foundUser = uData;
-          }
-        });
-        if (foundUser) {
-          setUsers((prev) => {
-            const idx = prev.findIndex((u) => u.id === foundUser!.id || u.email.toLowerCase() === trimmedEmail);
-            if (idx >= 0) {
-              const copy = [...prev];
-              copy[idx] = foundUser!;
-              return copy;
-            }
-            return [...prev, foundUser!];
-          });
-        }
-      } catch (e) {
-        console.warn('Firestore fallback user query on login:', e);
-      }
-    }
-
-    if (!foundUser) {
-      return { success: false, error: 'No se encontró ninguna cuenta asociada a este correo electrónico.' };
-    }
-    const expectedPassword = foundUser.password;
-    if (!expectedPassword || password !== expectedPassword) {
-      return { success: false, error: 'Contraseña incorrecta. Por favor intente nuevamente.' };
-    }
-
-    // If the user belongs to a specific company, switch company context immediately!
-    if (foundUser.companyId) {
-      const compExists = companies.some((c) => c.id === foundUser!.companyId);
-      if (!compExists) {
-        try {
-          const compDoc = await getDoc(doc(db, 'companies', foundUser.companyId));
-          if (compDoc.exists()) {
-            const cloudComp = compDoc.data() as Company;
-            setCompanies((prev) => [...prev, cloudComp]);
-            setCurrentCompanyId(cloudComp.id);
-          }
-        } catch (e) {
-          console.warn('Firestore fallback company fetch on login:', e);
-        }
-      } else {
-        setCurrentCompanyId(foundUser.companyId);
-      }
-    }
-
-    setCurrentUserId(foundUser.id);
-    setIsAuthenticated(true);
-    setIsSupportMode(false);
-    try {
-      localStorage.setItem('sivarflow_auth_user', foundUser.id);
-    } catch (e) {}
-
-    // Save user last login & log event in Cloud Firestore
-    try {
-      setDoc(doc(db, 'users', foundUser.id), { lastLoginAt: new Date().toISOString() }, { merge: true }).catch(reportCloudError);
-      setDoc(doc(db, 'logins', `login_${Date.now()}`), {
-        userId: foundUser.id,
-        userName: foundUser.name,
-        userEmail: foundUser.email,
-        role: foundUser.role,
-        loginAt: new Date().toISOString(),
-        status: 'success'
-      }).catch(reportCloudError);
-    } catch (e) {}
-
-    // Adapt module view according to archetype or role
-    if (foundUser.systemArchetype === 'finanzas_personales') {
-      setActiveModule('personal_finances');
-    } else if (foundUser.role === 'cajero') {
-      setActiveModule('pos_terminal');
-    } else if (foundUser.role === 'admin_maestro') {
-      setActiveModule('admin_profiles');
-    } else {
-      setActiveModule('dashboard');
-    }
-
-    addNotification('success', `¡Bienvenido(a), ${foundUser.name}!`, `Sesión iniciada como ${foundUser.role.replace('_', ' ').toUpperCase()}.`);
-    return { success: true };
+    try { await loginAccount(email, password); return { success: true }; }
+    catch (error) { return { success: false, error: authErrorMessage(error) }; }
   };
+  const logout = () => { signOut(auth).catch(reportCloudError); };
 
-  const logout = () => {
-    setIsAuthenticated(false);
-    try {
-      localStorage.removeItem('sivarflow_auth_user');
-    } catch (e) {}
-    addNotification('info', 'Sesión Finalizada', 'Has cerrado tu sesión de forma segura.');
-  };
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    setActiveModule(currentUser.systemArchetype === 'finanzas_personales' ? 'personal_finances' : currentUser.role === 'cajero' ? 'pos_terminal' : session.platformAdmin ? 'admin_profiles' : 'dashboard');
+  }, [isAuthenticated, currentUser.systemArchetype, currentUser.role]);
 
   // Personal Finances Methods
   const addPersonalTransaction = (txData: Omit<PersonalTransaction, 'id' | 'userId'>) => {
+    if (!Number.isFinite(txData.amount) || txData.amount <= 0) { reportCloudError(new Error('El monto debe ser mayor que cero.')); return; }
     const newTx: PersonalTransaction = {
       ...txData,
-      id: `pt_${Date.now()}`,
+      id: `pt_${crypto.randomUUID()}`,
       userId: currentUser.id,
     };
     setPersonalTransactions((prev) => [newTx, ...prev]);
-
-    // Cloud Firestore Sync for Personal Finances
-    try {
-      setDoc(doc(db, 'personal_finances', newTx.id), {
-        ...newTx,
-        storedInCloud: true,
-      }).catch((e) => console.warn('Sync personal tx to Firestore:', e));
-    } catch (e) {
-      console.warn('Firestore write:', e);
-    }
 
     addNotification(
       'success',
@@ -1943,44 +818,40 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const deletePersonalTransaction = (id: string) => {
     setPersonalTransactions((prev) => prev.filter((t) => t.id !== id));
-    try {
-      deleteDoc(doc(db, 'personal_finances', id)).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('info', 'Movimiento Eliminado', 'El registro de finanzas personales fue removido.');
   };
 
   const updatePersonalBudget = (id: string, newAmount: number) => {
-    setPersonalBudgets((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, budgetedAmount: Math.max(0, newAmount) } : b))
-    );
+    if (!Number.isFinite(newAmount) || newAmount < 0) return;
+    savePersonalMeta({ personalBudgets: personalBudgets.map(b => b.id === id ? { ...b, budgetedAmount: newAmount } : b) });
     addNotification('success', 'Presupuesto Actualizado', 'El límite mensual fue reconfigurado.');
   };
 
   const depositToSavingGoal = (id: string, amount: number) => {
-    setPersonalSavingGoals((prev) =>
-      prev.map((g) => {
+    if (!Number.isFinite(amount) || amount <= 0) { reportCloudError(new Error('El abono debe ser mayor que cero.')); return; }
+    savePersonalMeta({ personalSavingGoals: personalSavingGoals.map((g) => {
         if (g.id !== id) return g;
         const newTotal = g.currentAmount + amount;
         return { ...g, currentAmount: newTotal };
-      })
-    );
+      }) });
     addNotification('success', 'Abono a Meta de Ahorro', `Se sumaron $${amount.toFixed(2)} a tu meta.`);
   };
 
   const addPersonalSavingGoal = (goalData: Omit<PersonalSavingGoal, 'id'>) => {
+    if (!Number.isFinite(goalData.targetAmount) || goalData.targetAmount <= 0 || !Number.isFinite(goalData.currentAmount) || goalData.currentAmount < 0) return;
     const newGoal: PersonalSavingGoal = {
       ...goalData,
-      id: `pg_${Date.now()}`,
+      id: `pg_${crypto.randomUUID()}`,
     };
-    setPersonalSavingGoals((prev) => [...prev, newGoal]);
+    savePersonalMeta({ personalSavingGoals: [...personalSavingGoals, newGoal] });
     addNotification('success', 'Nueva Meta de Ahorro', `"${newGoal.title}" creada con objetivo de $${newGoal.targetAmount.toFixed(2)}.`);
   };
 
   const resetPersonalFinancesToSampleData = () => {
     const fresh = getSamplePersonalFinancesData();
-    setPersonalTransactions(fresh.transactions);
-    setPersonalBudgets(fresh.budgets);
-    setPersonalSavingGoals(fresh.goals);
+    setPersonalTransactions(fresh.transactions.map(tx => ({ ...tx, id: crypto.randomUUID(), userId: currentUserId })));
+    savePersonalMeta({ personalBudgets: fresh.budgets, personalSavingGoals: fresh.goals });
     addNotification(
       'info',
       'Datos de Demostración Cargados',
@@ -2028,14 +899,10 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return [...others, ...branchesUpdates];
       });
       branchesUpdates.forEach((b) => {
-        try {
-          setDoc(doc(db, 'branches', b.id), b).catch(reportCloudError);
-        } catch (e) {}
+
       });
       staleBranches.forEach((b) => {
-        try {
-          deleteDoc(doc(db, 'branches', b.id)).catch(reportCloudError);
-        } catch (e) {}
+
       });
     }
 
@@ -2073,7 +940,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       'info',
       nextActive ? '⚡ Modo Facturación Electrónica DTE Activo' : '🏪 Modo Control Interno (Emprendedor) Activo',
       nextActive
-        ? 'El sistema emitirá comprobantes oficiales con validación y firma del Ministerio de Hacienda.'
+        ? 'Modo de demostración DTE: los documentos no se transmiten a Hacienda y no tienen validación fiscal.'
         : 'Modo simplificado activo: ventas con tickets, notas internas y control ágil sin requisitos de Hacienda.'
     );
   };
@@ -2102,13 +969,11 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const sanitized = sanitizeBranch(branchData as any);
     const newBranch: Branch = {
       ...sanitized,
-      id: `branch_${Date.now()}`,
+      id: `branch_${crypto.randomUUID()}`,
       companyId: currentCompany.id,
     };
     setBranches((prev) => [...prev, newBranch]);
-    try {
-      setDoc(doc(db, 'branches', newBranch.id), newBranch).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('success', 'Sucursal Registrada', `"${newBranch.name}" añadida a ${currentCompany.name}.`);
   };
 
@@ -2120,18 +985,14 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setBranches((prev) =>
       prev.map((b) => (b.id === id ? { ...b, ...sanitizedUpdates } : b))
     );
-    try {
-      setDoc(doc(db, 'branches', id), sanitizedUpdates, { merge: true }).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('info', 'Sucursal Actualizada', 'Datos de la sucursal guardados.');
   };
 
   const deleteBranch = (id: string) => {
     setBranches((prev) => prev.filter((b) => b.id !== id));
     if (selectedBranchId === id) setSelectedBranchId('all');
-    try {
-      deleteDoc(doc(db, 'branches', id)).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('warning', 'Sucursal Eliminada', 'La sucursal ha sido removida.');
   };
 
@@ -2141,16 +1002,14 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const createCustomer = (customerData: Omit<Customer, 'id'>): Customer => {
     const newCustomer: Customer = {
       ...customerData,
-      id: `cust_${Date.now()}`,
+      id: `cust_${crypto.randomUUID()}`,
       companyId: currentCompany.id, // sin esto el filtro por empresa lo ocultaba al instante
       rating: customerData.rating || 5,
       stage: customerData.stage || 'prospecto',
       notesTimeline: customerData.notesTimeline || [],
     };
     setCustomers((prev) => [...prev, newCustomer]);
-    try {
-      setDoc(doc(db, 'customers', newCustomer.id), newCustomer).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('success', 'Cliente Registrado', `"${newCustomer.name}" añadido al CRM y sincronizado en la nube.`);
     return newCustomer;
   };
@@ -2159,24 +1018,20 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setCustomers((prev) =>
       prev.map((c) => (c.id === id ? { ...c, ...updates } : c))
     );
-    try {
-      setDoc(doc(db, 'customers', id), updates, { merge: true }).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('info', 'Cliente Actualizado', 'Información del cliente sincronizada en la nube.');
   };
 
   const deleteCustomer = (id: string) => {
     setCustomers((prev) => prev.filter((c) => c.id !== id));
-    try {
-      deleteDoc(doc(db, 'customers', id)).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('warning', 'Cliente Eliminado', 'El registro del cliente ha sido removido del CRM.');
   };
 
   const addCustomerNote = (customerId: string, noteData: Omit<CustomerNote, 'id' | 'date'>) => {
     const newNote: CustomerNote = {
       ...noteData,
-      id: `cn_${Date.now()}`,
+      id: `cn_${crypto.randomUUID()}`,
       date: new Date().toISOString().split('T')[0],
     };
     setCustomers((prev) =>
@@ -2184,9 +1039,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (c.id === customerId) {
           const notes = c.notesTimeline ? [newNote, ...c.notesTimeline] : [newNote];
           const updated = { ...c, notesTimeline: notes };
-          try {
-            setDoc(doc(db, 'customers', customerId), { notesTimeline: notes }, { merge: true }).catch(reportCloudError);
-          } catch (e) {}
+
           return updated;
         }
         return c;
@@ -2198,13 +1051,11 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const createProduct = (productData: Omit<Product, 'id' | 'companyId'>) => {
     const newProd: Product = {
       ...productData,
-      id: `prod_${Date.now()}`,
+      id: `prod_${crypto.randomUUID()}`,
       companyId: currentCompany.id,
     };
     setProducts((prev) => [...prev, newProd]);
-    try {
-      setDoc(doc(db, 'products', newProd.id), newProd).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('success', 'Producto Creado', `"${newProd.name}" registrado en inventario y guardado en la nube.`);
   };
 
@@ -2212,21 +1063,17 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setProducts((prev) =>
       prev.map((p) => (p.id === id ? { ...p, ...updates } : p))
     );
-    try {
-      setDoc(doc(db, 'products', id), updates, { merge: true }).catch(reportCloudError);
-    } catch (e) {}
+
   };
 
   const deleteProduct = (id: string) => {
     setProducts((prev) => prev.filter((p) => p.id !== id));
-    try {
-      deleteDoc(doc(db, 'products', id)).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('warning', 'Producto Eliminado', 'El producto ha sido removido del catálogo.');
   };
 
   const createInvoice = (invoiceData: Omit<Invoice, 'id' | 'companyId' | 'createdAt'>): Invoice => {
-    const invoiceId = `inv_${Date.now()}`;
+    const invoiceId = `inv_${crypto.randomUUID()}`;
     const nextEntryNumber = journalEntries.length + 1;
 
     // Asignar sucursal activa si no está definida
@@ -2262,7 +1109,8 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     if (!existingCust && newInvoice.customerName && newInvoice.customerName.trim().length > 0) {
       const autoCust: Customer = {
-        id: newInvoice.customerId && newInvoice.customerId.startsWith('cust_') ? newInvoice.customerId : `cust_${Date.now()}`,
+        companyId: currentCompany.id,
+        id: newInvoice.customerId && newInvoice.customerId.startsWith('cust_') ? newInvoice.customerId : `cust_${crypto.randomUUID()}`,
         name: newInvoice.customerName,
         tradeName: newInvoice.customerName,
         nit: newInvoice.customerNit || '0614-000000-000-0',
@@ -2280,7 +1128,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         municipality: currentCompany.municipality || 'San Salvador Centro',
         notesTimeline: [
           {
-            id: `cn_${Date.now()}`,
+            id: `cn_${crypto.randomUUID()}`,
             date: newInvoice.date,
             type: 'acuerdo',
             content: `Cliente registrado automáticamente con la venta #${newInvoice.correlativeNumber} ($${newInvoice.totalPagar.toFixed(2)}).`,
@@ -2296,7 +1144,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           if (c.id === existingCust.id) {
             const nextStage = c.stage === 'prospecto' || c.stage === 'cotizacion' ? 'frecuente' : c.stage;
             const newNote: CustomerNote = {
-              id: `cn_${Date.now()}`,
+              id: `cn_${crypto.randomUUID()}`,
               date: newInvoice.date,
               type: 'acuerdo',
               content: `Venta registrada: ${newInvoice.type.toUpperCase()} #${newInvoice.correlativeNumber} por $${newInvoice.totalPagar.toFixed(2)}.`,
@@ -2331,7 +1179,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         // Movimiento de tesorería
         const tMovement: TreasuryMovement = {
-          id: `tmov_${Date.now()}`,
+          id: `tmov_${crypto.randomUUID()}`,
           companyId: currentCompany.id,
           branchId: newInvoice.branchId,
           branchName: newInvoice.branchName,
@@ -2358,9 +1206,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setProducts((prev) =>
           prev.map((p) => (p.id === product.id ? { ...p, stock: newStock } : p))
         );
-        try {
-          setDoc(doc(db, 'products', product.id), { stock: newStock }, { merge: true }).catch(reportCloudError);
-        } catch (e) {}
+
 
         kMovements.push({
           id: `kdx_${Date.now()}_${item.id}`,
@@ -2387,9 +1233,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setKardexMovements((prev) => [...kMovements, ...prev]);
     }
 
-    try {
-      setDoc(doc(db, 'invoices', newInvoice.id), newInvoice).catch(reportCloudError);
-    } catch (e) {}
+
 
     addNotification(
       'success',
@@ -2404,9 +1248,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setInvoices((prev) =>
       prev.map((inv) => (inv.id === id ? { ...inv, ...updates } : inv))
     );
-    try {
-      setDoc(doc(db, 'invoices', id), updates, { merge: true }).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('info', 'Venta Modificada', 'Registro de venta actualizado correctamente.');
   };
 
@@ -2421,9 +1263,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setProducts((prev) =>
           prev.map((p) => (p.id === prod.id ? { ...p, stock: p.stock + item.quantity } : p))
         );
-        try {
-          setDoc(doc(db, 'products', prod.id), { stock: prod.stock + item.quantity }, { merge: true }).catch(reportCloudError);
-        } catch (e) {}
+
       }
     });
 
@@ -2443,122 +1283,30 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // 6. Eliminar la factura
     setInvoices((prev) => prev.filter((i) => i.id !== invoiceId));
-    try {
-      deleteDoc(doc(db, 'invoices', invoiceId)).catch(reportCloudError);
-    } catch (e) {}
+
 
     addNotification('warning', 'Venta Eliminada', `Documento #${inv.correlativeNumber} y sus asientos/kardex han sido revertidos.`);
   };
 
-  const deleteCustomerPayment = (paymentId: string) => {
-    const p = customerPayments.find((cp) => cp.id === paymentId);
-    if (!p) return;
-
-    setInvoices((prev) =>
-      prev.map((inv) => {
-        if (inv.id === p.invoiceId) {
-          const restoredSaldo = Number((inv.saldoPendiente + p.amount).toFixed(2));
-          const restoredStatus = restoredSaldo >= inv.totalPagar ? 'emitida' : 'parcial';
-          try {
-            setDoc(doc(db, 'invoices', p.invoiceId), { saldoPendiente: restoredSaldo, status: restoredStatus }, { merge: true }).catch(reportCloudError);
-          } catch (e) {}
-          return {
-            ...inv,
-            saldoPendiente: restoredSaldo,
-            status: restoredStatus,
-          };
-        }
-        return inv;
-      })
-    );
-
-    setCustomerPayments((prev) => prev.filter((cp) => cp.id !== paymentId));
+  const deleteCustomerPayment = async (paymentId: string) => {
     try {
-      deleteDoc(doc(db, 'customer_payments', paymentId)).catch(reportCloudError);
-    } catch (e) {}
-    addNotification('info', 'Pago Revertido', `Abono de $${p.amount.toFixed(2)} eliminado y saldo de factura restaurado.`);
+      await reversePayment(currentCompany.id, paymentId, 'customer');
+      addNotification('info', 'Abono revertido', 'La deuda, el banco y los registros asociados se actualizaron juntos.');
+    } catch (error) { reportCloudError(error); }
   };
 
-  const registerCustomerPayment = (paymentData: Omit<CustomerPayment, 'id' | 'companyId'>) => {
-    const paymentId = `cpay_${Date.now()}`;
-    const newPayment: CustomerPayment = {
-      ...paymentData,
-      id: paymentId,
-      companyId: currentCompany.id,
-    };
-
-    // 1. Actualizar saldo de la factura
-    const targetInv = invoices.find((i) => i.id === paymentData.invoiceId);
-    const newSaldo = targetInv ? Math.max(0, Number((targetInv.saldoPendiente - paymentData.amount).toFixed(2))) : 0;
-    const newStatus = newSaldo <= 0.01 ? 'pagada' : 'parcial';
-
-    setInvoices((prev) =>
-      prev.map((inv) => {
-        if (inv.id === paymentData.invoiceId) {
-          return { ...inv, saldoPendiente: newSaldo, status: newStatus };
-        }
-        return inv;
-      })
-    );
-
-    // 2. Incrementar saldo en cuenta bancaria/caja seleccionada
-    const targetAccount = bankAccounts.find((b) => b.id === paymentData.targetAccountId);
-    if (targetAccount) {
-      setBankAccounts((prev) =>
-        prev.map((b) =>
-          b.id === targetAccount.id
-            ? { ...b, currentBalance: Number((b.currentBalance + paymentData.amount).toFixed(2)) }
-            : b
-        )
-      );
-    }
-
-    // 3. Registrar partida contable de cobro CxC
-    const entry = generateCustomerPaymentEntry(
-      newPayment,
-      journalEntries.length + 1,
-      targetAccount?.accountingCode || '1101-01',
-      targetAccount?.accountName || 'Caja General'
-    );
-
-    // 4. Registrar movimiento de tesorería
-    const tMovement: TreasuryMovement = {
-      id: `tmov_${Date.now()}`,
-      companyId: currentCompany.id,
-      bankAccountId: paymentData.targetAccountId,
-      bankAccountName: targetAccount?.accountName || 'Banco / Caja',
-      date: paymentData.date,
-      type: 'abono_cxc',
-      amount: paymentData.amount,
-      referenceNumber: paymentData.receiptNumber,
-      description: `Abono de Cliente ${paymentData.customerName} - Doc: ${paymentData.invoiceNumber}`,
-      isReconciled: true,
-      accountingEntryId: entry.id,
-    };
-
-    setCustomerPayments((prev) => [newPayment, ...prev]);
-    setJournalEntries((prev) => [entry, ...prev]);
-    setTreasuryMovements((prev) => [tMovement, ...prev]);
-
+  const registerCustomerPayment = async (payment: Omit<CustomerPayment, 'id' | 'companyId'>) => {
     try {
-      setDoc(doc(db, 'customer_payments', newPayment.id), newPayment).catch(reportCloudError);
-      setDoc(doc(db, 'invoices', paymentData.invoiceId), { saldoPendiente: newSaldo, status: newStatus }, { merge: true }).catch(reportCloudError);
-    } catch (e) {}
-
-    addNotification(
-      'success',
-      'Cobro Registrado',
-      `Recibo #${paymentData.receiptNumber} por $${paymentData.amount.toFixed(2)} registrado e ingresado a tesorería.`
-    );
+      await recordPayment(currentCompany.id, payment, 'customer', journalEntries.length + 1);
+      addNotification('success', 'Cobro guardado', 'Se actualizaron la deuda, el banco y la contabilidad.');
+    } catch (error) { reportCloudError(error); }
   };
 
   const cancelInvoice = (id: string) => {
     setInvoices((prev) =>
       prev.map((inv) => (inv.id === id ? { ...inv, status: 'anulada', saldoPendiente: 0 } : inv))
     );
-    try {
-      setDoc(doc(db, 'invoices', id), { status: 'anulada', saldoPendiente: 0 }, { merge: true }).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('warning', 'Factura Anulada', 'El documento DTE ha sido marcado como anulado.');
   };
 
@@ -2568,7 +1316,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const createSupplier = (supplierData: Omit<Supplier, 'id'>) => {
     const newSupp: Supplier = {
       ...supplierData,
-      id: `supp_${Date.now()}`,
+      id: `supp_${crypto.randomUUID()}`,
       companyId: currentCompany.id, // sin esto el proveedor "no se guardaba" (el filtro por empresa lo ocultaba)
       rating: supplierData.rating || 5,
       qualityScore: supplierData.qualityScore || 5,
@@ -2577,9 +1325,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       notesTimeline: supplierData.notesTimeline || [],
     };
     setSuppliers((prev) => [...prev, newSupp]);
-    try {
-      setDoc(doc(db, 'suppliers', newSupp.id), newSupp).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('success', 'Proveedor Registrado', `"${newSupp.name}" añadido al catálogo.`);
   };
 
@@ -2587,16 +1333,14 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setSuppliers((prev) =>
       prev.map((s) => (s.id === id ? { ...s, ...updates } : s))
     );
-    try {
-      setDoc(doc(db, 'suppliers', id), updates, { merge: true }).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('info', 'Proveedor Actualizado', 'Información del proveedor sincronizada.');
   };
 
   const addSupplierNote = (supplierId: string, noteData: Omit<SupplierNote, 'id' | 'date'>) => {
     const newNote: SupplierNote = {
       ...noteData,
-      id: `sn_${Date.now()}`,
+      id: `sn_${crypto.randomUUID()}`,
       date: new Date().toISOString().split('T')[0],
     };
     setSuppliers((prev) =>
@@ -2612,7 +1356,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const createPurchase = (purchaseData: Omit<Purchase, 'id' | 'companyId' | 'createdAt'>): Purchase => {
-    const purchaseId = `pur_${Date.now()}`;
+    const purchaseId = `pur_${crypto.randomUUID()}`;
     const nextEntryNumber = journalEntries.length + 1;
 
     // Asignar sucursal activa si no está definida
@@ -2658,9 +1402,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               : p
           )
         );
-        try {
-          setDoc(doc(db, 'products', product.id), { stock: newStock, currentCost: newWeightedAverageCost }, { merge: true }).catch(reportCloudError);
-        } catch (e) {}
+
 
         kMovements.push({
           id: `kdx_${Date.now()}_${item.id}`,
@@ -2687,9 +1429,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setKardexMovements((prev) => [...kMovements, ...prev]);
     }
 
-    try {
-      setDoc(doc(db, 'purchases', newPurchase.id), newPurchase).catch(reportCloudError);
-    } catch (e) {}
+
 
     addNotification(
       'success',
@@ -2700,86 +1440,18 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return newPurchase;
   };
 
-  const registerSupplierPayment = (paymentData: Omit<SupplierPayment, 'id' | 'companyId'>) => {
-    const paymentId = `spay_${Date.now()}`;
-    const newPayment: SupplierPayment = {
-      ...paymentData,
-      id: paymentId,
-      companyId: currentCompany.id,
-    };
-
-    // 1. Reducir saldo de la compra
-    const targetPur = purchases.find((p) => p.id === paymentData.purchaseId);
-    const newSaldo = targetPur ? Math.max(0, Number((targetPur.saldoPendiente - paymentData.amount).toFixed(2))) : 0;
-    const newStatus = newSaldo <= 0.01 ? 'pagada' : 'parcial';
-
-    setPurchases((prev) =>
-      prev.map((pur) => {
-        if (pur.id === paymentData.purchaseId) {
-          return { ...pur, saldoPendiente: newSaldo, status: newStatus };
-        }
-        return pur;
-      })
-    );
-
-    // 2. Descontar saldo de la cuenta de banco origen
-    const sourceAccount = bankAccounts.find((b) => b.id === paymentData.sourceAccountId);
-    if (sourceAccount) {
-      setBankAccounts((prev) =>
-        prev.map((b) =>
-          b.id === sourceAccount.id
-            ? { ...b, currentBalance: Number((b.currentBalance - paymentData.amount).toFixed(2)) }
-            : b
-        )
-      );
-    }
-
-    // 3. Registrar partida contable de pago CxP
-    const entry = generateSupplierPaymentEntry(
-      newPayment,
-      journalEntries.length + 1,
-      sourceAccount?.accountingCode || '1101-03',
-      sourceAccount?.accountName || 'Banco Agrícola'
-    );
-
-    // 4. Registrar movimiento de tesorería
-    const tMovement: TreasuryMovement = {
-      id: `tmov_${Date.now()}`,
-      companyId: currentCompany.id,
-      bankAccountId: paymentData.sourceAccountId,
-      bankAccountName: sourceAccount?.accountName || 'Banco Origen',
-      date: paymentData.date,
-      type: 'pago_proveedor',
-      amount: paymentData.amount,
-      referenceNumber: paymentData.referenceNumber || `CHK-${Date.now().toString().slice(-4)}`,
-      description: `Pago a Proveedor ${paymentData.supplierName} - Factura: ${paymentData.purchaseNumber}`,
-      isReconciled: true,
-      accountingEntryId: entry.id,
-    };
-
-    setSupplierPayments((prev) => [newPayment, ...prev]);
-    setJournalEntries((prev) => [entry, ...prev]);
-    setTreasuryMovements((prev) => [tMovement, ...prev]);
-
+  const registerSupplierPayment = async (payment: Omit<SupplierPayment, 'id' | 'companyId'>) => {
     try {
-      setDoc(doc(db, 'supplier_payments', newPayment.id), newPayment).catch(reportCloudError);
-      setDoc(doc(db, 'purchases', paymentData.purchaseId), { saldoPendiente: newSaldo, status: newStatus }, { merge: true }).catch(reportCloudError);
-    } catch (e) {}
-
-    addNotification(
-      'success',
-      'Pago a Proveedor Realizado',
-      `Desembolso de $${paymentData.amount.toFixed(2)} registrado en CxP y Bancos.`
-    );
+      await recordPayment(currentCompany.id, payment, 'supplier', journalEntries.length + 1);
+      addNotification('success', 'Abono guardado', 'Se actualizaron la deuda, el banco y la contabilidad.');
+    } catch (error) { reportCloudError(error); }
   };
 
   const updatePurchase = (id: string, updates: Partial<Purchase>) => {
     setPurchases((prev) =>
       prev.map((pur) => (pur.id === id ? { ...pur, ...updates } : pur))
     );
-    try {
-      setDoc(doc(db, 'purchases', id), updates, { merge: true }).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('info', 'Compra Modificada', 'Registro de compra/gasto actualizado.');
   };
 
@@ -2794,9 +1466,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setProducts((prev) =>
           prev.map((p) => (p.id === prod.id ? { ...p, stock: Math.max(0, p.stock - item.quantity) } : p))
         );
-        try {
-          setDoc(doc(db, 'products', prod.id), { stock: Math.max(0, prod.stock - item.quantity) }, { merge: true }).catch(reportCloudError);
-        } catch (e) {}
+
       }
     });
 
@@ -2816,47 +1486,21 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // 6. Eliminar compra
     setPurchases((prev) => prev.filter((p) => p.id !== purchaseId));
-    try {
-      deleteDoc(doc(db, 'purchases', purchaseId)).catch(reportCloudError);
-    } catch (e) {}
+
 
     addNotification('warning', 'Compra Eliminada', `Documento #${pur.documentNumber} y sus efectos contables han sido revertidos.`);
   };
 
-  const deleteSupplierPayment = (paymentId: string) => {
-    const p = supplierPayments.find((sp) => sp.id === paymentId);
-    if (!p) return;
-
-    setPurchases((prev) =>
-      prev.map((pur) => {
-        if (pur.id === p.purchaseId) {
-          const restoredSaldo = Number((pur.saldoPendiente + p.amount).toFixed(2));
-          const restoredStatus: PurchaseStatus = restoredSaldo >= pur.totalPagar ? 'registrada' : 'parcial';
-          try {
-            setDoc(doc(db, 'purchases', p.purchaseId), { saldoPendiente: restoredSaldo, status: restoredStatus }, { merge: true }).catch(reportCloudError);
-          } catch (e) {}
-          return {
-            ...pur,
-            saldoPendiente: restoredSaldo,
-            status: restoredStatus,
-          };
-        }
-        return pur;
-      })
-    );
-
-    setSupplierPayments((prev) => prev.filter((sp) => sp.id !== paymentId));
+  const deleteSupplierPayment = async (paymentId: string) => {
     try {
-      deleteDoc(doc(db, 'supplier_payments', paymentId)).catch(reportCloudError);
-    } catch (e) {}
-    addNotification('info', 'Pago a Proveedor Revertido', `Abono de $${p.amount.toFixed(2)} eliminado y saldo de deuda restaurado.`);
+      await reversePayment(currentCompany.id, paymentId, 'supplier');
+      addNotification('info', 'Abono revertido', 'La deuda, el banco y los registros asociados se actualizaron juntos.');
+    } catch (error) { reportCloudError(error); }
   };
 
   const deleteSupplier = (id: string) => {
     setSuppliers((prev) => prev.filter((s) => s.id !== id));
-    try {
-      deleteDoc(doc(db, 'suppliers', id)).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('warning', 'Proveedor Eliminado', 'El proveedor ha sido removido del catálogo.');
   };
 
@@ -2896,16 +1540,14 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       department: cleanDepartmentStr(employeeData.department),
       branchId: finalBranchId,
       branchName: finalBranchName,
-      id: `emp_${Date.now()}`,
+      id: `emp_${crypto.randomUUID()}`,
       companyId: currentCompany.id,
       rating: 5,
       evaluations: [],
       disciplinaryActions: [],
     };
     setEmployees((prev) => [...prev, newEmp]);
-    try {
-      setDoc(doc(db, 'employees', newEmp.id), newEmp).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('success', 'Colaborador Registrado', `"${newEmp.firstName} ${newEmp.lastName}" ingresado con PIN ${newEmp.pinCode}.`);
   };
 
@@ -2920,24 +1562,20 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setEmployees((prev) =>
       prev.map((e) => (e.id === id ? { ...e, ...sanitizedUpdates } : e))
     );
-    try {
-      setDoc(doc(db, 'employees', id), sanitizedUpdates, { merge: true }).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('info', 'Empleado Actualizado', 'Ficha de colaborador modificada con éxito.');
   };
 
   const deleteEmployee = (id: string) => {
     setEmployees((prev) => prev.filter((e) => e.id !== id));
-    try {
-      deleteDoc(doc(db, 'employees', id)).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('warning', 'Colaborador Retirado', 'El colaborador ha sido removido del directorio.');
   };
 
   const addEmployeeEvaluation = (employeeId: string, evalData: Omit<EmployeeEvaluation, 'id' | 'date'>) => {
     const newEval: EmployeeEvaluation = {
       ...evalData,
-      id: `eval_${Date.now()}`,
+      id: `eval_${crypto.randomUUID()}`,
       date: new Date().toISOString().split('T')[0],
     };
     setEmployees((prev) =>
@@ -2961,7 +1599,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const addDisciplinaryAction = (employeeId: string, actionData: Omit<DisciplinaryAction, 'id' | 'date'>) => {
     const newAction: DisciplinaryAction = {
       ...actionData,
-      id: `disc_${Date.now()}`,
+      id: `disc_${crypto.randomUUID()}`,
       date: new Date().toISOString().split('T')[0],
     };
     setEmployees((prev) =>
@@ -3087,7 +1725,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const costoTotalEmpresa = Number((totalDevengado + totalIsssPatronal + totalAfpPatronal + totalInsaforpPatronal + totalProvisiones).toFixed(2));
 
     const newPayroll: Payroll = {
-      id: `pay_${Date.now()}`,
+      id: `pay_${crypto.randomUUID()}`,
       companyId: currentCompany.id,
       branchId: branchId && branchId !== 'all' ? branchId : undefined,
       branchName: targetBranchName,
@@ -3120,9 +1758,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setPayrolls((prev) => [newPayroll, ...prev]);
     setJournalEntries((prev) => [entry, ...prev]);
 
-    try {
-      setDoc(doc(db, 'payrolls', newPayroll.id), newPayroll).catch(reportCloudError);
-    } catch (e) {}
+
 
     addNotification(
       'success',
@@ -3134,6 +1770,11 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveCustomPayroll = (payroll: Payroll) => {
+    if (payrolls.some(existing => existing.id === payroll.id && existing.status === 'pagada')) { reportCloudError(new Error('No se puede editar una planilla pagada.')); return; }
+    const entry = generatePayrollAccountingEntry(payroll, journalEntries.find(existing => existing.id === payroll.accountingEntryId)?.entryNumber || journalEntries.length + 1);
+    if (!entry.isBalanced) { reportCloudError(new Error('La planilla no produce una partida contable equilibrada. Revisa sus totales.')); return; }
+    payroll = { ...payroll, accountingEntryId: entry.id };
+    setJournalEntries(prev => [entry, ...prev.filter(existing => existing.id !== entry.id)]);
     setPayrolls((prev) => {
       const idx = prev.findIndex((p) => p.id === payroll.id);
       if (idx >= 0) {
@@ -3143,64 +1784,24 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
       return [payroll, ...prev];
     });
-    try {
-      setDoc(doc(db, 'payrolls', payroll.id), payroll).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('success', 'Planilla Actualizada', `Cambios en la planilla ${payroll.periodType.toUpperCase()} guardados.`);
   };
 
   const deletePayroll = (id: string) => {
+    const payroll = payrolls.find(existing => existing.id === id);
+    if (payroll?.status === 'pagada') { reportCloudError(new Error('Una planilla pagada requiere una reversión contable; no puede borrarse directamente.')); return; }
+    if (payroll?.accountingEntryId) setJournalEntries(prev => prev.filter(entry => entry.id !== payroll.accountingEntryId));
     setPayrolls((prev) => prev.filter((p) => p.id !== id));
-    try {
-      deleteDoc(doc(db, 'payrolls', id)).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('warning', 'Planilla Eliminada', 'El registro de planilla fue removido del historial.');
   };
 
-  const payPayroll = (payrollId: string, bankAccountId: string) => {
-    const payroll = payrolls.find((p) => p.id === payrollId);
-    if (!payroll) return;
-
-    // 1. Marcar planilla como pagada
-    setPayrolls((prev) =>
-      prev.map((p) => (p.id === payrollId ? { ...p, status: 'pagada' } : p))
-    );
+  const payPayroll = async (payrollId: string, bankAccountId: string) => {
     try {
-      setDoc(doc(db, 'payrolls', payrollId), { status: 'pagada' }, { merge: true }).catch(reportCloudError);
-    } catch (e) {}
-
-    // 2. Descontar fondos del banco
-    const bank = bankAccounts.find((b) => b.id === bankAccountId);
-    if (bank) {
-      setBankAccounts((prev) =>
-        prev.map((b) =>
-          b.id === bank.id
-            ? { ...b, currentBalance: Number((b.currentBalance - payroll.totalLiquido).toFixed(2)) }
-            : b
-        )
-      );
-
-      // 3. Movimiento de tesorería
-      const tMovement: TreasuryMovement = {
-        id: `tmov_${Date.now()}`,
-        companyId: currentCompany.id,
-        bankAccountId: bank.id,
-        bankAccountName: bank.accountName,
-        date: new Date().toISOString().split('T')[0],
-        type: 'pago_planilla',
-        amount: payroll.totalLiquido,
-        referenceNumber: `PLA-${payroll.year}-${payroll.month}`,
-        description: `Dispersión Electrónica de Sueldos Netos Planilla ${payroll.periodType.toUpperCase()}`,
-        isReconciled: true,
-      };
-      setTreasuryMovements((prev) => [tMovement, ...prev]);
-    }
-
-    addNotification(
-      'success',
-      'Planilla Pagada & Dispersada',
-      `Se dispersaron $${payroll.totalLiquido.toFixed(2)} a las cuentas de los colaboradores.`
-    );
+      await settlePayroll(currentCompany.id, payrollId, bankAccountId, journalEntries.length + 1);
+      addNotification('success', 'Planilla pagada', 'La cuenta, la planilla y la contabilidad se actualizaron juntas.');
+    } catch (error) { reportCloudError(error); }
   };
 
   // ----------------------------------------------------
@@ -3216,7 +1817,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const newRecord: ProfessionalServiceRecord = {
       ...serviceData,
-      id: `prof_${Date.now()}`,
+      id: `prof_${crypto.randomUUID()}`,
       companyId: currentCompany.id,
       grossAmount: gross,
       retentionRate: rate,
@@ -3227,9 +1828,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     setRawProfessionalServices((prev) => [newRecord, ...prev]);
-    try {
-      setDoc(doc(db, 'professional_services', newRecord.id), newRecord).catch(reportCloudError);
-    } catch (e) {}
+
 
     addNotification(
       'success',
@@ -3251,9 +1850,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             updated.retentionAmount = Number((gross * rate).toFixed(2));
             updated.netAmount = Number((gross - updated.retentionAmount).toFixed(2));
           }
-          try {
-            setDoc(doc(db, 'professional_services', id), updated, { merge: true }).catch(reportCloudError);
-          } catch (e) {}
+
           return updated;
         }
         return s;
@@ -3264,9 +1861,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const deleteProfessionalService = (id: string) => {
     setRawProfessionalServices((prev) => prev.filter((s) => s.id !== id));
-    try {
-      deleteDoc(doc(db, 'professional_services', id)).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('warning', 'Servicio Eliminado', 'El registro de servicios profesionales fue removido.');
   };
 
@@ -3276,14 +1871,12 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const createCandidateFolder = (folderData: Omit<CandidateFolder, 'id' | 'companyId' | 'createdAt'>): CandidateFolder => {
     const newFolder: CandidateFolder = {
       ...folderData,
-      id: `cf_${Date.now()}`,
+      id: `cf_${crypto.randomUUID()}`,
       companyId: currentCompany.id,
       createdAt: new Date().toISOString().split('T')[0],
     };
     setRawCandidateFolders((prev) => [...prev, newFolder]);
-    try {
-      setDoc(doc(db, 'candidate_folders', newFolder.id), newFolder).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('success', 'Carpeta Creada', `Vacante / Carpeta "${newFolder.name}" habilitada.`);
     return newFolder;
   };
@@ -3291,23 +1884,19 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const deleteCandidateFolder = (id: string) => {
     setRawCandidateFolders((prev) => prev.filter((f) => f.id !== id));
     setRawCandidateApplicants((prev) => prev.filter((a) => a.folderId !== id));
-    try {
-      deleteDoc(doc(db, 'candidate_folders', id)).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('info', 'Carpeta Eliminada', 'La carpeta de selección y sus candidatos fueron removidos.');
   };
 
   const createCandidateApplicant = (applicantData: Omit<CandidateApplicant, 'id' | 'companyId' | 'createdAt'>): CandidateApplicant => {
     const newApp: CandidateApplicant = {
       ...applicantData,
-      id: `cand_${Date.now()}`,
+      id: `cand_${crypto.randomUUID()}`,
       companyId: currentCompany.id,
       createdAt: new Date().toISOString(),
     };
     setRawCandidateApplicants((prev) => [newApp, ...prev]);
-    try {
-      setDoc(doc(db, 'candidates', newApp.id), newApp).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('success', 'Candidato Registrado', `"${newApp.fullName}" agregado a la vacante ${newApp.folderName}.`);
     return newApp;
   };
@@ -3316,17 +1905,13 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setRawCandidateApplicants((prev) =>
       prev.map((a) => (a.id === id ? { ...a, ...updates } : a))
     );
-    try {
-      setDoc(doc(db, 'candidates', id), updates, { merge: true }).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('info', 'Candidato Actualizado', 'Estado y datos de postulación guardados.');
   };
 
   const deleteCandidateApplicant = (id: string) => {
     setRawCandidateApplicants((prev) => prev.filter((a) => a.id !== id));
-    try {
-      deleteDoc(doc(db, 'candidates', id)).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('warning', 'Postulante Eliminado', 'El candidato fue retirado del proceso.');
   };
 
@@ -3339,7 +1924,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const lastName = lastParts.join(' ') || 'General';
 
     const newEmp: Employee = {
-      id: `emp_${Date.now()}`,
+      id: `emp_${crypto.randomUUID()}`,
       companyId: currentCompany.id,
       code: `EMP-${(employees.length + 1).toString().padStart(3, '0')}`,
       firstName,
@@ -3363,9 +1948,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     setEmployees((prev) => [...prev, newEmp]);
-    try {
-      setDoc(doc(db, 'employees', newEmp.id), newEmp).catch(reportCloudError);
-    } catch (e) {}
+
 
     // Mark applicant as seleccionado
     updateCandidateApplicant(applicantId, { status: 'seleccionado' });
@@ -3420,7 +2003,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       targetRecord = { ...rawAttendanceRecords[existingIndex] };
     } else {
       targetRecord = {
-        id: `att_${Date.now()}`,
+        id: `att_${crypto.randomUUID()}`,
         companyId: currentCompany.id,
         employeeId: emp.id,
         employeeCode: emp.code,
@@ -3467,9 +2050,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return [targetRecord, ...prev];
     });
 
-    try {
-      setDoc(doc(db, 'attendance', targetRecord.id), targetRecord).catch(reportCloudError);
-    } catch (e) {}
+
 
     return {
       status: targetRecord.status === 'tardanza' ? 'warning' : 'success',
@@ -3482,14 +2063,12 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const createLeaveRequest = (req: Omit<EmployeeLeaveRequest, 'id' | 'companyId' | 'createdAt'>): EmployeeLeaveRequest => {
     const newLeave: EmployeeLeaveRequest = {
       ...req,
-      id: `leave_${Date.now()}`,
+      id: `leave_${crypto.randomUUID()}`,
       companyId: currentCompany.id,
       createdAt: new Date().toISOString(),
     };
     setRawLeaveRequests((prev) => [newLeave, ...prev]);
-    try {
-      setDoc(doc(db, 'leave_requests', newLeave.id), newLeave).catch(reportCloudError);
-    } catch (e) {}
+
     return newLeave;
   };
 
@@ -3497,9 +2076,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setRawLeaveRequests((prev) =>
       prev.map((l) => (l.id === id ? { ...l, status, approvedAt: new Date().toISOString() } : l))
     );
-    try {
-      setDoc(doc(db, 'leave_requests', id), { status, approvedAt: new Date().toISOString() }, { merge: true }).catch(reportCloudError);
-    } catch (e) {}
+
   };
 
   // ----------------------------------------------------
@@ -3508,91 +2085,20 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const createBankAccount = (accountData: Omit<BankAccount, 'id' | 'companyId' | 'currentBalance'>) => {
     const newAcc: BankAccount = {
       ...accountData,
-      id: `bank_${Date.now()}`,
+      id: `bank_${crypto.randomUUID()}`,
       companyId: currentCompany.id,
       currentBalance: accountData.initialBalance,
     };
     setBankAccounts((prev) => [...prev, newAcc]);
-    try {
-      setDoc(doc(db, 'bank_accounts', newAcc.id), newAcc).catch(reportCloudError);
-    } catch (e) {}
+
     addNotification('success', 'Cuenta Bancaria Registrada', `"${newAcc.accountName}" añadida a tesorería.`);
   };
 
-  const transferFunds = (
-    fromAccountId: string,
-    toAccountId: string,
-    amount: number,
-    reference: string,
-    description: string
-  ) => {
-    const fromAcc = bankAccounts.find((b) => b.id === fromAccountId);
-    const toAcc = bankAccounts.find((b) => b.id === toAccountId);
-    if (!fromAcc || !toAcc) return;
-
-    // Actualizar saldos
-    setBankAccounts((prev) =>
-      prev.map((b) => {
-        if (b.id === fromAccountId) {
-          return { ...b, currentBalance: Number((b.currentBalance - amount).toFixed(2)) };
-        }
-        if (b.id === toAccountId) {
-          return { ...b, currentBalance: Number((b.currentBalance + amount).toFixed(2)) };
-        }
-        return b;
-      })
-    );
-
-    // Asiento contable
-    const entry = createBalancedJournalEntry({
-      id: `entry_trf_${Date.now()}`,
-      companyId: currentCompany.id,
-      entryNumber: journalEntries.length + 1,
-      date: new Date().toISOString().split('T')[0],
-      concept: `Transferencia interna de fondos: ${fromAcc.accountName} a ${toAcc.accountName}`,
-      sourceModule: 'tesoreria',
-      referenceDoc: reference,
-      lines: [
-        {
-          accountCode: toAcc.accountingCode,
-          accountName: toAcc.accountName,
-          debit: amount,
-          credit: 0,
-          concept: `Ingreso por transferencia desde ${fromAcc.accountName}`,
-        },
-        {
-          accountCode: fromAcc.accountingCode,
-          accountName: fromAcc.accountName,
-          debit: 0,
-          credit: amount,
-          concept: `Salida por transferencia hacia ${toAcc.accountName}`,
-        },
-      ],
-    });
-
-    // Movimiento de tesorería
-    const tMov: TreasuryMovement = {
-      id: `tmov_${Date.now()}`,
-      companyId: currentCompany.id,
-      bankAccountId: fromAccountId,
-      bankAccountName: fromAcc.accountName,
-      date: new Date().toISOString().split('T')[0],
-      type: 'transferencia_interna',
-      amount,
-      referenceNumber: reference,
-      description: `${description} (${fromAcc.accountName} ➔ ${toAcc.accountName})`,
-      isReconciled: true,
-      accountingEntryId: entry.id,
-    };
-
-    setJournalEntries((prev) => [entry, ...prev]);
-    setTreasuryMovements((prev) => [tMov, ...prev]);
-
-    addNotification(
-      'success',
-      'Transferencia Ejecutada',
-      `Traslado de $${amount.toFixed(2)} completado con partida contable automática.`
-    );
+  const transferFunds = async (from: string, to: string, amount: number, reference: string, description: string) => {
+    try {
+      await moveFunds(currentCompany.id, from, to, amount, reference, description, journalEntries.length + 1);
+      addNotification('success', 'Transferencia guardada', 'Los saldos y la partida contable se guardaron juntos.');
+    } catch (error) { reportCloudError(error); }
   };
 
   const reconcileMovement = (movementId: string) => {
@@ -3609,6 +2115,9 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const deleteTreasuryMovement = (movementId: string) => {
     const mov = treasuryMovements.find((m) => m.id === movementId);
     if (!mov) return;
+    if (mov.accountingEntryId || mov.type === 'transferencia_interna') {
+      reportCloudError(new Error('Este movimiento está vinculado a una operación. Corrígela desde su módulo de origen para conservar los saldos y la contabilidad.')); return;
+    }
 
     // Revert bank balance
     const isIncome = ['ingreso_venta', 'abono_cxc', 'otro_ingreso'].includes(mov.type);
@@ -3618,9 +2127,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           const newBal = isIncome
             ? Number((b.currentBalance - mov.amount).toFixed(2))
             : Number((b.currentBalance + mov.amount).toFixed(2));
-          try {
-            setDoc(doc(db, 'bank_accounts', b.id), { currentBalance: newBal }, { merge: true }).catch(reportCloudError);
-          } catch (e) {}
+
           return { ...b, currentBalance: newBal };
         }
         return b;
@@ -3633,15 +2140,13 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     setTreasuryMovements((prev) => prev.filter((m) => m.id !== movementId));
-    try {
-      deleteDoc(doc(db, 'treasury_movements', movementId)).catch(reportCloudError);
-    } catch (e) {}
+
 
     addNotification('info', 'Movimiento Revertido', `Movimiento #${mov.referenceNumber} eliminado y saldo bancario restaurado.`);
   };
 
   const createOtherIncome = (incomeData: Omit<OtherIncome, 'id' | 'companyId' | 'createdAt'>): OtherIncome => {
-    const incomeId = `inc_oth_${Date.now()}`;
+    const incomeId = `inc_oth_${crypto.randomUUID()}`;
     const newIncome: OtherIncome = {
       ...incomeData,
       id: incomeId,
@@ -3663,7 +2168,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // 2. Generar partida contable automática
     const entry = createBalancedJournalEntry({
-      id: `entry_inc_${Date.now()}`,
+      id: `entry_inc_${crypto.randomUUID()}`,
       companyId: currentCompany.id,
       entryNumber: journalEntries.length + 1,
       date: newIncome.date,
@@ -3679,7 +2184,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           concept: `Ingreso a ${targetAccount?.accountName || 'Banco'} por ${newIncome.categoryLabel}`,
         },
         {
-          accountCode: '5201-01',
+          accountCode: '6201',
           accountName: 'Otros Ingresos No Operacionales / Remanentes y Ganancias Extraordinarias',
           debit: 0,
           credit: newIncome.amount,
@@ -3691,7 +2196,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // 3. Movimiento de tesorería
     const tMovement: TreasuryMovement = {
-      id: `tmov_${Date.now()}`,
+      id: `tmov_${crypto.randomUUID()}`,
       companyId: currentCompany.id,
       bankAccountId: newIncome.targetAccountId,
       bankAccountName: targetAccount?.accountName || 'Banco / Caja',
@@ -3746,131 +2251,24 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Cálculo del Flujo de Efectivo Real / Ejecutado
   const realCashFlowSummary: RealCashFlowPeriod = useMemo(() => {
-    const totalLiquidCurrent = bankAccounts.reduce((acc, b) => acc + b.currentBalance, 0);
-
-    // Ventas al contado cobradas efectivamente
-    const inflowsContado = invoices
-      .filter((i) => i.status !== 'anulada' && i.paymentCondition === 'contado')
-      .reduce((acc, i) => acc + i.totalPagar, 0);
-
-    // Cobros reales de CxC
-    const inflowsCxc = customerPayments.reduce((acc, p) => acc + p.amount, 0);
-    const inflowsOther = otherIncomes.reduce((acc, o) => acc + o.amount, 0);
-    const totalInflows = inflowsContado + inflowsCxc + inflowsOther;
-
-    // Compras al contado pagadas
-    const outflowsContado = purchases
-      .filter((p) => p.status === 'pagada')
-      .reduce((acc, p) => acc + p.totalPagar, 0);
-
-    // Pagos reales de CxP a proveedores
-    const outflowsCxp = supplierPayments.reduce((acc, p) => acc + p.amount, 0);
-
-    // Sueldos netos pagados en planillas pagadas
-    const outflowsPayrollNet = payrolls
-      .filter((p) => p.status === 'pagada')
-      .reduce((acc, p) => acc + p.totalLiquido, 0);
-
-    const outflowsPatronal = payrolls
-      .filter((p) => p.status === 'pagada')
-      .reduce((acc, p) => acc + p.totalIsssPatronal + p.totalAfpPatronal + p.totalInsaforpPatronal, 0);
-
-    // Impuestos F-07 estimados
-    const totalIvaDebito = invoices
-      .filter((i) => i.status !== 'anulada')
-      .reduce((acc, i) => acc + i.iva13, 0);
-    const totalIvaCredito = purchases
-      .filter((p) => p.status !== 'anulada')
-      .reduce((acc, p) => acc + p.ivaCreditoFiscal, 0);
-    const ivaToPay = Math.max(0, totalIvaDebito - totalIvaCredito);
-    const pagoCuenta = invoices
-      .filter((i) => i.status !== 'anulada')
-      .reduce((acc, i) => acc + i.sumasGravadas * fiscalConfig.pagoCuentaRate, 0);
-    const outflowsTaxesMH = ivaToPay + pagoCuenta;
-
-    const outflowsOperating = 1200; // Servicios y software
-
-    const totalOutflows = outflowsContado + outflowsCxp + outflowsPayrollNet + outflowsPatronal + outflowsTaxesMH + outflowsOperating;
-    const netCashFlow = totalInflows - totalOutflows;
-    const openingCash = totalLiquidCurrent - netCashFlow;
-
-    return {
-      periodLabel: 'Agosto 2026 (Mes Actual)',
-      startDate: '2026-08-01',
-      endDate: '2026-08-31',
-      openingCash: Math.max(0, openingCash),
-      inflowsContadoSales: inflowsContado,
-      inflowsCxcCollections: inflowsCxc,
-      inflowsOther,
-      totalInflows,
-      outflowsContadoPurchases: outflowsContado,
-      outflowsCxpPayments: outflowsCxp,
-      outflowsPayrollNet,
-      outflowsPayrollTaxesPatronal: outflowsPatronal,
-      outflowsTaxesMH,
-      outflowsOperating,
-      totalOutflows,
-      netCashFlow,
-      closingCash: totalLiquidCurrent,
-    };
-  }, [bankAccounts, invoices, customerPayments, otherIncomes, purchases, supplierPayments, payrolls, fiscalConfig]);
-
-  // Proyecciones de Flujo de Caja (90 días)
+    const now = new Date(), start = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-01', end = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(new Date(now.getFullYear(),now.getMonth()+1,0).getDate());
+    const report = buildAccountingReports(chartOfAccounts,journalEntries,bankAccounts,start,end);
+    const amount=(source: string, positive:boolean)=>money(report.cashMovements.filter(row=>row.amount*(positive?1:-1)>0 && report.period.find(entry=>entry.id===row.id)?.sourceModule===source).reduce((sum,row)=>sum+Math.abs(row.amount),0));
+    const totalInflows=money(report.cashMovements.filter(row=>row.amount>0).reduce((sum,row)=>sum+row.amount,0)), totalOutflows=money(report.cashMovements.filter(row=>row.amount<0).reduce((sum,row)=>sum-row.amount,0));
+    const sales=amount('ventas',true),other=money(totalInflows-sales), purchases=amount('compras',false), payroll=amount('planilla',false);
+    return {periodLabel:now.toLocaleDateString('es-SV',{month:'long',year:'numeric'}),startDate:start,endDate:end,openingCash:report.openingCash,closingCash:report.closingCash,inflowsContadoSales:sales,inflowsCxcCollections:0,inflowsOther:other,totalInflows,outflowsContadoPurchases:purchases,outflowsCxpPayments:0,outflowsPayrollNet:payroll,outflowsPayrollTaxesPatronal:0,outflowsTaxesMH:0,outflowsOperating:money(totalOutflows-purchases-payroll),totalOutflows,netCashFlow:report.netCash};
+  },[chartOfAccounts,journalEntries,bankAccounts]);
+  // Scheduled outstanding invoices and purchases, counted once by due date.
   const cashFlowProjections: CashFlowProjectionItem[] = useMemo(() => {
-    const currentLiquidity = bankAccounts.reduce((acc, b) => acc + b.currentBalance, 0);
-    const totalCxc = invoices
-      .filter((i) => i.status !== 'pagada' && i.status !== 'anulada')
-      .reduce((acc, i) => acc + i.saldoPendiente, 0);
-    const totalCxp = purchases
-      .filter((p) => p.status !== 'pagada' && p.status !== 'anulada')
-      .reduce((acc, p) => acc + p.saldoPendiente, 0);
-    const activeMonthlyPayroll = employees
-      .filter((e) => e.isActive)
-      .reduce((acc, e) => acc + e.baseSalary, 0);
-
-    const periods = [
-      { label: 'Sem 1 (1-7 Sep)', days: 7, salesRatio: 0.25, cxcRatio: 0.40, cxpRatio: 0.30, payrollRatio: 0 },
-      { label: 'Sem 2 (8-15 Sep)', days: 15, salesRatio: 0.25, cxcRatio: 0.30, cxpRatio: 0.30, payrollRatio: 0.5 },
-      { label: 'Sem 3 (16-22 Sep)', days: 22, salesRatio: 0.25, cxcRatio: 0.20, cxpRatio: 0.20, payrollRatio: 0 },
-      { label: 'Sem 4 (23-30 Sep)', days: 30, salesRatio: 0.25, cxcRatio: 0.10, cxpRatio: 0.20, payrollRatio: 0.5 },
-      { label: 'Octubre 2026', days: 60, salesRatio: 1.1, cxcRatio: 0.8, cxpRatio: 0.8, payrollRatio: 1.0 },
-      { label: 'Noviembre 2026', days: 90, salesRatio: 1.25, cxcRatio: 0.9, cxpRatio: 0.9, payrollRatio: 1.0 },
-    ];
-
-    let runningBalance = currentLiquidity;
-    return periods.map((p) => {
-      const opening = runningBalance;
-      const cxcIn = totalCxc * p.cxcRatio;
-      const salesIn = 2500 * p.salesRatio;
-      const inflows = cxcIn + salesIn;
-
-      const cxpOut = totalCxp * p.cxpRatio;
-      const payrollOut = activeMonthlyPayroll * p.payrollRatio;
-      const taxesOut = 450 * (p.salesRatio || 1);
-      const opOut = 300 * (p.salesRatio || 1);
-      const outflows = cxpOut + payrollOut + taxesOut + opOut;
-
-      const net = inflows - outflows;
-      runningBalance += net;
-
-      return {
-        date: new Date(Date.now() + p.days * 86400000).toISOString().split('T')[0],
-        periodLabel: p.label,
-        openingBalance: opening,
-        cxcInflows: cxcIn,
-        projectedSalesInflows: salesIn,
-        totalInflows: inflows,
-        cxpOutflows: cxpOut,
-        payrollOutflows: payrollOut,
-        taxesOutflows: taxesOut,
-        operatingOutflows: opOut,
-        totalOutflows: outflows,
-        netCashFlow: net,
-        closingBalance: runningBalance,
-        status: runningBalance > 5000 ? 'saludable' : runningBalance > 0 ? 'alerta' : 'deficit',
-      };
+    const now=new Date(), dateKey=(date:Date)=>date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');
+    const today=dateKey(now); let previous=today, balance=bankAccounts.reduce((sum,account)=>sum+account.currentBalance,0);
+    return [30,60,90].map((days,index)=>{const end=dateKey(new Date(now.getFullYear(),now.getMonth(),now.getDate()+days)); const due=(date:string)=>index===0 ? date<=end : date>previous&&date<=end;
+      const inflows=money(invoices.filter(doc=>doc.status!=='anulada'&&doc.saldoPendiente>0&&doc.dueDate&&due(doc.dueDate)).reduce((sum,doc)=>sum+doc.saldoPendiente,0));
+      const outflows=money(purchases.filter(doc=>doc.status!=='anulada'&&doc.saldoPendiente>0&&doc.dueDate&&due(doc.dueDate)).reduce((sum,doc)=>sum+doc.saldoPendiente,0));
+      const opening=balance; balance=money(balance+inflows-outflows);previous=end;
+      return {date:end,periodLabel:'Hasta '+days+' días',openingBalance:opening,cxcInflows:inflows,projectedSalesInflows:0,totalInflows:inflows,cxpOutflows:outflows,payrollOutflows:0,taxesOutflows:0,operatingOutflows:0,totalOutflows:outflows,netCashFlow:money(inflows-outflows),closingBalance:balance,status:balance<0?'deficit':balance===0?'alerta':'saludable'};
     });
-  }, [bankAccounts, invoices, purchases, employees]);
+  },[bankAccounts,invoices,purchases]);
 
   // ----------------------------------------------------
   // MÓDULO 5: MOTOR CONTABLE & CATÁLOGO CONFIGURABLE
@@ -3885,6 +2283,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const updateAccountNode = (code: string, updates: Partial<AccountNode>) => {
+    if (updates.code && updates.code !== code && journalEntries.some(entry => entry.lines.some(line => line.accountCode === code))) { reportCloudError(new Error('No se puede cambiar el código de una cuenta con movimientos.')); return; }
     setChartOfAccounts((prev) =>
       prev.map((a) => (a.code === code ? { ...a, ...updates } : a))
     );
@@ -3892,6 +2291,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const deleteAccountNode = (code: string) => {
+    if (journalEntries.some(entry => entry.lines.some(line => line.accountCode === code))) { reportCloudError(new Error('Esta cuenta tiene movimientos contables y no puede eliminarse.')); return; }
     const acc = chartOfAccounts.find((a) => a.code === code);
     if (acc?.isSystem) {
       addNotification('error', 'Cuenta Protegida', 'No se puede eliminar una cuenta de control del sistema.');
@@ -3903,10 +2303,10 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const loadChartTemplate = (templateType: 'simplified' | 'niif_full') => {
     if (templateType === 'simplified') {
-      setChartOfAccounts(SIMPLIFIED_STARTUP_CHART_OF_ACCOUNTS);
+      setChartOfAccounts(emptyChart(SIMPLIFIED_STARTUP_CHART_OF_ACCOUNTS));
       addNotification('success', 'Catálogo Simplificado Aplicado', 'Estructura ágil cargada ideal para startups y microempresas.');
     } else {
-      setChartOfAccounts(FULL_NIIF_CHART_OF_ACCOUNTS);
+      setChartOfAccounts(emptyChart(FULL_NIIF_CHART_OF_ACCOUNTS));
       addNotification('success', 'Catálogo NIIF Completo Aplicado', 'Estructura oficial para auditorías y despachos contables.');
     }
   };
@@ -3917,9 +2317,15 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       'id' | 'companyId' | 'createdAt' | 'entryNumber' | 'totalDebit' | 'totalCredit' | 'isBalanced'
     >
   ): JournalEntry => {
-    const nextEntryNumber = journalEntries.length + 1;
+    if (!['admin_maestro', 'gerente', 'contador'].includes(currentUser.role)) throw new Error('No tienes permiso para registrar partidas.');
+    const date = new Date(entryData.date + 'T12:00:00Z');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(entryData.date) || !Number.isFinite(date.getTime()) || date.toISOString().slice(0,10) !== entryData.date || !entryData.concept.trim()) throw new Error('Indica fecha válida y concepto.');
+    if (entryData.lines.length < 2 || entryData.lines.some(line => !chartOfAccounts.some(account => account.code === line.accountCode && account.isMovement) || ![line.debit,line.credit].every(value => Number.isFinite(value) && value >= 0 && Math.abs(value * 100 - Math.round(value * 100)) < 0.000001) || (line.debit > 0 && line.credit > 0))) throw new Error('Selecciona cuentas de movimiento y valores positivos con hasta dos decimales.');
+    const debit = entryData.lines.reduce((sum,line) => sum + Math.round(line.debit*100),0), credit = entryData.lines.reduce((sum,line) => sum + Math.round(line.credit*100),0);
+    if (!debit || debit !== credit) throw new Error('El debe y el haber deben ser iguales y mayores que cero.');
+    const nextEntryNumber = Math.max(0, ...journalEntries.map(entry => entry.entryNumber)) + 1;
     const entry = createBalancedJournalEntry({
-      id: `entry_man_${Date.now()}`,
+      id: `entry_man_${crypto.randomUUID()}`,
       companyId: currentCompany.id,
       entryNumber: nextEntryNumber,
       date: entryData.date,
@@ -3929,6 +2335,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       lines: entryData.lines,
     });
 
+    if (entryData.cashFlowActivity) entry.cashFlowActivity = entryData.cashFlowActivity;
     setJournalEntries((prev) => [entry, ...prev]);
     addNotification('success', 'Partida Contable Asentada', `Partida #${nextEntryNumber} registrada en el Libro Diario.`);
     return entry;
@@ -3940,7 +2347,8 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const addDynamicWidget = (widgetData: Omit<DynamicChartWidget, 'id' | 'createdAt'>) => {
     const newWidget: DynamicChartWidget = {
       ...widgetData,
-      id: `dw_${Date.now()}`,
+      id: `dw_${crypto.randomUUID()}`,
+      companyId: currentCompany.id,
       createdAt: new Date().toISOString(),
     };
     setDynamicWidgets((prev) => [newWidget, ...prev]);
@@ -3962,30 +2370,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // BACKUP & RESET
   // ----------------------------------------------------
   const resetAllDataToSample = () => {
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(LEGACY_STORAGE_KEY);
-    localStorage.removeItem(ANCIENT_STORAGE_KEY);
-    setCompanies(SAMPLE_COMPANIES);
-    setCurrentCompanyId(SAMPLE_COMPANIES[0].id);
-    setBranches(SAMPLE_BRANCHES);
-    setSelectedBranchId('all');
-    setProducts(SAMPLE_PRODUCTS);
-    setCustomers(SAMPLE_CUSTOMERS);
-    setInvoices(SAMPLE_INVOICES);
-    setCustomerPayments([]);
-    setSuppliers(SAMPLE_SUPPLIERS);
-    setPurchases(SAMPLE_PURCHASES);
-    setSupplierPayments([]);
-    setKardexMovements(SAMPLE_KARDEX_MOVEMENTS);
-    setEmployees(SAMPLE_EMPLOYEES);
-    setPayrolls(SAMPLE_PAYROLLS);
-    setBankAccounts(SAMPLE_BANK_ACCOUNTS);
-    setTreasuryMovements([]);
-    setOtherIncomes(SAMPLE_OTHER_INCOMES);
-    setChartOfAccounts(DEFAULT_CHART_OF_ACCOUNTS);
-    setJournalEntries([]);
-    setDynamicWidgets(INITIAL_DYNAMIC_WIDGETS);
-    addNotification('info', 'Datos Restaurados', 'Base de datos de demostración restaurada con éxito.');
+    addNotification('info', 'Demostración separada', 'La restauración global de datos demo está deshabilitada para proteger las empresas registradas.');
   };
 
   const exportDatabaseJSON = (): string => {
@@ -3993,7 +2378,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       exportedAt: new Date().toISOString(),
       app: 'FinaPyme ERP',
       version: '2.1.0',
-      companies,
+      companies: currentCompany.id ? [currentCompany] : [],
       branches,
       products,
       customers,
@@ -4011,6 +2396,16 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       chartOfAccounts,
       journalEntries,
       dynamicWidgets,
+      companyId: currentCompany.id,
+      professionalServices,
+      candidateFolders,
+      candidateApplicants,
+      attendanceRecords,
+      leaveRequests,
+      personalTransactions,
+      personalBudgets,
+      personalSavingGoals,
+      userId: currentUserId,
     };
     return JSON.stringify(fullState, null, 2);
   };
@@ -4018,7 +2413,11 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const importDatabaseJSON = (jsonStr: string): boolean => {
     try {
       const parsed = JSON.parse(jsonStr);
-      if (parsed.companies) setCompanies(parsed.companies);
+      if (!currentCompany.id || !['gerente', 'admin_maestro'].includes(userRole)) throw new Error('Solo el administrador puede importar datos de su empresa.');
+      for (const key of ['branches', 'products', 'customers', 'invoices', 'customerPayments', 'suppliers', 'purchases', 'supplierPayments', 'kardexMovements', 'employees', 'payrolls', 'bankAccounts', 'treasuryMovements', 'otherIncomes', 'journalEntries', 'dynamicWidgets', 'professionalServices', 'candidateFolders', 'candidateApplicants', 'attendanceRecords', 'leaveRequests']) {
+        if (parsed[key] !== undefined) assertTenantRecords(parsed[key], currentCompany.id);
+      }
+      if (parsed.companies?.some((company: Company) => company.id !== currentCompany.id)) throw new Error('El respaldo pertenece a otra empresa.');
       if (parsed.branches) setBranches(parsed.branches);
       if (parsed.products) setProducts(parsed.products);
       if (parsed.customers) setCustomers(parsed.customers);
@@ -4036,11 +2435,16 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (parsed.chartOfAccounts) setChartOfAccounts(parsed.chartOfAccounts);
       if (parsed.journalEntries) setJournalEntries(parsed.journalEntries);
       if (parsed.dynamicWidgets) setDynamicWidgets(parsed.dynamicWidgets);
+      if (parsed.professionalServices) setRawProfessionalServices(parsed.professionalServices);
+      if (parsed.candidateFolders) setRawCandidateFolders(parsed.candidateFolders);
+      if (parsed.candidateApplicants) setRawCandidateApplicants(parsed.candidateApplicants);
+      if (parsed.attendanceRecords) setRawAttendanceRecords(parsed.attendanceRecords);
+      if (parsed.leaveRequests) setRawLeaveRequests(parsed.leaveRequests);
 
       addNotification('success', 'Respaldo JSON Importado', 'Todos los datos y configuraciones se han cargado correctamente.');
       return true;
     } catch (err: any) {
-      addNotification('error', 'Error al Importar', 'El archivo JSON no tiene un formato válido de FinaPyme ERP.');
+      addNotification('error', 'Error al importar', err instanceof Error ? err.message : 'El respaldo no es válido.');
       return false;
     }
   };
@@ -4049,6 +2453,10 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     <ERPContext.Provider
       value={{
         isAuthenticated,
+        isAuthLoading: session.loading,
+        authError: session.error,
+        resetPassword: resetAccountPassword,
+        registerPersonalAccount,
         login,
         logout,
         companies,

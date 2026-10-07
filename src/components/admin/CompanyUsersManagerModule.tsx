@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { AssignPasswordButton } from './UserAccessControls';
 import { useERP } from '../../context/ERPContext';
 import { db } from '../../lib/firebase';
 import { doc, setDoc, deleteDoc } from 'firebase/firestore';
@@ -100,8 +101,7 @@ export const CompanyUsersManagerModule: React.FC = () => {
       if (u.companyId) {
         return u.companyId === currentCompany.id;
       }
-      // Si no tiene companyId y no es admin_maestro global, asociarlo a la empresa actual
-      return u.id === currentUser?.id || u.role !== 'admin_maestro';
+      return false;
     });
   }, [users, currentCompany, currentUser]);
 
@@ -183,7 +183,7 @@ export const CompanyUsersManagerModule: React.FC = () => {
     setEditingUserId(user.id);
     setFormName(user.name);
     setFormEmail(user.email);
-    setFormPassword(user.password || '123456');
+    setFormPassword('');
     setFormPhone(user.phone || '');
     setFormRole(user.role);
     setFormBranchId(branches[0]?.id || '');
@@ -193,10 +193,11 @@ export const CompanyUsersManagerModule: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formName.trim() || !formEmail.trim() || !formPassword.trim()) {
+    if (!formName.trim() || !formEmail.trim() || (!editingUserId && !formPassword.trim())) {
       addNotification('error', 'Campos Obligatorios', 'Por favor ingresa el nombre, correo y contraseña.');
       return;
     }
+    if (editingUserId && formPassword) { addNotification('error', 'Contraseña protegida', 'Para cambiarla, usa Asignar contraseña en la tarjeta del usuario.'); return; }
 
     const trimmedEmail = formEmail.trim().toLowerCase();
     const finalPermissions = [...formPermissions];
@@ -205,19 +206,14 @@ export const CompanyUsersManagerModule: React.FC = () => {
       const updates: Partial<UserProfile> = {
         name: formName.trim(),
         email: trimmedEmail,
-        password: formPassword.trim(),
         phone: formPhone.trim() || undefined,
         role: formRole,
         companyId: currentCompany.id,
         permissions: finalPermissions,
       };
 
-      updateUser(editingUserId, updates);
-      try {
-        await setDoc(doc(db, 'users', editingUserId), updates, { merge: true });
-      } catch (err) {
-        console.warn('Error guardando en Firestore:', err);
-      }
+      try { await updateUser(editingUserId, updates); }
+      catch (error) { addNotification('error', 'No se actualizó', error instanceof Error ? error.message : 'Comprueba la conexión.'); return; }
 
       addNotification('success', 'Usuario Actualizado', `Los accesos de ${formName} han sido actualizados.`);
     } else {
@@ -237,17 +233,13 @@ export const CompanyUsersManagerModule: React.FC = () => {
         storedInCloud: true,
       };
 
-      createUser(newUser);
-      try {
-        await setDoc(doc(db, 'users', newUserId), newUser);
-      } catch (err) {
-        console.warn('Error guardando en Firestore:', err);
-      }
+      try { await createUser({ ...newUser, password: formPassword }); }
+      catch (error) { addNotification('error', 'No se creó el acceso', error instanceof Error ? error.message : 'Comprueba la conexión.'); return; }
 
       setCreatedCredential({
         name: newUser.name,
         email: newUser.email,
-        pass: newUser.password || '123456',
+        pass: formPassword,
         role: newUser.role,
       });
 
@@ -518,7 +510,7 @@ export const CompanyUsersManagerModule: React.FC = () => {
                     <span className="text-[10px] font-bold text-slate-400">Contraseña:</span>
                     <div className="flex items-center gap-1.5 font-mono">
                       <span className="font-black text-slate-900 dark:text-white select-all">
-                        {showPass ? user.password || '123456' : '••••••'}
+                        {showPass ? 'Protegida por Firebase' : '••••••'}
                       </span>
                       <button
                         onClick={() =>
@@ -563,11 +555,12 @@ export const CompanyUsersManagerModule: React.FC = () => {
 
               {/* Botones de acción al pie de la tarjeta */}
               <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                <AssignPasswordButton user={user} />
                 <button
                   type="button"
                   onClick={() =>
                     handleCopyCredentials(
-                      `Usuario: ${user.email} | Clave: ${user.password || '123456'}`,
+                      `Usuario: ${user.email} | Clave: ${'Protegida por Firebase'}`,
                       user.id
                     )
                   }
@@ -771,8 +764,9 @@ export const CompanyUsersManagerModule: React.FC = () => {
                   </div>
                   <input
                     type="text"
-                    required
-                    placeholder="123456"
+                    required={!editingUserId}
+                    disabled={!!editingUserId}
+                    placeholder={editingUserId ? 'Usa Asignar contraseña en la tarjeta' : 'Mínimo 6 caracteres'}
                     value={formPassword}
                     onChange={(e) => setFormPassword(e.target.value)}
                     className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-black"

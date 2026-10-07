@@ -1,4 +1,6 @@
 {
+  "include": ["src", "server", "api", "server.ts", "vite.config.ts", "playwright.config.ts", "tests"],
+  "exclude": ["node_modules", "dist", ".server-build", ".tools", ".private-backups"],
   "compilerOptions": {
     "target": "ES2022",
     "experimentalDecorators": true,

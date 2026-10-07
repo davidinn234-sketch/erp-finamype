@@ -76,7 +76,7 @@ export function generateSaleAccountingEntry(invoice: Invoice, entryNumber: numbe
   // 3. ABONO: Ingresos por Ventas (5101)
   const taxableSale = invoice.sumasGravadas + invoice.sumasExentas + invoice.sumasNoSujetas;
   lines.push({
-    accountCode: invoice.type === 'exportacion' ? '5102' : '5101',
+    accountCode: invoice.type === 'exportacion' ? '6103' : '6101',
     accountName: invoice.type === 'exportacion' ? 'Ingresos por Exportación (Tasa 0%)' : 'Ingresos por Ventas Locales Gravadas',
     debit: 0,
     credit: taxableSale,
@@ -143,7 +143,7 @@ export function generatePurchaseAccountingEntry(purchase: Purchase, entryNumber:
   const lines: JournalEntryLine[] = [];
 
   // 1. CARGO: Inventario (1105-01) o Gasto de Administración (4201-04)
-  const purchaseCostAccountCode = purchase.isServicesPurchase ? '4201-04' : '1105-01';
+  const purchaseCostAccountCode = purchase.isServicesPurchase ? '5102-03' : '1105-01';
   const purchaseCostAccountName = purchase.isServicesPurchase ? 'Honorarios y Servicios Profesionales' : 'Mercaderías para la Venta (Bodega Central)';
   const netPurchase = purchase.comprasGravadas + purchase.comprasExentas + purchase.comprasSujetoExcluido;
 
@@ -228,7 +228,7 @@ export function generatePayrollAccountingEntry(payroll: Payroll, entryNumber: nu
 
   // 1. CARGO: Gasto de Sueldos y Salarios (4201-01)
   lines.push({
-    accountCode: '4201-01',
+    accountCode: '5101-01',
     accountName: 'Sueldos y Salarios Administrativos',
     debit: payroll.totalDevengado,
     credit: 0,
@@ -236,18 +236,15 @@ export function generatePayrollAccountingEntry(payroll: Payroll, entryNumber: nu
   });
 
   // 2. CARGO: Gasto Aportes Patronales ISSS y AFP (4201-02)
-  const totalAportesPatronales = Number((payroll.totalIsssPatronal + payroll.totalAfpPatronal + payroll.totalInsaforpPatronal).toFixed(2));
-  lines.push({
-    accountCode: '4201-02',
-    accountName: 'Aportes Patronales ISSS y AFP',
-    debit: totalAportesPatronales,
-    credit: 0,
-    concept: `Aportes Patronales ISSS (7.5%), AFP (8.75%) e INSAFORP (1%)`,
-  });
+  for (const [code, name, value] of [
+    ['5101-02', 'Aportes patronales ISSS', payroll.totalIsssPatronal],
+    ['5101-03', 'Aportes patronales AFP', payroll.totalAfpPatronal],
+    ['5101-04', 'Aportes patronales INSAFORP', payroll.totalInsaforpPatronal],
+  ] as const) if (value > 0) lines.push({ accountCode: code, accountName: name, debit: value, credit: 0, concept: 'Devengo de aportes patronales' });
 
   // 3. CARGO: Gasto de Provisiones Laborales (4201-03)
   lines.push({
-    accountCode: '4201-03',
+    accountCode: '5101-05',
     accountName: 'Provisiones Laborales (Aguinaldo/Vacaciones)',
     debit: payroll.totalProvisiones,
     credit: 0,
@@ -311,44 +308,51 @@ export function generatePayrollAccountingEntry(payroll: Payroll, entryNumber: nu
     });
   }
 
-  // 6. ABONO: Provisiones en Pasivo
+  // Record the actual provisions calculated for each employee, rather than
+  // assigning arbitrary percentages of the total to different liabilities.
+  const includedDetails = payroll.details.filter(detail => detail.isIncluded !== false);
+  const provisionAguinaldo = Number(includedDetails.reduce((sum, detail) => sum + detail.provisionAguinaldo, 0).toFixed(2));
+  const provisionVacacion = Number(includedDetails.reduce((sum, detail) => sum + detail.provisionVacacion, 0).toFixed(2));
+  const provisionIndemnizacion = Number(includedDetails.reduce((sum, detail) => sum + detail.provisionIndemnizacion, 0).toFixed(2));
   lines.push({
     accountCode: '2110-01',
     accountName: 'Provisión para Aguinaldos',
     debit: 0,
-    credit: Number((payroll.totalProvisiones * 0.35).toFixed(2)),
+    credit: provisionAguinaldo,
     concept: `Reserva para Aguinaldo proporcional`,
   });
   lines.push({
     accountCode: '2110-02',
     accountName: 'Provisión para Vacaciones (Recargo 30%)',
     debit: 0,
-    credit: Number((payroll.totalProvisiones * 0.35).toFixed(2)),
+    credit: provisionVacacion,
     concept: `Reserva para Vacación Anual y recargo 30%`,
   });
   lines.push({
     accountCode: '2110-03',
     accountName: 'Provisión para Indemnizaciones',
     debit: 0,
-    credit: Number((payroll.totalProvisiones * 0.30).toFixed(2)),
+    credit: provisionIndemnizacion,
     concept: `Reserva para Indemnizaciones laborales`,
   });
 
-  // 7. ABONO: Sueldos Netos Pagados (Banco Agrícola / Efectivo)
+  // Accrual creates a payable. The selected bank is affected only on payment.
   lines.push({
-    accountCode: '1101-03',
-    accountName: 'Banco Agrícola (Cta. Corriente)',
+    accountCode: '2102-01',
+    accountName: 'Sueldos netos por pagar',
     debit: 0,
     credit: payroll.totalLiquido,
-    concept: `Pago líquido de planilla vía transferencia bancaria`,
+    concept: 'Devengo de sueldos pendientes de pago',
   });
+  const otherDeductions = Number((payroll.totalDevengado - payroll.totalIsssLaboral - payroll.totalAfpLaboral - payroll.totalRentaRetenida - payroll.totalLiquido).toFixed(2));
+  if (otherDeductions > 0) lines.push({ accountCode: '2102-02', accountName: 'Otras deducciones de planilla por pagar', debit: 0, credit: otherDeductions, concept: 'Deducciones adicionales de la planilla' });
 
   return createBalancedJournalEntry({
     id: `entry_payroll_${payroll.id}`,
     companyId: payroll.companyId,
     entryNumber,
     date: payroll.paymentDate,
-    concept: `Liquidación y Pago de Planilla ${payroll.periodType.toUpperCase()} - Período ${payroll.startDate} al ${payroll.endDate}`,
+    concept: `Devengo de Planilla ${payroll.periodType.toUpperCase()} - Período ${payroll.startDate} al ${payroll.endDate}`,
     sourceModule: 'planilla',
     referenceDoc: `PLN-${payroll.year}-${payroll.month}`,
     lines,

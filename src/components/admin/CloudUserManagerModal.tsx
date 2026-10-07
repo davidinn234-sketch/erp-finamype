@@ -4,6 +4,7 @@ import { db, testFirebaseConnection } from '../../lib/firebase';
 import { collection, doc, setDoc, getDocs } from 'firebase/firestore';
 import { UserProfile, SystemArchetype, UserRole, Company, Branch } from '../../types';
 import { DEFAULT_FISCAL_CONFIG } from '../../utils/salvadoranTax';
+import { AccessCredentialsDialog } from './UserAccessControls';
 import {
   Cloud,
   CheckCircle2,
@@ -42,8 +43,8 @@ export const CloudUserManagerModal: React.FC<Props> = ({ isOpen, onClose }) => {
     setActiveModule,
     addNotification,
     currentCompany,
-    createCompany,
-    createBranch,
+    createCompanyWithAdmin,
+    enterSupportMode,
   } = useERP();
 
   // Cloud status
@@ -56,11 +57,12 @@ export const CloudUserManagerModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('123456');
+  const [createdAccess, setCreatedAccess] = useState<{ name: string; email: string; password: string } | null>(null);
   const [phone, setPhone] = useState('');
   const [dui, setDui] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [businessGiro, setBusinessGiro] = useState('');
-  const [businessRole, setBusinessRole] = useState<UserRole>('admin_maestro');
+  const [businessRole, setBusinessRole] = useState<UserRole>('gerente');
 
   // Copy feedback
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -149,7 +151,7 @@ export const CloudUserManagerModal: React.FC<Props> = ({ isOpen, onClose }) => {
       companyId: compId,
       name: name.trim(),
       email: email.trim().toLowerCase(),
-      password: password.trim() || '123456',
+      password,
       role,
       systemArchetype: archetype,
       phone: phone.trim() || '+503 7000-0000',
@@ -170,49 +172,25 @@ export const CloudUserManagerModal: React.FC<Props> = ({ isOpen, onClose }) => {
     };
 
     try {
-      // 1. Guardar en Firestore
-      await setDoc(doc(db, 'companies', compId), newComp);
-      await setDoc(doc(db, 'branches', initialBranch.id), initialBranch);
-      await setDoc(doc(db, 'users', userId), newUser);
-
-      // 2. Registrar en estado local
-      createCompany(newComp);
-      createBranch(initialBranch);
-      createUser(newUser);
-
-      addNotification(
-        'success',
-        '¡Cuenta y Sucursal Creadas en la Nube!',
-        `Usuario ${newUser.name} registrado con su propia empresa y sucursal. En su primer inicio completará su personalización.`
-      );
-
-      // Reset form fields
-      setName('');
-      setEmail('');
-      setPassword('123456');
-      setPhone('');
-      setDui('');
-      setBusinessName('');
-      setBusinessGiro('');
-    } catch (err) {
-      console.error('Error saving to Firestore:', err);
-      // Fallback local save
-      createUser(newUser);
-      addNotification(
-        'info',
-        'Cuenta Registrada Localmente',
-        `El usuario fue registrado en la sesión. (Firebase offline/verificando)`
-      );
-    } finally {
-      setIsSaving(false);
-    }
+      if (accountType === 'finanzas_personales') {
+        const { companyId, id, ...personal } = newUser;
+        await createUser({ ...personal, role: 'gerente', isConfigured: true });
+      } else {
+        const { id, primaryAdminUserId, ...company } = newComp;
+        await createCompanyWithAdmin(company, { name: name.trim(), email, password, phone });
+      }
+      setCreatedAccess({ name: name.trim(), email: email.trim().toLowerCase(), password });
+      setName(''); setEmail(''); setPassword(''); setPhone(''); setDui(''); setBusinessName(''); setBusinessGiro('');
+    } catch (error) {
+      addNotification('error', 'No se creó la cuenta', error instanceof Error ? error.message : 'Comprueba la conexión.');
+    } finally { setIsSaving(false); }
   };
 
   const copyCredentials = (u: UserProfile) => {
     const text = `¡Hola ${u.name}! Aquí tienes tu acceso para FINAMIPE SV:
-🌐 Plataforma: https://ais-dev-zt5ox4j3ww7wbwalmkdubu-128537300182.us-east1.run.app
+🌐 Plataforma: ${window.location.origin}
 📧 Usuario: ${u.email}
-🔑 Contraseña: ${u.password || '123456'}
+🔑 Contraseña: ${'Protegida por Firebase'}
 📌 Tipo de Cuenta: ${
       u.systemArchetype === 'finanzas_personales'
         ? 'Finanzas Personales (Portal Independiente)'
@@ -228,12 +206,13 @@ export const CloudUserManagerModal: React.FC<Props> = ({ isOpen, onClose }) => {
   };
 
   const testLoginAsUser = (u: UserProfile) => {
-    login(u.email, u.password || 'admin');
-    onClose();
+    if (u.companyId) { enterSupportMode(u.companyId); onClose(); }
+    else addNotification('info', 'Finanzas privadas', 'Las finanzas personales solo son accesibles por su propietario.');
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
+      <AccessCredentialsDialog access={createdAccess} onClose={() => setCreatedAccess(null)} />
       <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-3xl w-full flex flex-col max-h-[92vh] overflow-hidden">
         {/* Header */}
         <div className="p-4 sm:p-6 bg-gradient-to-r from-blue-700 via-indigo-700 to-indigo-900 text-white flex items-center justify-between shrink-0">
@@ -493,7 +472,6 @@ export const CloudUserManagerModal: React.FC<Props> = ({ isOpen, onClose }) => {
                         onChange={(e) => setBusinessRole(e.target.value as UserRole)}
                         className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/30 outline-none"
                       >
-                        <option value="admin_maestro">Administrador Maestro (Dueño)</option>
                         <option value="gerente">Gerente de Operaciones</option>
                         <option value="cajero">Cajero (Punto de Venta POS)</option>
                         <option value="contador">Contador General</option>
@@ -576,7 +554,7 @@ export const CloudUserManagerModal: React.FC<Props> = ({ isOpen, onClose }) => {
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-400 font-mono">
-                          {u.email} • Clave: <span className="font-bold text-slate-600 dark:text-slate-300">{u.password || 'admin'}</span>
+                          {u.email} • Clave: <span className="font-bold text-slate-600 dark:text-slate-300">{'Protegida por Firebase'}</span>
                         </p>
                       </div>
                     </div>

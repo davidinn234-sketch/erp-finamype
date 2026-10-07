@@ -1,3 +1,5 @@
+import { useERP } from '../../context/ERPContext';
+import { buildAccountingReports, money } from '../../lib/accountingReports';
 import React, { useState, useMemo } from 'react';
 import {
   TrendingUp,
@@ -99,11 +101,12 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
   onSelectYear,
   onSelectMonth,
 }) => {
-  const availableYears = [2026, 2025, 2024, 2023, 2022];
+  const {journalEntries,chartOfAccounts,bankAccounts}=useERP();
+  const availableYears=[...new Set([new Date().getFullYear(),...journalEntries.map(entry=>Number(entry.date.slice(0,4)))])].sort((a,b)=>b-a);
 
   // Internal state fallback if not controlled by parent
   const [internalGranularity, setInternalGranularity] = useState<TimeGranularity>('meses');
-  const [internalYear, setInternalYear] = useState<number>(2026);
+  const [internalYear, setInternalYear] = useState<number>(new Date().getFullYear());
   const [internalMonth, setInternalMonth] = useState<string>('all');
 
   const selectedMasterYear = propSelectedYear !== undefined ? propSelectedYear : internalYear;
@@ -124,315 +127,16 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
   const [chartType, setChartType] = useState<'bars' | 'lines' | 'area'>('bars');
   const [showTable, setShowTable] = useState(false);
 
-  // Baseline monthly payroll cost with SV employer contributions (ISSS 7.5% + AFP 8.75% + INSAFORP 1% + Provisiones ~17%)
-  const baseMonthlyPayroll = useMemo(() => {
-    return (
-      (employees || [])
-        .filter((e) => e && e.isActive)
-        .reduce((acc, e) => acc + (e.baseSalary || 0) * 1.34, 0) || 2200
-    );
-  }, [employees]);
-
-  const baseOperatingExpenses = 1500;
-  const pagoCuentaRate = fiscalConfig?.pagoCuentaRate || 0.0175;
-
-  // Real DB aggregated figures
-  const realSales = useMemo(() => (invoices || []).reduce((acc, i) => acc + (i.totalPagar || 0), 0) || 7850, [invoices]);
-  const realPurchases = useMemo(() => (purchases || []).reduce((acc, p) => acc + (p.totalPagar || 0), 0) || 4200, [purchases]);
-  const realOtherIncomes = useMemo(() => (otherIncomes || []).reduce((acc, o) => acc + (o.amount || 0), 0) || 1200, [otherIncomes]);
-
-  // ----------------------------------------------------
-  // GENERADOR DINÁMICO DE 12 MESES PARA CUALQUIER AÑO
-  // ----------------------------------------------------
-  const generateMonthlyDataForYear = (targetYear: number): PeriodData[] => {
-    const monthConfigs = [
-      { key: '01', name: 'Enero', short: 'Ene', factor: 0.72, purFactor: 0.74, other: 0 },
-      { key: '02', name: 'Febrero', short: 'Feb', factor: 0.81, purFactor: 0.78, other: 250 },
-      { key: '03', name: 'Marzo', short: 'Mar', factor: 0.92, purFactor: 0.84, other: 150 },
-      { key: '04', name: 'Abril', short: 'Abr', factor: 0.88, purFactor: 0.82, other: 0 },
-      { key: '05', name: 'Mayo', short: 'May', factor: 1.05, purFactor: 0.95, other: 300 },
-      { key: '06', name: 'Junio', short: 'Jun', factor: 1.15, purFactor: 1.02, other: 1200 },
-      { key: '07', name: 'Julio', short: 'Jul', factor: 1.22, purFactor: 1.08, other: 100 },
-      { key: '08', name: 'Agosto', short: 'Ago', factor: 1.30, purFactor: 1.12, other: 500 },
-      { key: '09', name: 'Septiembre', short: 'Sep', factor: 1.18, purFactor: 1.05, other: 200 },
-      { key: '10', name: 'Octubre', short: 'Oct', factor: 1.25, purFactor: 1.10, other: 150 },
-      { key: '11', name: 'Noviembre', short: 'Nov', factor: 1.45, purFactor: 1.28, other: 350 },
-      { key: '12', name: 'Diciembre', short: 'Dic', factor: 1.68, purFactor: 1.40, other: 800 },
-    ];
-
-    let yearSalesBase = realSales;
-    let yearPurchasesBase = realPurchases;
-    let yearPayrollBase = baseMonthlyPayroll;
-    let yearOpExpBase = baseOperatingExpenses;
-
-    if (targetYear === 2022) {
-      yearSalesBase = 4360;
-      yearPurchasesBase = 2450;
-      yearPayrollBase = baseMonthlyPayroll * 0.72;
-      yearOpExpBase = 1000;
-    } else if (targetYear === 2023) {
-      yearSalesBase = 5700;
-      yearPurchasesBase = 3180;
-      yearPayrollBase = baseMonthlyPayroll * 0.82;
-      yearOpExpBase = 1200;
-    } else if (targetYear === 2024) {
-      yearSalesBase = 7450;
-      yearPurchasesBase = 3870;
-      yearPayrollBase = baseMonthlyPayroll * 0.91;
-      yearOpExpBase = 1350;
-    } else if (targetYear === 2025) {
-      yearSalesBase = 9400;
-      yearPurchasesBase = 4520;
-      yearPayrollBase = baseMonthlyPayroll * 0.96;
-      yearOpExpBase = 1450;
-    } else if (targetYear === 2026) {
-      yearSalesBase = realSales;
-      yearPurchasesBase = realPurchases;
-      yearPayrollBase = baseMonthlyPayroll;
-      yearOpExpBase = baseOperatingExpenses;
-    }
-
-    const currentSystemYear = new Date().getFullYear();
-    let prevSales = 0;
-
-    return monthConfigs.map((m) => {
-      const monthInvs = (invoices || []).filter(
-        (inv) => inv.date && inv.date.startsWith(`${targetYear}-${m.key}`) && inv.status !== 'anulada'
-      );
-      const monthPurs = (purchases || []).filter(
-        (pur) => pur.date && pur.date.startsWith(`${targetYear}-${m.key}`) && pur.status !== 'anulada'
-      );
-      const hasActualRecords = monthInvs.length > 0 || monthPurs.length > 0;
-
-      let sales = 0;
-      let purchasesVal = 0;
-      let other = 0;
-      let payroll = 0;
-      let opExpenses = 0;
-
-      if (targetYear < currentSystemYear) {
-        sales = Math.round(yearSalesBase * (m.factor / 1.30));
-        purchasesVal = Math.round(yearPurchasesBase * (m.purFactor / 1.12));
-        other = m.other;
-        payroll = Math.round(yearPayrollBase);
-        opExpenses = Math.round(yearOpExpBase);
-      } else if (targetYear === currentSystemYear) {
-        if (hasActualRecords) {
-          sales = monthInvs.reduce((sum, inv) => sum + (inv.totalPagar || 0), 0);
-          purchasesVal = monthPurs.reduce((sum, p) => sum + (p.totalPagar || 0), 0);
-          other = realOtherIncomes;
-          payroll = Math.round(baseMonthlyPayroll);
-          opExpenses = Math.round(baseOperatingExpenses);
-        } else {
-          sales = 0;
-          purchasesVal = 0;
-          other = 0;
-          payroll = 0;
-          opExpenses = 0;
-        }
-      }
-
-      const totalIncomesVal = sales + other;
-      const ivaDebito = sales * 0.13;
-      const ivaCredito = purchasesVal * 0.13;
-      const ivaNeto = Math.max(0, ivaDebito - ivaCredito);
-      const pagoCuenta = sales * pagoCuentaRate;
-      const taxesMH = Math.round(ivaNeto + pagoCuenta);
-
-      const totalOutflows = purchasesVal + payroll + opExpenses + taxesMH;
-      const gross = sales - purchasesVal;
-      const operating = gross - payroll - opExpenses;
-      const netFinal = operating + other - taxesMH;
-      const cashFlow = totalIncomesVal - totalOutflows;
-      const netPct = totalIncomesVal > 0 ? (netFinal / totalIncomesVal) * 100 : 0;
-      const growth = prevSales > 0 ? ((sales - prevSales) / prevSales) * 100 : 0;
-      prevSales = sales;
-
-      return {
-        periodKey: `${targetYear}-${m.key}`,
-        label: `${m.name} ${targetYear}`,
-        shortLabel: m.short,
-        ventas: sales,
-        otrosIngresos: other,
-        ingresosTotales: totalIncomesVal,
-        compras: purchasesVal,
-        nomina: payroll,
-        gastosOperativos: opExpenses,
-        impuestosMH: taxesMH,
-        egresosTotales: totalOutflows,
-        utilidadBruta: gross,
-        utilidadOperativa: operating,
-        utilidadNeta: netFinal,
-        flujoNeto: cashFlow,
-        margenNetoPct: Number(netPct.toFixed(1)),
-        growthVentas: Number(growth.toFixed(1)),
-      };
-    });
+  const periodData=(prefix:string,label:string,shortLabel:string):PeriodData=>{
+    const start=prefix.length===4?prefix+'-01-01':prefix.length===7?prefix+'-01':prefix;
+    const end=prefix.length===4?prefix+'-12-31':prefix.length===7?prefix+'-31':prefix;
+    const report=buildAccountingReports(chartOfAccounts,journalEntries,bankAccounts,start,end);
+    const payroll=report.period.filter(entry=>entry.sourceModule==='planilla').flatMap(entry=>entry.lines).filter(line=>chartOfAccounts.find(account=>account.code===line.accountCode)?.category==='gastos').reduce((sum,line)=>sum+line.debit-line.credit,0);
+    return {periodKey:prefix,label,shortLabel,ventas:report.revenue,otrosIngresos:0,ingresosTotales:report.revenue,compras:report.costs,nomina:money(payroll),gastosOperativos:money(report.expenses-payroll),impuestosMH:0,egresosTotales:money(report.costs+report.expenses),utilidadBruta:money(report.revenue-report.costs),utilidadOperativa:report.profit,utilidadNeta:report.profit,flujoNeto:report.netCash,margenNetoPct:report.revenue?report.profit/report.revenue*100:0};
   };
-
-  // ----------------------------------------------------
-  // GENERADOR DINÁMICO DE DETALLE INTRA-MES (Semanas)
-  // ----------------------------------------------------
-  const generateIntraMonthData = (targetYear: number, monthKey: string): PeriodData[] => {
-    const monthlyList = generateMonthlyDataForYear(targetYear);
-    const monthData = monthlyList.find((m) => m.periodKey.endsWith(`-${monthKey}`)) || monthlyList[0];
-    const monthInfo = MONTHS_CATALOG.find((m) => m.key === monthKey) || { name: 'Mes', short: 'M' };
-
-    const intraIntervals = [
-      { key: 'w1', name: 'Semana 1 (Días 01-07)', short: `01-07 ${monthInfo.short}`, weight: 0.22, payrollWeight: 0, taxWeight: 0 },
-      { key: 'w2', name: 'Semana 2 (Días 08-14)', short: `08-14 ${monthInfo.short}`, weight: 0.23, payrollWeight: 0, taxWeight: 0 },
-      { key: 'q1', name: 'Corte Quincena (Día 15)', short: `15 ${monthInfo.short} (Q1)`, weight: 0.08, payrollWeight: 0.50, taxWeight: 0 },
-      { key: 'w3', name: 'Semana 3 (Días 16-21)', short: `16-21 ${monthInfo.short}`, weight: 0.21, payrollWeight: 0, taxWeight: 0 },
-      { key: 'w4', name: 'Semana 4 (Días 22-28)', short: `22-28 ${monthInfo.short}`, weight: 0.16, payrollWeight: 0, taxWeight: 0 },
-      { key: 'cl', name: 'Cierre de Mes (Días 29-31)', short: `29-31 ${monthInfo.short}`, weight: 0.10, payrollWeight: 0.50, taxWeight: 1.0 },
-    ];
-
-    let prevSales = 0;
-
-    return intraIntervals.map((interval) => {
-      const sales = Math.round(monthData.ventas * interval.weight);
-      const other = Math.round(monthData.otrosIngresos * interval.weight);
-      const totalIncomesVal = sales + other;
-      const purchasesVal = Math.round(monthData.compras * interval.weight);
-      const payroll = Math.round(monthData.nomina * interval.payrollWeight);
-      const opExpenses = Math.round(monthData.gastosOperativos * interval.weight);
-      const taxesMH = Math.round(monthData.impuestosMH * interval.taxWeight);
-
-      const totalOutflows = purchasesVal + payroll + opExpenses + taxesMH;
-      const gross = sales - purchasesVal;
-      const operating = gross - payroll - opExpenses;
-      const netFinal = operating + other - taxesMH;
-      const cashFlow = totalIncomesVal - totalOutflows;
-      const netPct = totalIncomesVal > 0 ? (netFinal / totalIncomesVal) * 100 : 0;
-      const growth = prevSales > 0 ? ((sales - prevSales) / prevSales) * 100 : 0;
-      prevSales = sales;
-
-      return {
-        periodKey: `${targetYear}-${monthKey}-${interval.key}`,
-        label: `${interval.name} • ${monthInfo.name} ${targetYear}`,
-        shortLabel: interval.short,
-        ventas: sales,
-        otrosIngresos: other,
-        ingresosTotales: totalIncomesVal,
-        compras: purchasesVal,
-        nomina: payroll,
-        gastosOperativos: opExpenses,
-        impuestosMH: taxesMH,
-        egresosTotales: totalOutflows,
-        utilidadBruta: gross,
-        utilidadOperativa: operating,
-        utilidadNeta: netFinal,
-        flujoNeto: cashFlow,
-        margenNetoPct: Number(netPct.toFixed(1)),
-        growthVentas: Number(growth.toFixed(1)),
-      };
-    });
-  };
-
-  // ----------------------------------------------------
-  // BASE DE DATOS HISTÓRICA POR AÑOS (Multi-Anual 2022 - 2026)
-  // ----------------------------------------------------
-  const annualHistoricalData: PeriodData[] = useMemo(() => {
-    const data2026 = generateMonthlyDataForYear(2026);
-    const curYearSales = data2026.reduce((acc, m) => acc + m.ventas, 0);
-    const curYearOutflows = data2026.reduce((acc, m) => acc + m.egresosTotales, 0);
-    const curYearIncomes = data2026.reduce((acc, m) => acc + m.ingresosTotales, 0);
-    const curYearNetProfit = data2026.reduce((acc, m) => acc + m.utilidadNeta, 0);
-    const curYearCashFlow = data2026.reduce((acc, m) => acc + m.flujoNeto, 0);
-
-    return [
-      {
-        periodKey: '2022',
-        label: 'Año Fiscal 2022',
-        shortLabel: '2022',
-        ventas: 52400,
-        otrosIngresos: 1800,
-        ingresosTotales: 54200,
-        compras: 29400,
-        nomina: 18900,
-        gastosOperativos: 12000,
-        impuestosMH: 4800,
-        egresosTotales: 65100,
-        utilidadBruta: 23000,
-        utilidadOperativa: -7900,
-        utilidadNeta: -10900,
-        flujoNeto: -10900,
-        margenNetoPct: -20.1,
-      },
-      {
-        periodKey: '2023',
-        label: 'Año Fiscal 2023',
-        shortLabel: '2023',
-        ventas: 68500,
-        otrosIngresos: 2400,
-        ingresosTotales: 70900,
-        compras: 38200,
-        nomina: 21600,
-        gastosOperativos: 14400,
-        impuestosMH: 6100,
-        egresosTotales: 80300,
-        utilidadBruta: 30300,
-        utilidadOperativa: -5700,
-        utilidadNeta: -9400,
-        flujoNeto: -9400,
-        margenNetoPct: -13.2,
-      },
-      {
-        periodKey: '2024',
-        label: 'Año Fiscal 2024',
-        shortLabel: '2024',
-        ventas: 89400,
-        otrosIngresos: 3800,
-        ingresosTotales: 93200,
-        compras: 46500,
-        nomina: 24000,
-        gastosOperativos: 16200,
-        impuestosMH: 7800,
-        egresosTotales: 94500,
-        utilidadBruta: 42900,
-        utilidadOperativa: 2700,
-        utilidadNeta: -1300,
-        flujoNeto: -1300,
-        margenNetoPct: -1.4,
-      },
-      {
-        periodKey: '2025',
-        label: 'Año Fiscal 2025',
-        shortLabel: '2025',
-        ventas: 112800,
-        otrosIngresos: 5600,
-        ingresosTotales: 118400,
-        compras: 54200,
-        nomina: 26400,
-        gastosOperativos: 18000,
-        impuestosMH: 9900,
-        egresosTotales: 108500,
-        utilidadBruta: 58600,
-        utilidadOperativa: 14200,
-        utilidadNeta: 9900,
-        flujoNeto: 9900,
-        margenNetoPct: 8.4,
-      },
-      {
-        periodKey: '2026',
-        label: 'Año Fiscal 2026 (En Curso)',
-        shortLabel: '2026',
-        ventas: curYearSales || 63600,
-        otrosIngresos: 6800,
-        ingresosTotales: curYearIncomes || 70400,
-        compras: curYearSales ? Math.round(curYearSales * 0.45) : 28600,
-        nomina: Math.round(baseMonthlyPayroll * 12),
-        gastosOperativos: baseOperatingExpenses * 12,
-        impuestosMH: Math.round((curYearSales || 63600) * 0.05),
-        egresosTotales: curYearOutflows || 55200,
-        utilidadBruta: (curYearSales || 63600) - (curYearSales ? Math.round(curYearSales * 0.45) : 28600),
-        utilidadOperativa: 21800,
-        utilidadNeta: curYearNetProfit || 15200,
-        flujoNeto: curYearCashFlow || 15200,
-        margenNetoPct: Number((((curYearNetProfit || 15200) / (curYearIncomes || 70400)) * 100).toFixed(1)),
-      },
-    ];
-  }, [realSales, realPurchases, realOtherIncomes, baseMonthlyPayroll, baseOperatingExpenses, invoices, purchases]);
+  const generateMonthlyDataForYear=(year:number)=>Array.from({length:12},(_,index)=>{const date=new Date(year,index,1);return periodData(year+'-'+String(index+1).padStart(2,'0'),date.toLocaleDateString('es-SV',{month:'long'}),date.toLocaleDateString('es-SV',{month:'short'}));});
+  const generateIntraMonthData=(year:number,month:string)=>Array.from({length:new Date(year,Number(month),0).getDate()},(_,index)=>periodData(year+'-'+month+'-'+String(index+1).padStart(2,'0'),'Día '+(index+1),String(index+1)));
+  const annualHistoricalData=useMemo(()=>availableYears.slice().reverse().map(year=>periodData(String(year),'Año '+year,String(year))),[journalEntries,chartOfAccounts,bankAccounts]);
 
   // Current dataset selector
   const currentDataset: PeriodData[] = useMemo(() => {
@@ -443,7 +147,7 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
       return generateMonthlyDataForYear(selectedMasterYear);
     }
     return generateIntraMonthData(selectedMasterYear, selectedMasterMonth);
-  }, [granularity, selectedMasterYear, selectedMasterMonth, annualHistoricalData]);
+  }, [granularity, selectedMasterYear, selectedMasterMonth, annualHistoricalData, journalEntries, chartOfAccounts, bankAccounts]);
 
   // Summary statistics for the current active metric
   const metricStats = useMemo(() => {
@@ -540,7 +244,7 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
             <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-teal-50 dark:bg-teal-950/60 text-[#0F766E] dark:text-teal-300 border border-teal-200 dark:border-teal-800">
               {metricConfig.badge}
             </span>
-            <span className="text-[12px] text-[#6B7280] font-medium">• {selectedBranchName}</span>
+            <span className="text-[12px] text-[#6B7280] font-medium">• {'Contabilidad consolidada de la empresa'}</span>
           </div>
           <h2 className="text-[16px] font-semibold text-[#111827] dark:text-white flex items-center gap-2">
             <BarChart3 className="w-4 h-4 text-[#0F766E]" />
@@ -572,7 +276,7 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
                   ? 'bg-white dark:bg-slate-700 text-[#0F766E] dark:text-teal-300 shadow-2xs font-semibold'
                   : 'text-[#6B7280] hover:text-[#111827] dark:hover:text-white'
               }`}
-              title="Ver histórico multianual 2022 - 2026"
+              title="Ver años con registros"
             >
               <Layers className="w-3 h-3" />
               <span>Histórico 5 Años</span>
@@ -750,7 +454,7 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
 
       {/* MAIN RECHARTS GRAPH */}
       <div className="h-80 w-full pt-2">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer key={chartType} width="100%" height="100%">
           {activeMetric === 'comparativa' ? (
             chartType === 'bars' ? (
               <BarChart
@@ -781,10 +485,10 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
                   }}
                 />
                 <Legend verticalAlign="top" height={36} />
-                <Bar dataKey="ventas" name="1. Ventas Facturadas" fill="#0F766E" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="egresosTotales" name="2. Egresos Totales" fill="#64748B" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="utilidadNeta" name="3. Utilidad Neta Final" fill="#059669" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="flujoNeto" name="4. Flujo Neto de Caja" fill="#0D9488" radius={[4, 4, 0, 0]} />
+                <Bar isAnimationActive={false} dataKey="ventas" name="1. Ventas Facturadas" fill="#0F766E" radius={[4, 4, 0, 0]} />
+                <Bar isAnimationActive={false} dataKey="egresosTotales" name="2. Egresos Totales" fill="#64748B" radius={[4, 4, 0, 0]} />
+                <Bar isAnimationActive={false} dataKey="utilidadNeta" name="3. Utilidad Neta Final" fill="#059669" radius={[4, 4, 0, 0]} />
+                <Bar isAnimationActive={false} dataKey="flujoNeto" name="4. Flujo Neto de Caja" fill="#0D9488" radius={[4, 4, 0, 0]} />
               </BarChart>
             ) : chartType === 'lines' ? (
               <LineChart
@@ -815,9 +519,9 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
                   }}
                 />
                 <Legend verticalAlign="top" height={36} />
-                <Line type="monotone" dataKey="ventas" name="1. Ventas Facturadas" stroke="#0F766E" strokeWidth={3} dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="egresosTotales" name="2. Egresos Totales" stroke="#64748B" strokeWidth={3} dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="utilidadNeta" name="3. Utilidad Neta Final" stroke="#059669" strokeWidth={3} dot={{ r: 4 }} />
+                <Line isAnimationActive={false} type="monotone" dataKey="ventas" name="1. Ventas Facturadas" stroke="#0F766E" strokeWidth={3} dot={{ r: 4 }} />
+                <Line isAnimationActive={false} type="monotone" dataKey="egresosTotales" name="2. Egresos Totales" stroke="#64748B" strokeWidth={3} dot={{ r: 4 }} />
+                <Line isAnimationActive={false} type="monotone" dataKey="utilidadNeta" name="3. Utilidad Neta Final" stroke="#059669" strokeWidth={3} dot={{ r: 4 }} />
                 <Line
                   type="monotone"
                   dataKey="flujoNeto"
@@ -857,10 +561,10 @@ export const HistoricalFinancialAnalytics: React.FC<HistoricalFinancialAnalytics
                   }}
                 />
                 <Legend verticalAlign="top" height={36} />
-                <Area type="monotone" dataKey="ventas" name="Ventas" stroke="#0F766E" fill="#0F766E" fillOpacity={0.2} />
-                <Area type="monotone" dataKey="egresosTotales" name="Egresos" stroke="#64748B" fill="#64748B" fillOpacity={0.15} />
-                <Area type="monotone" dataKey="utilidadNeta" name="Utilidad Neta" stroke="#059669" fill="#059669" fillOpacity={0.25} />
-                <Area type="monotone" dataKey="flujoNeto" name="Flujo Neto" stroke="#0D9488" fill="#0D9488" fillOpacity={0.15} />
+                <Area isAnimationActive={false} type="monotone" dataKey="ventas" name="Ventas" stroke="#0F766E" fill="#0F766E" fillOpacity={0.2} />
+                <Area isAnimationActive={false} type="monotone" dataKey="egresosTotales" name="Egresos" stroke="#64748B" fill="#64748B" fillOpacity={0.15} />
+                <Area isAnimationActive={false} type="monotone" dataKey="utilidadNeta" name="Utilidad Neta" stroke="#059669" fill="#059669" fillOpacity={0.25} />
+                <Area isAnimationActive={false} type="monotone" dataKey="flujoNeto" name="Flujo Neto" stroke="#0D9488" fill="#0D9488" fillOpacity={0.15} />
               </AreaChart>
             )
           ) : chartType === 'bars' ? (
