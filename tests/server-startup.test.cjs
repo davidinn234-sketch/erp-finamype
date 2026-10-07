@@ -21,3 +21,23 @@ test('production API starts with require(ESM) disabled and protects private rout
     await new Promise(resolve => server.close(resolve));
   }
 });
+
+test('Vercel without private Firebase credentials explains the server setup requirement', async () => {
+  const previousVercel = process.env.VERCEL;
+  const previousCredential = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  process.env.VERCEL = '1';
+  delete process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  const server = createServer(handler);
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/admin/users/test/password`, {
+      method: 'POST', headers: { Authorization: 'Bearer invalid-token' }
+    });
+    assert.equal(response.status, 503);
+    assert.match((await response.json()).error, /credenciales privadas de Firebase/);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    if (previousVercel === undefined) delete process.env.VERCEL; else process.env.VERCEL = previousVercel;
+    if (previousCredential === undefined) delete process.env.FIREBASE_SERVICE_ACCOUNT_JSON; else process.env.FIREBASE_SERVICE_ACCOUNT_JSON = previousCredential;
+  }
+});

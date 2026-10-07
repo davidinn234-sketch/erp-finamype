@@ -3,6 +3,7 @@ export function getAdminApp() {
   if (getApps().length) return getApps()[0];
   const projectId = process.env.FIREBASE_PROJECT_ID || 'mi-erp-nube';
   const encoded = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (process.env.VERCEL && !encoded) throw new Error('Configura FIREBASE_SERVICE_ACCOUNT_JSON en las variables privadas del servidor de Vercel.');
   if (encoded) {
     let account: Record<string, string>;
     try { account = JSON.parse(encoded); } catch { throw new Error('La credencial privada del servidor no contiene JSON válido.'); }
