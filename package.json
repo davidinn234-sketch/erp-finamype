@@ -12,7 +12,8 @@
     "lint": "tsc --noEmit",
     "test:rules": "firebase emulators:exec --config firebase.emulators.json --project demo-fina-pyme --only firestore \"tsx --test tests/isolation.test.ts\"",
     "test:ui": "firebase emulators:exec --config firebase.emulators.json --project demo-fina-pyme --only auth,firestore \"playwright test\"",
-    "test:reports": "tsx --test tests/reporting.test.ts"
+    "test:reports": "tsx --test tests/reporting.test.ts",
+    "test:server": "npm run vercel-build --prefix api && node --no-experimental-require-module --test tests/server-startup.test.cjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -44,6 +45,11 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.3"
+  },
+  "overrides": {
+    "jwks-rsa": {
+      "jose": "5.10.0"
+    }
   },
   "engines": {
     "node": "22.x"
