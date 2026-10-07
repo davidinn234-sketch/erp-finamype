@@ -1,10 +1,10 @@
 import express from 'express';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
-import { getAdminApp } from './firebaseAdmin';
+import { getAdminApp } from './firebaseAdmin.js';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { userAccessRouter } from './userAccess';
+import { userAccessRouter } from './userAccess.js';
 
 dotenv.config();
 

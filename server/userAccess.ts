@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getAdminApp } from './firebaseAdmin';
+import { getAdminApp } from './firebaseAdmin.js';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 
