@@ -1,3 +1,4 @@
+import { AuthSessionProvider, useAuthSession } from './context/AuthSession';
 import React, { useState, useEffect } from 'react';
 import { ERPProvider, useERP } from './context/ERPContext';
 import { Header } from './components/common/Header';
@@ -99,6 +100,10 @@ const MainLayout: React.FC = () => {
         <ToastContainer />
       </>
     );
+  }
+
+  if (currentUser.companyId && currentCompany.id !== currentUser.companyId && !isSupportMode) {
+    return <div role="status" className="p-8">Cargando los datos de tu empresa… <button onClick={logout}>Cerrar sesión</button></div>;
   }
 
   // If user account is a Dedicated Tablet Kiosk for Attendance:
@@ -260,10 +265,13 @@ const MainLayout: React.FC = () => {
   );
 };
 
+function SessionERP() {
+  const { profile, ready } = useAuthSession();
+  if (!ready) return <div role="status" className="p-8">Verificando sesión…</div>;
+  // A change of identity, company or role discards the previous account's in-memory data.
+  return <ERPProvider key={`${profile?.id || 'signedout'}:${profile?.companyId || ''}:${profile?.role || ''}`}><MainLayout /></ERPProvider>;
+}
+
 export default function App() {
-  return (
-    <ERPProvider>
-      <MainLayout />
-    </ERPProvider>
-  );
+  return <AuthSessionProvider><SessionERP /></AuthSessionProvider>;
 }

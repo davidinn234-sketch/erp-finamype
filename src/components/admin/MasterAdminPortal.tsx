@@ -102,7 +102,7 @@ export const MasterAdminPortal: React.FC = () => {
   // Admin user credentials
   const [formAdminName, setFormAdminName] = useState('');
   const [formAdminEmail, setFormAdminEmail] = useState('');
-  const [formAdminPassword, setFormAdminPassword] = useState('admin123');
+  const [formAdminPassword, setFormAdminPassword] = useState('');
   const [formAdminPhone, setFormAdminPhone] = useState('');
 
   // Submitting
@@ -220,7 +220,7 @@ export const MasterAdminPortal: React.FC = () => {
       setFormEmail('');
       setFormAdminName('');
       setFormAdminEmail('');
-      setFormAdminPassword('admin123');
+      setFormAdminPassword('');
       setFormAdminPhone('');
       setFormNotes('');
       setActiveTab('empresas');
@@ -250,7 +250,7 @@ Ya hemos habilitado la cuenta de tu empresa *${comp.tradeName || comp.name}*:
 
 🌐 *Plataforma:* https://ais-dev-zt5ox4j3ww7wbwalmkdubu-128537300182.us-east1.run.app
 📧 *Correo de Acceso:* ${adminUser?.email || comp.email}
-🔑 *Contraseña:* ${adminUser?.password || 'admin123'}
+🔑 *Contraseña:* ${'No se muestra; utiliza la contraseña asignada'}
 📦 *Plan Activado:* ${serviceName} ($${comp.subscriptionPrice || 14.99}/mes)
 
 ✨ Tu cuenta empieza completamente desde CERO ($0.00) lista para que ingreses tus productos y comiences a registrar tus ventas diarias.
@@ -1188,7 +1188,7 @@ Ya hemos habilitado la cuenta de tu empresa *${comp.tradeName || comp.name}*:
                             </span>
                           </td>
                           <td className="px-4 py-3 font-mono text-slate-400">
-                            {u.password || 'admin'}
+                            {'No se muestra; utiliza la contraseña asignada'}
                           </td>
                           <td className="px-4 py-3 text-right space-x-1">
                             {!isSuper && (
@@ -1244,7 +1244,7 @@ Ya hemos habilitado la cuenta de tu empresa *${comp.tradeName || comp.name}*:
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Contraseña:</span>
-                <span className="text-emerald-400 font-bold">{createdModalData.user.password}</span>
+                <span className="text-emerald-400 font-bold">{'La contraseña que ingresaste al crear la cuenta'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Modalidad:</span>

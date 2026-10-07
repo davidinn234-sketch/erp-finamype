@@ -1,3 +1,5 @@
+import { accountsRouter, registrationRouter } from './server/accounts';
+import { requireSession, rateLimit } from './server/security';
 import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
@@ -6,10 +8,13 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const app = express();
-const PORT = 3000;
+export const app = express();
+const PORT = Number(process.env.PORT || 3000);
 
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '1mb' }));
+app.use('/api/accounts', accountsRouter);
+app.use('/api/register', registrationRouter);
+app.use('/api/ai', requireSession, rateLimit(20, 60 * 1000));
 
 // Lazy initializer for Gemini client
 let aiClient: GoogleGenAI | null = null;
@@ -40,7 +45,7 @@ app.get('/api/health', (req, res) => {
 app.post('/api/ai/chat', async (req, res) => {
   try {
     const { message, context, chatHistory } = req.body;
-    if (!message) {
+    if (typeof message !== 'string' || !message.trim() || message.length > 8000) {
       return res.status(400).json({ error: 'El mensaje es requerido.' });
     }
 
@@ -58,7 +63,8 @@ ${context ? JSON.stringify(context, null, 2) : 'No se adjuntó contexto'}`;
 
     const contents = [];
     if (Array.isArray(chatHistory)) {
-      for (const msg of chatHistory) {
+      for (const msg of chatHistory.slice(-30)) {
+        if (!msg || typeof msg.content !== 'string' || msg.content.length > 8000) continue;
         contents.push({
           role: msg.role === 'user' ? 'user' : 'model',
           parts: [{ text: msg.content }],
@@ -71,7 +77,7 @@ ${context ? JSON.stringify(context, null, 2) : 'No se adjuntó contexto'}`;
     });
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
+      model: process.env.GEMINI_MODEL || 'gemini-3.7-flash',
       contents,
       config: {
         systemInstruction,
@@ -83,7 +89,7 @@ ${context ? JSON.stringify(context, null, 2) : 'No se adjuntó contexto'}`;
   } catch (error: any) {
     console.error('Error in /api/ai/chat:', error);
     return res.status(500).json({
-      error: error.message || 'Error al conectar con SivarAI Copilot.',
+      error: 'El asistente no está disponible. Intenta nuevamente.',
     });
   }
 });
@@ -92,7 +98,7 @@ ${context ? JSON.stringify(context, null, 2) : 'No se adjuntó contexto'}`;
 app.post('/api/ai/dynamic-chart', async (req, res) => {
   try {
     const { prompt, dataset, companyContext } = req.body;
-    if (!prompt) {
+    if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 8000) {
       return res.status(400).json({ error: 'El prompt de análisis es requerido.' });
     }
 
@@ -100,7 +106,7 @@ app.post('/api/ai/dynamic-chart', async (req, res) => {
 
     const ai = getAIClient();
     const systemInstruction = `Eres un motor experto en Inteligencia Artificial, Business Intelligence y visualización de datos para SivarFlow ERP en El Salvador.
-Tu objetivo es analizar la solicitud del usuario (por ejemplo: "ventas mensuales del año 2022", "ventas por departamento", "distribución de clientes por género", "gastos por categoría", "utilidad por trimestre") y los datos de la empresa, y generar un JSON estructurado con la configuración y serie de datos para renderizar un gráfico interactivo.
+No inventes cifras ni completes datos ausentes. Si falta información, devuelve data vacío y explica la limitación. Tu objetivo es analizar la solicitud del usuario (por ejemplo: "ventas mensuales del año 2022", "ventas por departamento", "distribución de clientes por género", "gastos por categoría", "utilidad por trimestre") y los datos de la empresa, y generar un JSON estructurado con la configuración y serie de datos para renderizar un gráfico interactivo.
 
 Debes responder ÚNICAMENTE en JSON con el esquema especificado:
 - chartType: Puede ser "bar", "area", "pie", o "line".
@@ -110,7 +116,7 @@ Debes responder ÚNICAMENTE en JSON con el esquema especificado:
 - insights: Arreglo de 2 o 3 viñetas con observaciones clave detectadas en los datos para la toma de decisiones gerenciales.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
+      model: process.env.GEMINI_MODEL || 'gemini-3.7-flash',
       contents: `Solicitud del usuario: "${prompt}"\n\nContexto y datos de la empresa:\n${JSON.stringify(businessData, null, 2)}`,
       config: {
         systemInstruction,
@@ -153,86 +159,12 @@ Debes responder ÚNICAMENTE en JSON con el esquema especificado:
     });
 
     const parsedData = JSON.parse(response.text?.trim() || '{}');
+    if (!['bar', 'area', 'pie', 'line'].includes(parsedData.chartType) || typeof parsedData.title !== 'string' || !Array.isArray(parsedData.data) || !parsedData.data.every((row: any) => typeof row.name === 'string' && Number.isFinite(row.value))) throw new Error('Invalid chart response');
     return res.json(parsedData);
   } catch (error: any) {
     console.error('Error in /api/ai/dynamic-chart:', error);
 
-    // High quality intelligent heuristic fallback if Gemini API key isn't provided or fails
-    const promptLower = (req.body.prompt || '').toLowerCase();
-    let title = 'Análisis Personalizado con IA';
-    let chartType: 'bar' | 'pie' | 'line' | 'area' = 'bar';
-    let description = 'Gráfico generado a partir de tu consulta gerencial';
-    let data: Array<{ name: string; value: number }> = [];
-    let insights: string[] = [];
-
-    if (promptLower.includes('2022') || promptLower.includes('mensual')) {
-      title = 'Ventas Mensuales - Ejercicio Fiscal 2022';
-      chartType = 'area';
-      description = 'Comportamiento histórico de facturación mensual durante el año 2022';
-      data = [
-        { name: 'Ene', value: 3200 },
-        { name: 'Feb', value: 3600 },
-        { name: 'Mar', value: 4100 },
-        { name: 'Abr', value: 3900 },
-        { name: 'May', value: 4600 },
-        { name: 'Jun', value: 4800 },
-        { name: 'Jul', value: 5100 },
-        { name: 'Ago', value: 4200 },
-        { name: 'Sep', value: 4400 },
-        { name: 'Oct', value: 4700 },
-        { name: 'Nov', value: 5900 },
-        { name: 'Dic', value: 6800 },
-      ];
-      insights = [
-        'Ventas totales en 2022 alcanzaron $55,300 con fuerte pico en temporada navideña de diciembre.',
-        'El mes de agosto 2022 registró una facturación de $4,200.',
-        'Crecimiento constante del 112% desde enero a diciembre 2022.',
-      ];
-    } else if (promptLower.includes('departamento') || promptLower.includes('zona') || promptLower.includes('region')) {
-      title = 'Facturación por Departamento (El Salvador)';
-      chartType = 'bar';
-      description = 'Distribución geográfica de ingresos comerciales en territorio salvadoreño';
-      data = [
-        { name: 'San Salvador', value: 48500 },
-        { name: 'La Libertad', value: 29400 },
-        { name: 'Santa Ana', value: 16800 },
-        { name: 'San Miguel', value: 14200 },
-        { name: 'Sonsonate', value: 8900 },
-      ];
-      insights = [
-        'San Salvador y La Libertad concentran el 66% de la facturación total.',
-        'San Miguel y Santa Ana representan los polos de mayor potencial de expansión.',
-      ];
-    } else if (promptLower.includes('genero') || promptLower.includes('género') || promptLower.includes('sexo')) {
-      title = 'Distribución de Clientes por Género & Tipo';
-      chartType = 'pie';
-      description = 'Proporción de ingresos generados por segmento de clientela';
-      data = [
-        { name: 'Empresas (B2B)', value: 45700 },
-        { name: 'Mujeres (Femenino)', value: 28900 },
-        { name: 'Hombres (Masculino)', value: 19400 },
-      ];
-      insights = [
-        'El segmento corporativo (B2B) representa el ticket promedio más alto con $1,850 por DTE.',
-        'El segmento femenino genera alta recurrencia de compra mensual.',
-      ];
-    } else {
-      title = `Análisis: ${req.body.prompt.slice(0, 35)}...`;
-      chartType = 'bar';
-      description = 'Visualización personalizada generada con el copiloto analítico de SivarFlow';
-      data = [
-        { name: 'Segmento A', value: 14200 },
-        { name: 'Segmento B', value: 9800 },
-        { name: 'Segmento C', value: 18600 },
-        { name: 'Segmento D', value: 12400 },
-      ];
-      insights = [
-        'Métrica procesada a partir de los libros y registros del ERP.',
-        'Identificado un comportamiento positivo en los períodos de mayor actividad comercial.',
-      ];
-    }
-
-    return res.json({ chartType, title, description, data, insights });
+    return res.status(503).json({ error: 'No se pudo generar el gráfico. Intenta nuevamente; no se han creado datos de ejemplo.' });
   }
 });
 
@@ -240,13 +172,13 @@ Debes responder ÚNICAMENTE en JSON con el esquema especificado:
 app.post('/api/ai/copilot', async (req, res) => {
   try {
     const { prompt, companyContext } = req.body;
-    if (!prompt) {
+    if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 8000) {
       return res.status(400).json({ error: 'El prompt es requerido.' });
     }
 
     const ai = getAIClient();
     const systemInstruction = `Eres "SivarAI Copilot", el Agente de Inteligencia Artificial y Consultor Empresarial de Élite integrado directamente en SivarFlow ERP (El Salvador).
-Tienes facultades completas de AUTOPILOTO OPERATIVO y CONSULTORÍA FINANCIERA ESTRATÉGICA.
+Generas propuestas y análisis; NO has ejecutado ninguna operación. Nunca afirmes que registraste una venta, compra o cliente. No inventes montos, identidades ni documentos.
 
 Tu misión es clasificar la intención del usuario en una de las siguientes 6 ACCIONES y generar la estructura JSON correspondiente:
 
@@ -310,7 +242,7 @@ Formato de respuesta: Devuelve ÚNICAMENTE un JSON con:
 }`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
+      model: process.env.GEMINI_MODEL || 'gemini-3.7-flash',
       contents: `Solicitud del usuario: "${prompt}"\n\nContexto financiero y operativo actual de la empresa:\n${JSON.stringify(companyContext || {}, null, 2)}`,
       config: {
         systemInstruction,
@@ -323,198 +255,7 @@ Formato de respuesta: Devuelve ÚNICAMENTE un JSON con:
   } catch (error: any) {
     console.error('Error in /api/ai/copilot:', error);
 
-    // Ultra-reliable fallback parser for all 6 action intents
-    const prompt = (req.body.prompt || '').trim();
-    const promptLower = prompt.toLowerCase();
-    const ctx = req.body.companyContext || {};
-
-    // 1. Check if intent is REGISTER_CUSTOMER
-    if (
-      promptLower.includes('cliente') &&
-      (promptLower.includes('meter') || promptLower.includes('crear') || promptLower.includes('ingresar') || promptLower.includes('nuevo') || promptLower.includes('agregar'))
-    ) {
-      // Extract potential name, nit, dept
-      const nameMatch = prompt.match(/(?:cliente|nombre|empresa)\s*[:=]?\s*([A-Za-zÁ-ÿ0-9\s.,-]+?)(?:,|\.|$|con|nit|dui)/i);
-      const nitMatch = prompt.match(/(?:nit|dui)\s*[:=]?\s*([0-9-]{9,17})/i);
-      const phoneMatch = prompt.match(/(?:tel|teléfono|telefono|cel)\s*[:=]?\s*([0-9-]{8,12})/i);
-      const emailMatch = prompt.match(/([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+)/i);
-
-      const customerName = nameMatch ? nameMatch[1].trim() : 'Ferretería & Comercial El Progreso';
-      const nit = nitMatch ? nitMatch[1].trim() : '0614-120590-101-2';
-      const phone = phoneMatch ? phoneMatch[1].trim() : '2250-8899';
-      const email = emailMatch ? emailMatch[1].trim() : 'contacto@cliente.sv';
-
-      return res.json({
-        actionType: 'REGISTER_CUSTOMER',
-        replyText: `¡He registrado con éxito al nuevo cliente "${customerName}" en tu catálogo CRM de SivarFlow! Ya está disponible para facturar con DTE (Factura o Crédito Fiscal).`,
-        customerData: {
-          name: customerName,
-          nit,
-          nrc: promptLower.includes('nrc') ? '198421-3' : '',
-          email,
-          phone,
-          address: 'Av. Las Palmeras #412, San Salvador',
-          department: 'San Salvador',
-          municipality: 'San Salvador Centro',
-          customerType: promptLower.includes('credito fiscal') || promptLower.includes('ccf') || promptLower.includes('empresa') ? 'contribuyente' : 'final',
-        },
-      });
-    }
-
-    // 2. Check if intent is REGISTER_SALE
-    if (
-      promptLower.includes('venta') ||
-      promptLower.includes('vender') ||
-      promptLower.includes('factura') ||
-      (promptLower.includes('cobrar') && !promptLower.includes('cuentas'))
-    ) {
-      // Extract money amount
-      const amountMatch = prompt.match(/\$?\s*([0-9]+(?:\.[0-9]{1,2})?)/);
-      const amount = amountMatch ? parseFloat(amountMatch[1]) : 150.0;
-      const customerMatch = prompt.match(/(?:a|cliente|para)\s+([A-Za-zÁ-ÿ\s]+?)(?:al|con|por|\$|$)/i);
-      const customerName = customerMatch ? customerMatch[1].trim() : 'Cliente General';
-
-      return res.json({
-        actionType: 'REGISTER_SALE',
-        replyText: `¡Venta registrada con éxito en el sistema! He emitido la operación por valor de $${amount.toFixed(2)} asignada a "${customerName}". Se ha actualizado el libro de ventas e inventario.`,
-        saleData: {
-          customerName,
-          customerDuiNit: '05123456-7',
-          items: [
-            {
-              description: 'Venta de productos/servicios comerciales',
-              quantity: 1,
-              unitPrice: amount,
-            },
-          ],
-          total: amount,
-          docType: promptLower.includes('ccf') || promptLower.includes('credito fiscal') ? '03' : '01',
-          paymentCondition: promptLower.includes('credito') ? 'credito_30' : 'contado',
-        },
-      });
-    }
-
-    // 3. Check if intent is REGISTER_PURCHASE / REGISTER_EXPENSE
-    if (
-      promptLower.includes('gasto') ||
-      promptLower.includes('compra') ||
-      promptLower.includes('egreso') ||
-      promptLower.includes('pagar') ||
-      promptLower.includes('desembolso')
-    ) {
-      const amountMatch = prompt.match(/\$?\s*([0-9]+(?:\.[0-9]{1,2})?)/);
-      const amount = amountMatch ? parseFloat(amountMatch[1]) : 85.0;
-      const supplierMatch = prompt.match(/(?:a|de|proveedor)\s+([A-Za-zÁ-ÿ\s]+?)(?:al|con|por|\$|$)/i);
-      const supplierName = supplierMatch ? supplierMatch[1].trim() : 'Distribuidora & Suministros SV';
-
-      let category = 'Papelería & Suministros';
-      if (promptLower.includes('combustible') || promptLower.includes('gasolina')) category = 'Combustible';
-      if (promptLower.includes('materia') || promptLower.includes('prima') || promptLower.includes('insumos')) category = 'Materia Prima';
-      if (promptLower.includes('luz') || promptLower.includes('agua') || promptLower.includes('internet')) category = 'Servicios Básicos';
-
-      return res.json({
-        actionType: 'REGISTER_PURCHASE',
-        replyText: `¡Gasto/Compra registrado correctamente! Se ingresó el desembolso de $${amount.toFixed(2)} bajo la categoría "${category}" a nombre de "${supplierName}". Afectó directamente tu estado de resultados y caja.`,
-        purchaseData: {
-          supplierName,
-          documentNumber: `CCF-${Math.floor(100000 + Math.random() * 900000)}`,
-          docType: '03',
-          items: [
-            {
-              description: `Desembolso operativo: ${category}`,
-              quantity: 1,
-              unitPrice: amount,
-            },
-          ],
-          total: amount,
-          paymentCondition: 'contado',
-          category,
-        },
-      });
-    }
-
-    // 4. Check if intent is BUSINESS_CONSULTANT (e.g. bulk raw material offer / investment scenario)
-    if (
-      promptLower.includes('invertir') ||
-      promptLower.includes('inversion') ||
-      promptLower.includes('materia prima') ||
-      promptLower.includes('descuento') ||
-      promptLower.includes('saludable') ||
-      promptLower.includes('conviene') ||
-      promptLower.includes('promocion') ||
-      promptLower.includes('promoción') ||
-      promptLower.includes('comprar al por mayor') ||
-      promptLower.includes('desembolsar')
-    ) {
-      const amountMatch = prompt.match(/\$?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,2})?|[0-9]+)/);
-      const proposedInvestment = amountMatch ? parseFloat(amountMatch[1].replace(',', '')) : 8000;
-      const currentLiquidity = ctx.totalLiquid || 71000;
-      const monthlyBurn = ctx.monthlyBurnRate || 4800;
-      const runwayAfterInvestment = (currentLiquidity - proposedInvestment) / (monthlyBurn || 1);
-
-      const isHealthy = runwayAfterInvestment >= 4;
-
-      return res.json({
-        actionType: 'BUSINESS_CONSULTANT',
-        replyText: `He evaluado minuciosamente tu propuesta de inversión en materia prima con descuento tomando en cuenta el balance de liquidez en bancos, tus egresos fijos y tu rotación de capital en SivarFlow:`,
-        consultantData: {
-          feasibilityScore: isHealthy ? 88 : 45,
-          riskLevel: isHealthy ? 'moderado' : 'alto',
-          verdict: isHealthy
-            ? 'OPERACIÓN ESTRATÉGICAMENTE RECOMENDADA (VIABLE CON CONDICIONES)'
-            : 'PRECAUCIÓN SEVERA: RIESGO DE ILIQUIDEZ EN CAPITAL DE TRABAJO',
-          liquidityImpact: `Tu liquidez actual es de $${currentLiquidity.toLocaleString()}. Si desembolsas $${proposedInvestment.toLocaleString()}, tu saldo de caja quedará en $${(currentLiquidity - proposedInvestment).toLocaleString()}, preservando un runway operativo de ${runwayAfterInvestment.toFixed(1)} meses de operación fija sin necesidad de financiamiento externo.`,
-          workingCapitalAnalysis: `El descuento en materia prima elevará tu Margen Bruto estimado en un +4.2% a +6.5% por unidad terminada. Sin embargo, debes asegurar que el lote no tarde más de 60 días en rotar para evitar costos de almacenamiento o merma de producto.`,
-          actionableSteps: [
-            `Negocia un esquema 50% de anticipo al contado y 50% a 30 días crédito para no drenar toda la liquidez en un solo desembolso.`,
-            `Confirma que la vida útil y demanda de la materia prima garantice su consumo en menos de 90 días.`,
-            `Aprovecha el Crédito Fiscal IVA (13%) del Comprobante de Crédito Fiscal (CCF) para deducirlo contra tus ventas del mes en el formulario F-07.`,
-          ],
-        },
-      });
-    }
-
-    // 5. Check if intent is CREATE_CHART
-    if (
-      promptLower.includes('grafico') ||
-      promptLower.includes('gráfico') ||
-      promptLower.includes('grafica') ||
-      promptLower.includes('gráfica')
-    ) {
-      return res.json({
-        actionType: 'CREATE_CHART',
-        replyText: `He generado el gráfico personalizado a partir de tu solicitud:`,
-        chartData: {
-          chartType: promptLower.includes('pie') || promptLower.includes('pastel') ? 'pie' : 'bar',
-          title: 'Análisis Solicitado por IA',
-          description: 'Distribución generada a partir de los libros contables y operativos del ERP',
-          data: [
-            { name: 'Ventas Contado', value: 34500 },
-            { name: 'Ventas Crédito 30d', value: 21800 },
-            { name: 'Contratos B2B', value: 18900 },
-            { name: 'Otros Ingresos', value: 3300 },
-          ],
-          insights: [
-            'El 44% de las ventas entra de inmediato en efectivo o transferencias directas.',
-            'La cartera a crédito de 30 días mantiene un índice de recaudo del 94.2%.',
-          ],
-        },
-      });
-    }
-
-    // 6. Default: QUERY_ANSWER
-    const cashSales = (ctx.invoices || [])
-      .filter((i: any) => i.paymentCondition === 'contado')
-      .reduce((sum: number, i: any) => sum + (i.totalPagar || 0), 0) || 5240;
-
-    return res.json({
-      actionType: 'QUERY_ANSWER',
-      replyText: `Consultando tus registros en SivarFlow: Durante el mes en curso has generado un total de $${cashSales.toLocaleString()} en ventas al contado (efectivo y transferencias inmediatas). Cuentas con $${(ctx.totalLiquid || 71000).toLocaleString()} de liquidez global distribuida entre tus cuentas bancarias y caja chica.`,
-      queryData: {
-        directAnswer: `Ventas en efectivo este mes: $${cashSales.toLocaleString()}`,
-        breakdown: `Facturado en efectivo: $${cashSales.toLocaleString()} • Liquidez en bancos: $${(ctx.totalLiquid || 71000).toLocaleString()} • Facturas al contado emitidas: ${(ctx.invoices || []).length || 18}`,
-      },
-    });
+    return res.status(503).json({ error: 'El asistente no está disponible. No se registró ninguna operación.' });
   }
 });
 
@@ -525,7 +266,7 @@ app.post('/api/ai/financial-diagnosis', async (req, res) => {
     const ai = getAIClient();
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.7-flash',
+      model: process.env.GEMINI_MODEL || 'gemini-3.7-flash',
       contents: `Genera un diagnóstico financiero y recomendaciones estratégicas para este negocio en El Salvador basado en sus métricas actuales:
 ${JSON.stringify(financialData, null, 2)}`,
       config: {
@@ -568,7 +309,7 @@ Devuelve un JSON estructurado con:
   } catch (error: any) {
     console.error('Error in /api/ai/financial-diagnosis:', error);
     return res.status(500).json({
-      error: error.message || 'Error al generar el diagnóstico financiero.',
+      error: 'No se pudo generar el diagnóstico financiero. Intenta nuevamente.',
     });
   }
 });
@@ -594,4 +335,4 @@ async function startServer() {
   });
 }
 
-startServer();
+if (process.env.NODE_ENV !== 'test') void startServer();

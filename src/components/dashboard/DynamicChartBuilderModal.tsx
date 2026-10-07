@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../../lib/api';
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import {
@@ -33,6 +34,7 @@ export const DynamicChartBuilderModal: React.FC<DynamicChartBuilderModalProps> =
     bankAccounts,
   } = useERP();
 
+  const [aiError, setAiError] = useState('');
   const [mode, setMode] = useState<'ai' | 'manual'>('ai');
   const [aiPrompt, setAiPrompt] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -52,11 +54,12 @@ export const DynamicChartBuilderModal: React.FC<DynamicChartBuilderModalProps> =
 
   const handleGenerateAI = async () => {
     if (!aiPrompt.trim()) return;
+    setAiError('');
     setIsLoading(true);
     setErrorMessage('');
 
     try {
-      const response = await fetch('/api/ai/dynamic-chart', {
+      const response = await authenticatedFetch('/api/ai/dynamic-chart', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -98,20 +101,7 @@ export const DynamicChartBuilderModal: React.FC<DynamicChartBuilderModalProps> =
       onClose();
     } catch (err: any) {
       console.error('AI Chart Error:', err);
-      // Fallback local widget if network/key issue
-      addDynamicWidget({
-        title: `Análisis: ${aiPrompt.slice(0, 30)}...`,
-        description: 'Gráfico interactivo generado con datos actuales del negocio',
-        chartType: 'bar',
-        data: [
-          { name: 'Segmento 1', value: 3400 },
-          { name: 'Segmento 2', value: 2100 },
-          { name: 'Segmento 3', value: 4500 },
-        ],
-        insights: ['Generado con motor analítico de FINAMIPE SV.'],
-        createdByAI: true,
-      });
-      onClose();
+      setAiError('No se pudo generar el gráfico. Intenta nuevamente; no se creó ningún gráfico.');
     } finally {
       setIsLoading(false);
     }
@@ -155,6 +145,7 @@ export const DynamicChartBuilderModal: React.FC<DynamicChartBuilderModalProps> =
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-3 sm:p-4">
       <div className="bg-white dark:bg-slate-900 rounded-[8px] shadow-lg border border-[#E3E8E6] dark:border-slate-800 w-full max-w-xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        {aiError && <p role="alert" className="p-3 text-red-600">{aiError}</p>}
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-[#E3E8E6] dark:border-slate-800 flex items-center justify-between bg-[#F6F8F7] dark:bg-slate-900">
           <div className="flex items-center gap-3">

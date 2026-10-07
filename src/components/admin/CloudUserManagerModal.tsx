@@ -1,3 +1,4 @@
+import { accountRequest } from '../../lib/api';
 import React, { useState, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { db, testFirebaseConnection } from '../../lib/firebase';
@@ -55,7 +56,7 @@ export const CloudUserManagerModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [accountType, setAccountType] = useState<'emprendedor' | 'consolidada' | 'finanzas_personales'>('emprendedor');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('123456');
+  const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
   const [dui, setDui] = useState('');
   const [businessName, setBusinessName] = useState('');
@@ -149,7 +150,7 @@ export const CloudUserManagerModal: React.FC<Props> = ({ isOpen, onClose }) => {
       companyId: compId,
       name: name.trim(),
       email: email.trim().toLowerCase(),
-      password: password.trim() || '123456',
+      password,
       role,
       systemArchetype: archetype,
       phone: phone.trim() || '+503 7000-0000',
@@ -170,15 +171,7 @@ export const CloudUserManagerModal: React.FC<Props> = ({ isOpen, onClose }) => {
     };
 
     try {
-      // 1. Guardar en Firestore
-      await setDoc(doc(db, 'companies', compId), newComp);
-      await setDoc(doc(db, 'branches', initialBranch.id), initialBranch);
-      await setDoc(doc(db, 'users', userId), newUser);
-
-      // 2. Registrar en estado local
-      createCompany(newComp);
-      createBranch(initialBranch);
-      createUser(newUser);
+      await accountRequest('/api/accounts', { user: newUser, company: newComp, branch: initialBranch });
 
       addNotification(
         'success',
@@ -189,20 +182,14 @@ export const CloudUserManagerModal: React.FC<Props> = ({ isOpen, onClose }) => {
       // Reset form fields
       setName('');
       setEmail('');
-      setPassword('123456');
+      setPassword('');
       setPhone('');
       setDui('');
       setBusinessName('');
       setBusinessGiro('');
     } catch (err) {
       console.error('Error saving to Firestore:', err);
-      // Fallback local save
-      createUser(newUser);
-      addNotification(
-        'info',
-        'Cuenta Registrada Localmente',
-        `El usuario fue registrado en la sesión. (Firebase offline/verificando)`
-      );
+      addNotification('error', 'No se creó la cuenta', 'Verifica los datos y usa una contraseña de al menos 12 caracteres.');
     } finally {
       setIsSaving(false);
     }
@@ -212,7 +199,7 @@ export const CloudUserManagerModal: React.FC<Props> = ({ isOpen, onClose }) => {
     const text = `¡Hola ${u.name}! Aquí tienes tu acceso para FINAMIPE SV:
 🌐 Plataforma: https://ais-dev-zt5ox4j3ww7wbwalmkdubu-128537300182.us-east1.run.app
 📧 Usuario: ${u.email}
-🔑 Contraseña: ${u.password || '123456'}
+🔑 Contraseña: ${'No se muestra; utiliza la contraseña asignada'}
 📌 Tipo de Cuenta: ${
       u.systemArchetype === 'finanzas_personales'
         ? 'Finanzas Personales (Portal Independiente)'
@@ -228,7 +215,7 @@ export const CloudUserManagerModal: React.FC<Props> = ({ isOpen, onClose }) => {
   };
 
   const testLoginAsUser = (u: UserProfile) => {
-    login(u.email, u.password || 'admin');
+    addNotification('info', 'Cambio de cuenta', 'Cierra sesión e inicia con las credenciales de la otra cuenta.');
     onClose();
   };
 
@@ -451,7 +438,7 @@ export const CloudUserManagerModal: React.FC<Props> = ({ isOpen, onClose }) => {
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="123456"
+                    placeholder="Mínimo 12 caracteres"
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono focus:ring-2 focus:ring-indigo-500/30 outline-none"
                   />
                 </div>
@@ -576,7 +563,7 @@ export const CloudUserManagerModal: React.FC<Props> = ({ isOpen, onClose }) => {
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-400 font-mono">
-                          {u.email} • Clave: <span className="font-bold text-slate-600 dark:text-slate-300">{u.password || 'admin'}</span>
+                          {u.email} • Clave: <span className="font-bold text-slate-600 dark:text-slate-300">{'No se muestra; utiliza la contraseña asignada'}</span>
                         </p>
                       </div>
                     </div>

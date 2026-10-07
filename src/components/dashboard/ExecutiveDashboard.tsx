@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '../../lib/api';
 import React, { useState, useMemo } from 'react';
 import { useERP } from '../../context/ERPContext';
 import {
@@ -99,6 +100,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
 }) => {
   const {
     currentCompany,
+    addNotification,
     customers,
     invoices,
     purchases,
@@ -935,7 +937,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   const handleRunDiagnosis = async () => {
     setIsDiagnosing(true);
     try {
-      const response = await fetch('/api/ai/financial-diagnosis', {
+      const response = await authenticatedFetch('/api/ai/financial-diagnosis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -953,24 +955,11 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
 
       if (!response.ok) throw new Error('Error al ejecutar diagnóstico');
       const data = await response.json();
-      setDiagnosisResult(data);
+      if (!Number.isFinite(data.healthScore) || !Array.isArray(data.keyStrengths) || !Array.isArray(data.recommendations)) throw new Error('Diagnóstico inválido');
+      setDiagnosisResult({ healthScore: data.healthScore, statusSummary: data.summary, strengths: data.keyStrengths, weaknesses: data.criticalAlerts || [], recommendations: data.recommendations });
     } catch (e) {
-      setDiagnosisResult({
-        healthScore: 94,
-        statusSummary: 'Excelente salud financiera con flujo neto positivo y total cobertura de pasivos en El Salvador.',
-        strengths: [
-          `Margen Bruto del ${financialSummary.margenBruto.toFixed(1)}% y Margen Neto del ${financialSummary.margenNeto.toFixed(1)}%.`,
-          `Cuentas por cobrar controladas con cartera al día en un 80%+.`,
-          'Obligaciones fiscales de IVA y Pago a Cuenta debidamente provisionadas.',
-        ],
-        weaknesses: [
-          'Oportunidad de negociar mejores términos de crédito con proveedores principales.',
-        ],
-        recommendations: [
-          'Mantener el excedente de liquidez en cuentas de rendimiento con tasa preferencial.',
-          'Confirmar fechas límite de impuestos con el calendario del Ministerio de Hacienda.',
-        ],
-      });
+      setDiagnosisResult(null);
+      addNotification('error', 'Diagnóstico no disponible', 'No se pudo analizar la información. Intenta nuevamente.');
     } finally {
       setIsDiagnosing(false);
     }

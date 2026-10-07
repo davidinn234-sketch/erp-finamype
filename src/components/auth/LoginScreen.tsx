@@ -1,3 +1,5 @@
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../../lib/firebase';
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import {
@@ -65,6 +67,16 @@ export const LoginScreen: React.FC = () => {
     }
   };
 
+  const handlePasswordReset = async () => {
+    if (!email.trim()) { setError('Ingresa tu correo para restablecer la contraseña.'); return; }
+    try {
+      await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+      setError('Si la cuenta existe, recibirás un correo para restablecer tu contraseña.');
+    } catch {
+      setError('No se pudo solicitar el restablecimiento. Verifica el correo e intenta más tarde.');
+    }
+  };
+
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -78,7 +90,7 @@ export const LoginScreen: React.FC = () => {
     try {
       if (regAccountType === 'finanzas_personales') {
         // Create isolated personal finance profile
-        createUser({
+        await createUser({
           name: regName.trim(),
           email: regEmail.trim().toLowerCase(),
           password: regPassword.trim(),
@@ -91,7 +103,8 @@ export const LoginScreen: React.FC = () => {
         });
 
         // Automatically log in
-        await login(regEmail.trim().toLowerCase(), regPassword.trim());
+        const result = await login(regEmail.trim().toLowerCase(), regPassword.trim());
+        if (!result.success) throw new Error(result.error);
       } else {
         // Business account (Emprendedor or Empresa DTE)
         const businessTitle = regBusinessName.trim() || `Negocio de ${regName.trim()}`;
@@ -136,12 +149,13 @@ export const LoginScreen: React.FC = () => {
         );
 
         // Automatically log in
-        await login(regEmail.trim().toLowerCase(), regPassword.trim());
+        const result = await login(regEmail.trim().toLowerCase(), regPassword.trim());
+        if (!result.success) throw new Error(result.error);
       }
       setIsLoading(false);
-    } catch {
+    } catch (error) {
       setIsLoading(false);
-      setError('Error al crear la cuenta. Por favor intente nuevamente.');
+      setError(error instanceof Error ? error.message : 'Error al crear la cuenta.');
     }
   };
 
@@ -222,6 +236,7 @@ export const LoginScreen: React.FC = () => {
           id="login-card"
           className="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-6 sm:p-8 shadow-2xl backdrop-blur-md space-y-5"
         >
+          {authMode === 'login' && <button type="button" onClick={handlePasswordReset} className="text-sm text-indigo-300">Restablecer contraseña</button>}
           {/* Segmented Mode Selector */}
           <div className="flex items-center p-1 bg-slate-950/80 border border-slate-800 rounded-xl">
             <button

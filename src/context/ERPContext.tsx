@@ -1,3 +1,7 @@
+import { useAuthSession } from './AuthSession';
+import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { accountRequest } from '../lib/api';
+import { auth } from '../lib/firebase';
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import {
   Company,
@@ -84,7 +88,7 @@ import {
   formatCurrencyUSD,
 } from '../utils/salvadoranTax';
 import { db, testFirebaseConnection } from '../lib/firebase';
-import { doc, setDoc, getDoc, getDocs, collection, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, getDoc, getDocs, collection, deleteDoc, onSnapshot, query, where, documentId } from 'firebase/firestore';
 
 interface ToastNotification {
   id: string;
@@ -126,8 +130,8 @@ interface ERPContextType {
   currentUser: UserProfile;
   setCurrentUserId: (id: string) => void;
   userRole: UserRole;
-  createUser: (user: Omit<UserProfile, 'id'>) => void;
-  updateUser: (id: string, updates: Partial<UserProfile>) => void;
+  createUser: (user: Omit<UserProfile, 'id'>) => Promise<void>;
+  updateUser: (id: string, updates: Partial<UserProfile>) => Promise<void>;
   deleteUser: (id: string) => void;
 
   // Personal Finances Module
@@ -320,6 +324,14 @@ const applyDocChanges = <T extends { id: string }>(prev: T[], upserts: T[], remo
   return next;
 };
 
+function scopedCollection(name: string, profile: UserProfile) {
+  const ref = collection(db, name);
+  if (name === 'personal_finances') return query(ref, where('userId', '==', profile.id));
+  if (profile.role === 'admin_maestro') return query(ref);
+  if (name === 'users' && profile.role !== 'gerente') return query(ref, where('id', '==', profile.id));
+  return query(ref, where(name === 'companies' ? documentId() : 'companyId', '==', profile.companyId || '__no_company__'));
+}
+
 // Espejo bidireccional lista local <-> colección de Firestore, para datos que se
 // modifican en muchos lugares (kardex, tesorería, otros ingresos) sin tocar cada función.
 function useCloudMirror<T extends { id: string }>(
@@ -327,14 +339,16 @@ function useCloudMirror<T extends { id: string }>(
   items: T[],
   setItems: React.Dispatch<React.SetStateAction<T[]>>,
   skipIds: Set<string>,
-  onError: (e: any) => void
+  onError: (e: any) => void,
+  profile: UserProfile | null
 ) {
   const known = React.useRef<Map<string, string>>(new Map());
   const [hydrated, setHydrated] = React.useState(false);
 
   useEffect(() => {
+    if (!profile || (profile.role !== 'admin_maestro' && !profile.companyId)) return;
     const unsub = onSnapshot(
-      collection(db, name),
+      scopedCollection(name, profile),
       (snap) => {
         const upserts: T[] = [];
         const removed = new Set<string>();
@@ -357,10 +371,10 @@ function useCloudMirror<T extends { id: string }>(
       }
     );
     return unsub;
-  }, [name]);
+  }, [name, profile?.id, profile?.companyId, profile?.role]);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || !profile) return;
     const current = new Set(items.map((i) => i.id));
     items.forEach((it) => {
       if (skipIds.has(it.id)) return;
@@ -440,124 +454,32 @@ export const ensureEmployeesHavePins = (list: Employee[]): Employee[] => {
 };
 
 export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { profile: sessionProfile } = useAuthSession();
+  const isAuthenticated = !!sessionProfile;
   // Multitenancy & Auth State
-  const [companies, setCompanies] = useState<Company[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY) || localStorage.getItem(ANCIENT_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.companies && Array.isArray(parsed.companies)) {
-          return parsed.companies.map((c: any) => sanitizeCompany(c));
-        }
-      } catch (e) {
-        console.error('Error restoring companies from storage:', e);
-      }
-    }
-    return SAMPLE_COMPANIES.map(sanitizeCompany);
-  });
+  const [companies, setCompanies] = useState<Company[]>([]);
 
-  const [currentCompanyId, setCurrentCompanyId] = useState<string>(() => companies[0]?.id || 'comp_1');
+  const [currentCompanyId, setCurrentCompanyId] = useState<string>(sessionProfile?.companyId || '');
 
-  const [rawBranches, setRawBranches] = useState<Branch[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.branches && Array.isArray(parsed.branches)) {
-          return parsed.branches.map((b: any) => sanitizeBranch(b));
-        }
-      } catch (e) {}
-    }
-    return SAMPLE_BRANCHES.map(sanitizeBranch);
-  });
+  const [rawBranches, setRawBranches] = useState<Branch[]>([]);
 
   const [selectedBranchId, setSelectedBranchId] = useState<string>('all');
 
-  const [users, setUsers] = useState<UserProfile[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.users && Array.isArray(parsed.users)) {
-          // Only guarantee the master admin account exists (safety net so the
-          // owner is never locked out). Other demo/sample users are NOT
-          // force-reinjected once the real user has removed them.
-          const merged: UserProfile[] = [...parsed.users];
-          const masterAdmin = SAMPLE_USERS.find((su) => su.id === 'user_david');
-          if (masterAdmin) {
-            const idx = merged.findIndex(
-              (u) => u.id === masterAdmin.id || u.email.toLowerCase() === masterAdmin.email.toLowerCase()
-            );
-            if (idx === -1) merged.push(masterAdmin);
-          }
-          return merged;
-        }
-      } catch (e) {}
-    }
-    return SAMPLE_USERS;
-  });
+  const [users, setUsers] = useState<UserProfile[]>(sessionProfile ? [sessionProfile] : []);
 
-  const [currentUserId, setCurrentUserId] = useState<string>(() => {
-    try {
-      const savedAuth = localStorage.getItem('sivarflow_auth_user');
-      if (savedAuth && users.some((u) => u.id === savedAuth)) {
-        return savedAuth;
-      }
-    } catch (e) {}
-    return SAMPLE_USERS[0].id;
-  });
+  const currentUserId = sessionProfile?.id || '';
+  const setCurrentUserId = (_id: string) => { throw new Error('Cierra sesión para cambiar de usuario.'); };
 
   // Auth Login State (Protected App Gate)
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    try {
-      const savedAuth = localStorage.getItem('sivarflow_auth_user');
-      return !!savedAuth;
-    } catch (e) {
-      return false;
-    }
-  });
 
   // Personal Finances State
-  const defaultPersonalData = useMemo(() => getSamplePersonalFinancesData(), []);
 
-  const [personalTransactions, setPersonalTransactions] = useState<PersonalTransaction[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.personalTransactions && Array.isArray(parsed.personalTransactions) && parsed.personalTransactions.length > 0) {
-          return parsed.personalTransactions;
-        }
-      } catch (e) {}
-    }
-    return getSamplePersonalFinancesData().transactions;
-  });
 
-  const [personalBudgets, setPersonalBudgets] = useState<PersonalBudgetCategory[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.personalBudgets && Array.isArray(parsed.personalBudgets) && parsed.personalBudgets.length > 0) {
-          return parsed.personalBudgets;
-        }
-      } catch (e) {}
-    }
-    return getSamplePersonalFinancesData().budgets;
-  });
+  const [personalTransactions, setPersonalTransactions] = useState<PersonalTransaction[]>([]);
 
-  const [personalSavingGoals, setPersonalSavingGoals] = useState<PersonalSavingGoal[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.personalSavingGoals && Array.isArray(parsed.personalSavingGoals) && parsed.personalSavingGoals.length > 0) {
-          return parsed.personalSavingGoals;
-        }
-      } catch (e) {}
-    }
-    return getSamplePersonalFinancesData().goals;
-  });
+  const [personalBudgets, setPersonalBudgets] = useState<PersonalBudgetCategory[]>([]);
+
+  const [personalSavingGoals, setPersonalSavingGoals] = useState<PersonalSavingGoal[]>([]);
 
   const [isExhaustiveCustomizationOpen, setIsExhaustiveCustomizationOpen] = useState<boolean>(false);
   const [isCloudUserManagerOpen, setIsCloudUserManagerOpen] = useState<boolean>(false);
@@ -583,290 +505,73 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (e) {}
   }, [isDarkMode]);
 
-  const [activeModule, setActiveModule] = useState<string>('dashboard');
+  const [activeModule, setActiveModule] = useState<string>(sessionProfile?.role === 'admin_maestro' ? 'admin_profiles' : sessionProfile?.role === 'cajero' ? 'pos_terminal' : 'dashboard');
 
   // Módulo 1: CRM & Ventas
-  const [rawProducts, setRawProducts] = useState<Product[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.products && Array.isArray(parsed.products)) return parsed.products;
-      } catch (e) {}
-    }
-    return SAMPLE_PRODUCTS;
-  });
+  const [rawProducts, setRawProducts] = useState<Product[]>([]);
 
-  const [rawCustomers, setRawCustomers] = useState<Customer[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.customers && Array.isArray(parsed.customers)) return parsed.customers;
-      } catch (e) {}
-    }
-    return SAMPLE_CUSTOMERS;
-  });
+  const [rawCustomers, setRawCustomers] = useState<Customer[]>([]);
 
-  const [rawInvoices, setRawInvoices] = useState<Invoice[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.invoices && Array.isArray(parsed.invoices)) {
-          return parsed.invoices.map((inv: any) => ({
-            ...inv,
-            saldoPendiente:
-              typeof inv.saldoPendiente === 'number' && !isNaN(inv.saldoPendiente)
-                ? inv.saldoPendiente
-                : inv.status === 'pagada'
-                ? 0
-                : typeof inv.totalPagar === 'number' && !isNaN(inv.totalPagar)
-                ? inv.totalPagar
-                : 0,
-            totalPagar:
-              typeof inv.totalPagar === 'number' && !isNaN(inv.totalPagar)
-                ? inv.totalPagar
-                : typeof inv.saldoPendiente === 'number' && !isNaN(inv.saldoPendiente)
-                ? inv.saldoPendiente
-                : 0,
-          }));
-        }
-      } catch (e) {}
-    }
-    return SAMPLE_INVOICES;
-  });
+  const [rawInvoices, setRawInvoices] = useState<Invoice[]>([]);
 
   const [customerPayments, setCustomerPayments] = useState<CustomerPayment[]>([]);
 
   // Módulo 2: CRM Proveedores & Compras
-  const [rawSuppliers, setRawSuppliers] = useState<Supplier[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.suppliers && Array.isArray(parsed.suppliers)) return parsed.suppliers;
-      } catch (e) {}
-    }
-    return SAMPLE_SUPPLIERS;
-  });
+  const [rawSuppliers, setRawSuppliers] = useState<Supplier[]>([]);
 
-  const [rawPurchases, setRawPurchases] = useState<Purchase[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.purchases && Array.isArray(parsed.purchases)) {
-          return parsed.purchases.map((pur: any) => ({
-            ...pur,
-            saldoPendiente:
-              typeof pur.saldoPendiente === 'number' && !isNaN(pur.saldoPendiente)
-                ? pur.saldoPendiente
-                : pur.status === 'pagada'
-                ? 0
-                : typeof pur.totalPagar === 'number' && !isNaN(pur.totalPagar)
-                ? pur.totalPagar
-                : 0,
-            totalPagar:
-              typeof pur.totalPagar === 'number' && !isNaN(pur.totalPagar)
-                ? pur.totalPagar
-                : typeof pur.saldoPendiente === 'number' && !isNaN(pur.saldoPendiente)
-                ? pur.saldoPendiente
-                : 0,
-          }));
-        }
-      } catch (e) {}
-    }
-    return SAMPLE_PURCHASES;
-  });
+  const [rawPurchases, setRawPurchases] = useState<Purchase[]>([]);
 
   const [supplierPayments, setSupplierPayments] = useState<SupplierPayment[]>([]);
 
-  const [rawKardexMovements, setRawKardexMovements] = useState<KardexMovement[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.kardexMovements && Array.isArray(parsed.kardexMovements)) return parsed.kardexMovements;
-      } catch (e) {}
-    }
-    return SAMPLE_KARDEX_MOVEMENTS;
-  });
+  const [rawKardexMovements, setRawKardexMovements] = useState<KardexMovement[]>([]);
 
   // Módulo 3: RRHH & Planilla
-  const [rawEmployees, setRawEmployees] = useState<Employee[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.employees && Array.isArray(parsed.employees)) {
-          return ensureEmployeesHavePins(parsed.employees);
-        }
-      } catch (e) {}
-    }
-    return ensureEmployeesHavePins(SAMPLE_EMPLOYEES);
-  });
+  const [rawEmployees, setRawEmployees] = useState<Employee[]>([]);
 
-  const [rawPayrolls, setRawPayrolls] = useState<Payroll[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.payrolls && Array.isArray(parsed.payrolls)) return parsed.payrolls;
-      } catch (e) {}
-    }
-    return SAMPLE_PAYROLLS;
-  });
+  const [rawPayrolls, setRawPayrolls] = useState<Payroll[]>([]);
 
   // Servicios Profesionales (Art. 156 Código Tributario SV)
-  const [rawProfessionalServices, setRawProfessionalServices] = useState<ProfessionalServiceRecord[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.professionalServices && Array.isArray(parsed.professionalServices)) return parsed.professionalServices;
-      } catch (e) {}
-    }
-    return SAMPLE_PROFESSIONAL_SERVICES;
-  });
+  const [rawProfessionalServices, setRawProfessionalServices] = useState<ProfessionalServiceRecord[]>([]);
 
   // Bolsa de Trabajo & Base de Currículum Vitae (CV)
-  const [rawCandidateFolders, setRawCandidateFolders] = useState<CandidateFolder[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.candidateFolders && Array.isArray(parsed.candidateFolders)) return parsed.candidateFolders;
-      } catch (e) {}
-    }
-    return SAMPLE_CANDIDATE_FOLDERS;
-  });
+  const [rawCandidateFolders, setRawCandidateFolders] = useState<CandidateFolder[]>([]);
 
-  const [rawCandidateApplicants, setRawCandidateApplicants] = useState<CandidateApplicant[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.candidateApplicants && Array.isArray(parsed.candidateApplicants)) return parsed.candidateApplicants;
-      } catch (e) {}
-    }
-    return SAMPLE_CANDIDATE_APPLICANTS;
-  });
+  const [rawCandidateApplicants, setRawCandidateApplicants] = useState<CandidateApplicant[]>([]);
 
   // Control de Asistencia & Horarios (Tablet Kiosk PIN)
-  const [rawAttendanceConfig, setRawAttendanceConfig] = useState<CompanyAttendanceConfig>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.attendanceConfig) return parsed.attendanceConfig;
-      } catch (e) {}
-    }
-    return DEFAULT_ATTENDANCE_CONFIG;
-  });
+  const [rawAttendanceConfig, setRawAttendanceConfig] = useState<CompanyAttendanceConfig>(DEFAULT_ATTENDANCE_CONFIG);
 
-  const [rawAttendanceRecords, setRawAttendanceRecords] = useState<AttendanceRecord[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.attendanceRecords && Array.isArray(parsed.attendanceRecords)) return parsed.attendanceRecords;
-      } catch (e) {}
-    }
-    return SAMPLE_ATTENDANCE_RECORDS;
-  });
+  const [rawAttendanceRecords, setRawAttendanceRecords] = useState<AttendanceRecord[]>([]);
 
-  const [rawLeaveRequests, setRawLeaveRequests] = useState<EmployeeLeaveRequest[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.leaveRequests && Array.isArray(parsed.leaveRequests)) return parsed.leaveRequests;
-      } catch (e) {}
-    }
-    return SAMPLE_LEAVE_REQUESTS;
-  });
+  const [rawLeaveRequests, setRawLeaveRequests] = useState<EmployeeLeaveRequest[]>([]);
 
   // Módulo 4: Tesorería & Bancos
-  const [rawBankAccounts, setRawBankAccounts] = useState<BankAccount[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.bankAccounts && Array.isArray(parsed.bankAccounts)) return parsed.bankAccounts;
-      } catch (e) {}
-    }
-    return SAMPLE_BANK_ACCOUNTS;
-  });
+  const [rawBankAccounts, setRawBankAccounts] = useState<BankAccount[]>([]);
 
   const [rawTreasuryMovements, setRawTreasuryMovements] = useState<TreasuryMovement[]>([]);
 
-  const [rawOtherIncomes, setRawOtherIncomes] = useState<OtherIncome[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.otherIncomes && Array.isArray(parsed.otherIncomes)) {
-          return parsed.otherIncomes;
-        }
-      } catch (e) {}
-    }
-    return SAMPLE_OTHER_INCOMES;
-  });
+  const [rawOtherIncomes, setRawOtherIncomes] = useState<OtherIncome[]>([]);
 
   // Módulo 5: Motor Contable
-  const [chartOfAccounts, setChartOfAccounts] = useState<AccountNode[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.chartOfAccounts && Array.isArray(parsed.chartOfAccounts)) return parsed.chartOfAccounts;
-      } catch (e) {}
-    }
-    return DEFAULT_CHART_OF_ACCOUNTS;
-  });
+  const [chartOfAccounts, setChartOfAccounts] = useState<AccountNode[]>(DEFAULT_CHART_OF_ACCOUNTS);
 
-  const [rawJournalEntries, setRawJournalEntries] = useState<JournalEntry[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.journalEntries && Array.isArray(parsed.journalEntries)) {
-          return parsed.journalEntries;
-        }
-      } catch (e) {}
-    }
-    return SAMPLE_JOURNAL_ENTRIES;
-  });
+  const [rawJournalEntries, setRawJournalEntries] = useState<JournalEntry[]>([]);
 
   // Módulo 6: AI Dynamic Widgets
-  const [dynamicWidgets, setDynamicWidgets] = useState<DynamicChartWidget[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.dynamicWidgets && Array.isArray(parsed.dynamicWidgets)) return parsed.dynamicWidgets;
-      } catch (e) {}
-    }
-    return INITIAL_DYNAMIC_WIDGETS;
-  });
+  const [rawDynamicWidgets, setDynamicWidgets] = useState<DynamicChartWidget[]>([]);
 
   // Notifications
   const [notifications, setNotifications] = useState<ToastNotification[]>([]);
 
   // Selected current Company & User
   const currentCompany = useMemo(() => {
-    return companies.find((c) => c.id === currentCompanyId) || companies[0] || SAMPLE_COMPANIES[0];
+    return companies.find((c) => c.id === currentCompanyId) || companies[0] || { ...SAMPLE_COMPANIES[0], id: '', name: '', tradeName: '' };
   }, [companies, currentCompanyId]);
 
-  const currentUser = useMemo(() => {
-    const found = (users || []).find((u) => u && u.id === currentUserId);
-    if (found) return found;
-    if (users && users.length > 0 && users[0]) return users[0];
-    return SAMPLE_USERS[0];
-  }, [users, currentUserId]);
+  const dynamicWidgets = useMemo(() => rawDynamicWidgets.filter((w) => w.companyId === currentCompany.id), [rawDynamicWidgets, currentCompany.id]);
 
-  const userRole = currentUser?.role || 'admin_maestro';
+  const currentUser: UserProfile = sessionProfile || { id: '', name: '', email: '', role: 'vendedor', systemArchetype: 'finanzas_personales' };
+  const userRole = currentUser.role;
 
   // Support Mode & Multi-Tenancy Isolation
   const [isSupportMode, setIsSupportMode] = useState<boolean>(false);
@@ -963,6 +668,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const setJournalEntries = setRawJournalEntries;
 
   const enterSupportMode = (companyId: string) => {
+    if (sessionProfile?.role !== 'admin_maestro') return;
     setCurrentCompanyId(companyId);
     setIsSupportMode(true);
     setActiveModule('pos_terminal');
@@ -1033,21 +739,10 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       createdAt: new Date().toISOString().split('T')[0],
     };
 
-    const userId = `usr_${Date.now()}`;
-    const newUser: UserProfile = {
-      id: userId,
-      companyId: compId,
-      name: adminData.name.trim(),
-      email: adminData.email.trim().toLowerCase(),
-      password: adminData.password || 'admin123',
-      phone: adminData.phone || undefined,
-      role: 'gerente',
-      systemArchetype: newComp.systemArchetype || 'emprendedor_control_interno',
-      isConfigured: false, // Permite que en el primer inicio de sesión se abra el Gran Formulario de Sucursales
-      createdAt: new Date().toISOString().split('T')[0],
-      storedInCloud: true,
+    const newUser = {
+      ...adminData, email: adminData.email.trim().toLowerCase(), role: 'gerente',
+      systemArchetype: newComp.systemArchetype || 'emprendedor_control_interno', isConfigured: false,
     };
-    newComp.primaryAdminUserId = userId;
 
     // Crear sucursal inicial aislada para la nueva empresa
     const initialBranch: Branch = {
@@ -1064,20 +759,13 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       isActive: true,
     };
 
-    setCompanies((prev) => [...prev, newComp]);
-    setUsers((prev) => [...prev, newUser]);
-    setBranches((prev) => [...prev, initialBranch]);
+    const result = await saveAccount({ user: newUser, company: newComp, branch: initialBranch });
+    setCompanies((prev) => [...prev, result.company]);
+    setUsers((prev) => [...prev, result.user]);
+    setBranches((prev) => [...prev, result.branch]);
+    addNotification('success', 'Empresa Registrada', `"${result.company.name}" creada en cero.`);
+    return { company: result.company, user: result.user };
 
-    try {
-      await setDoc(doc(db, 'companies', compId), newComp);
-      await setDoc(doc(db, 'users', userId), newUser);
-      await setDoc(doc(db, 'branches', initialBranch.id), initialBranch);
-    } catch (e) {
-      console.warn('Firestore write note:', e);
-    }
-
-    addNotification('success', 'Empresa Registrada', `"${newComp.tradeName || newComp.name}" creada en cero.`);
-    return { company: newComp, user: newUser };
   };
 
   // Fiscal Config for Current Company
@@ -1120,73 +808,29 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   // Datos que antes solo vivían en el dispositivo (o en un "bloque" general que se pisaba):
-  useCloudMirror<KardexMovement>('kardex_movements', rawKardexMovements, setRawKardexMovements, new Set(SAMPLE_KARDEX_MOVEMENTS.map((k) => k.id)), reportCloudError);
-  useCloudMirror<TreasuryMovement>('treasury_movements', rawTreasuryMovements, setRawTreasuryMovements, new Set<string>(), reportCloudError);
-  useCloudMirror<OtherIncome>('other_incomes', rawOtherIncomes, setRawOtherIncomes, new Set(SAMPLE_OTHER_INCOMES.map((o) => o.id)), reportCloudError);
+  useCloudMirror<KardexMovement>('kardex_movements', rawKardexMovements, setRawKardexMovements, new Set(SAMPLE_KARDEX_MOVEMENTS.map((k) => k.id)), reportCloudError, sessionProfile);
+  useCloudMirror<TreasuryMovement>('treasury_movements', rawTreasuryMovements, setRawTreasuryMovements, new Set<string>(), reportCloudError, sessionProfile);
+  useCloudMirror<OtherIncome>('other_incomes', rawOtherIncomes, setRawOtherIncomes, new Set(SAMPLE_OTHER_INCOMES.map((o) => o.id)), reportCloudError, sessionProfile);
 
-  // Sync to LocalStorage
+  useCloudMirror<JournalEntry>('journal_entries', rawJournalEntries, setRawJournalEntries, new Set<string>(), reportCloudError, sessionProfile);
+  useCloudMirror<BankAccount>('bank_accounts', rawBankAccounts, setRawBankAccounts, new Set<string>(), reportCloudError, sessionProfile);
+
+  useCloudMirror<DynamicChartWidget>('dynamic_widgets', rawDynamicWidgets, setDynamicWidgets, new Set<string>(), reportCloudError, sessionProfile);
+
+  // Retain unsynced legacy business data for export, but remove old plaintext credentials.
+  // This cache is never loaded into an authenticated session.
   useEffect(() => {
-    const appState = {
-      companies,
-      branches: rawBranches,
-      users,
-      products: rawProducts,
-      customers: rawCustomers,
-      invoices: rawInvoices,
-      customerPayments,
-      suppliers: rawSuppliers,
-      purchases: rawPurchases,
-      supplierPayments,
-      kardexMovements: rawKardexMovements,
-      employees: rawEmployees,
-      payrolls: rawPayrolls,
-      bankAccounts: rawBankAccounts,
-      treasuryMovements: rawTreasuryMovements,
-      otherIncomes: rawOtherIncomes,
-      chartOfAccounts,
-      journalEntries: rawJournalEntries,
-      dynamicWidgets,
-      personalTransactions,
-      personalBudgets,
-      personalSavingGoals,
-      professionalServices: rawProfessionalServices,
-      candidateFolders: rawCandidateFolders,
-      candidateApplicants: rawCandidateApplicants,
-    };
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
-    } catch (err) {
-      console.error('Failed to persist ERP state in localStorage:', err);
+    localStorage.removeItem('sivarflow_auth_user');
+    for (const key of [STORAGE_KEY, LEGACY_STORAGE_KEY, ANCIENT_STORAGE_KEY]) {
+      try {
+        const cached = JSON.parse(localStorage.getItem(key) || 'null');
+        if (cached?.users) {
+          cached.users = cached.users.map(({ password, ...profile }: any) => profile);
+          localStorage.setItem(key, JSON.stringify(cached));
+        }
+      } catch { /* Leave unreadable legacy data intact for manual recovery. */ }
     }
-  }, [
-    companies,
-    rawBranches,
-    users,
-    rawProducts,
-    rawCustomers,
-    rawInvoices,
-    customerPayments,
-    rawSuppliers,
-    rawPurchases,
-    supplierPayments,
-    rawKardexMovements,
-    rawEmployees,
-    rawPayrolls,
-    rawProfessionalServices,
-    rawCandidateFolders,
-    rawCandidateApplicants,
-    rawBankAccounts,
-    rawTreasuryMovements,
-    rawOtherIncomes,
-    chartOfAccounts,
-    rawJournalEntries,
-    dynamicWidgets,
-    personalTransactions,
-    personalBudgets,
-    personalSavingGoals,
-  ]);
-
-  // (El antiguo bloque único 'system_state' se eliminó: se pisaba entre dispositivos y empresas.)
+  }, []);
 
   // Company management
   const createCompany = (companyData: Omit<Company, 'id'>) => {
@@ -1219,701 +863,133 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (e) {}
   };
 
-  // Initial load from Firebase Firestore & Real-time cross-device sync
+  const [settingsCompanyId, setSettingsCompanyId] = useState('');
+  const settingsSignature = React.useRef('');
   useEffect(() => {
-    async function loadCloudData() {
-      // 0. Verify connection to Firestore in mi-erp-nube
-      testFirebaseConnection().catch(() => {});
-
-      try {
-        // 2. Query individual collections to ensure 100% cloud accuracy
-        const [
-          companiesSnap,
-          usersSnap,
-          prodSnap,
-          custSnap,
-          invSnap,
-          purSnap,
-          suppSnap,
-          branchSnap,
-          cPaySnap,
-          sPaySnap,
-          bankSnap,
-          empSnap,
-          paySnap,
-          profSnap,
-          foldSnap,
-          candSnap,
-          persSnap,
-        ] = await Promise.all([
-          getDocs(collection(db, 'companies')).catch(() => null),
-          getDocs(collection(db, 'users')).catch(() => null),
-          getDocs(collection(db, 'products')).catch(() => null),
-          getDocs(collection(db, 'customers')).catch(() => null),
-          getDocs(collection(db, 'invoices')).catch(() => null),
-          getDocs(collection(db, 'purchases')).catch(() => null),
-          getDocs(collection(db, 'suppliers')).catch(() => null),
-          getDocs(collection(db, 'branches')).catch(() => null),
-          getDocs(collection(db, 'customer_payments')).catch(() => null),
-          getDocs(collection(db, 'supplier_payments')).catch(() => null),
-          getDocs(collection(db, 'bank_accounts')).catch(() => null),
-          getDocs(collection(db, 'employees')).catch(() => null),
-          getDocs(collection(db, 'payrolls')).catch(() => null),
-          getDocs(collection(db, 'professional_services')).catch(() => null),
-          getDocs(collection(db, 'candidate_folders')).catch(() => null),
-          getDocs(collection(db, 'candidates')).catch(() => null),
-          getDocs(collection(db, 'personal_finances')).catch(() => null),
-        ]);
-
-        // Firestore es la fuente de verdad para companies una vez que ya tiene datos:
-        // se REEMPLAZA el estado local en vez de "solo agregar", para que una empresa
-        // borrada en la nube no reaparezca. Si la colección está vacía (proyecto nuevo
-        // sin datos aún subidos), se respeta el estado local/demo en vez de vaciarlo.
-        if (companiesSnap && !companiesSnap.empty) {
-          const cloudComps: Company[] = [];
-          companiesSnap.forEach((d) => { const item = d.data() as Company; if (item.id && item.name) cloudComps.push(sanitizeCompany(item)); });
-          setCompanies(cloudComps);
-        }
-
-        // Mismo criterio para users: la nube manda, así un usuario eliminado no vuelve.
-        if (usersSnap && !usersSnap.empty) {
-          const cloudUsers: UserProfile[] = [];
-          usersSnap.forEach((d) => {
-            const item = d.data() as UserProfile;
-            if (item.id && item.email) {
-              cloudUsers.push({
-                ...item,
-                role: item.role || 'admin_maestro',
-              });
-            }
-          });
-          if (cloudUsers.length > 0) {
-            setUsers((prev) => {
-              const merged = [...cloudUsers];
-              prev.forEach((pu) => {
-                if (!merged.some((cu) => cu.id === pu.id || (pu.email && cu.email && cu.email.toLowerCase() === pu.email.toLowerCase()))) {
-                  merged.push(pu);
-                }
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (prodSnap && !prodSnap.empty) {
-          const cloudProds: Product[] = [];
-          prodSnap.forEach((d) => { const item = d.data() as Product; if (item.id) cloudProds.push(item); });
-          if (cloudProds.length > 0) {
-            setRawProducts((prev) => {
-              const merged = [...prev];
-              cloudProds.forEach((cp) => {
-                const idx = merged.findIndex((p) => p.id === cp.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...cp };
-                else merged.push(cp);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (custSnap && !custSnap.empty) {
-          const cloudCust: Customer[] = [];
-          custSnap.forEach((d) => { const item = d.data() as Customer; if (item.id) cloudCust.push(item); });
-          if (cloudCust.length > 0) {
-            setRawCustomers((prev) => {
-              const merged = [...prev];
-              cloudCust.forEach((cc) => {
-                const idx = merged.findIndex((c) => c.id === cc.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...cc };
-                else merged.push(cc);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (invSnap && !invSnap.empty) {
-          const cloudInvs: Invoice[] = [];
-          invSnap.forEach((d) => { const item = d.data() as Invoice; if (item.id) cloudInvs.push(item); });
-          if (cloudInvs.length > 0) {
-            setRawInvoices((prev) => {
-              const merged = [...prev];
-              cloudInvs.forEach((ci) => {
-                const idx = merged.findIndex((i) => i.id === ci.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...ci };
-                else merged.push(ci);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (purSnap && !purSnap.empty) {
-          const cloudPurs: Purchase[] = [];
-          purSnap.forEach((d) => { const item = d.data() as Purchase; if (item.id) cloudPurs.push(item); });
-          if (cloudPurs.length > 0) {
-            setRawPurchases((prev) => {
-              const merged = [...prev];
-              cloudPurs.forEach((cp) => {
-                const idx = merged.findIndex((p) => p.id === cp.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...cp };
-                else merged.push(cp);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (suppSnap && !suppSnap.empty) {
-          const cloudSupp: Supplier[] = [];
-          suppSnap.forEach((d) => { const item = d.data() as Supplier; if (item.id) cloudSupp.push(item); });
-          if (cloudSupp.length > 0) {
-            setRawSuppliers((prev) => {
-              const merged = [...prev];
-              cloudSupp.forEach((cs) => {
-                const idx = merged.findIndex((s) => s.id === cs.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...cs };
-                else merged.push(cs);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (branchSnap && !branchSnap.empty) {
-          const cloudBranches: Branch[] = [];
-          branchSnap.forEach((d) => { const item = d.data() as Branch; if (item.id) cloudBranches.push(sanitizeBranch(item)); });
-          if (cloudBranches.length > 0) {
-            setRawBranches((prev) => {
-              const merged = [...prev];
-              cloudBranches.forEach((cb) => {
-                const idx = merged.findIndex((b) => b.id === cb.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...cb };
-                else merged.push(cb);
-              });
-              return merged.map(sanitizeBranch);
-            });
-          }
-        }
-
-        if (cPaySnap && !cPaySnap.empty) {
-          const cloudCPays: CustomerPayment[] = [];
-          cPaySnap.forEach((d) => { const item = d.data() as CustomerPayment; if (item.id) cloudCPays.push(item); });
-          if (cloudCPays.length > 0) {
-            setCustomerPayments((prev) => {
-              const merged = [...prev];
-              cloudCPays.forEach((cp) => {
-                const idx = merged.findIndex((p) => p.id === cp.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...cp };
-                else merged.push(cp);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (sPaySnap && !sPaySnap.empty) {
-          const cloudSPays: SupplierPayment[] = [];
-          sPaySnap.forEach((d) => { const item = d.data() as SupplierPayment; if (item.id) cloudSPays.push(item); });
-          if (cloudSPays.length > 0) {
-            setSupplierPayments((prev) => {
-              const merged = [...prev];
-              cloudSPays.forEach((sp) => {
-                const idx = merged.findIndex((p) => p.id === sp.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...sp };
-                else merged.push(sp);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (bankSnap && !bankSnap.empty) {
-          const cloudBanks: BankAccount[] = [];
-          bankSnap.forEach((d) => { const item = d.data() as BankAccount; if (item.id) cloudBanks.push(item); });
-          if (cloudBanks.length > 0) {
-            setRawBankAccounts((prev) => {
-              const merged = [...prev];
-              cloudBanks.forEach((cb) => {
-                const idx = merged.findIndex((b) => b.id === cb.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...cb };
-                else merged.push(cb);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (empSnap && !empSnap.empty) {
-          const cloudEmps: Employee[] = [];
-          empSnap.forEach((d) => { const item = d.data() as Employee; if (item.id) cloudEmps.push(item); });
-          if (cloudEmps.length > 0) {
-            setRawEmployees((prev) => {
-              const merged = [...prev];
-              cloudEmps.forEach((ce) => {
-                const idx = merged.findIndex((e) => e.id === ce.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...ce };
-                else merged.push(ce);
-              });
-              return ensureEmployeesHavePins(merged);
-            });
-          }
-        }
-
-        if (paySnap && !paySnap.empty) {
-          const cloudPays: Payroll[] = [];
-          paySnap.forEach((d) => { const item = d.data() as Payroll; if (item.id) cloudPays.push(item); });
-          if (cloudPays.length > 0) {
-            setRawPayrolls((prev) => {
-              const merged = [...prev];
-              cloudPays.forEach((cp) => {
-                const idx = merged.findIndex((p) => p.id === cp.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...cp };
-                else merged.push(cp);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (profSnap && !profSnap.empty) {
-          const cloudProf: ProfessionalServiceRecord[] = [];
-          profSnap.forEach((d) => { const item = d.data() as ProfessionalServiceRecord; if (item.id) cloudProf.push(item); });
-          if (cloudProf.length > 0) {
-            setRawProfessionalServices((prev) => {
-              const merged = [...prev];
-              cloudProf.forEach((cp) => {
-                const idx = merged.findIndex((p) => p.id === cp.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...cp };
-                else merged.push(cp);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (foldSnap && !foldSnap.empty) {
-          const cloudFolds: CandidateFolder[] = [];
-          foldSnap.forEach((d) => { const item = d.data() as CandidateFolder; if (item.id) cloudFolds.push(item); });
-          if (cloudFolds.length > 0) {
-            setRawCandidateFolders((prev) => {
-              const merged = [...prev];
-              cloudFolds.forEach((cf) => {
-                const idx = merged.findIndex((f) => f.id === cf.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...cf };
-                else merged.push(cf);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (candSnap && !candSnap.empty) {
-          const cloudCands: CandidateApplicant[] = [];
-          candSnap.forEach((d) => { const item = d.data() as CandidateApplicant; if (item.id) cloudCands.push(item); });
-          if (cloudCands.length > 0) {
-            setRawCandidateApplicants((prev) => {
-              const merged = [...prev];
-              cloudCands.forEach((ca) => {
-                const idx = merged.findIndex((a) => a.id === ca.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...ca };
-                else merged.push(ca);
-              });
-              return merged;
-            });
-          }
-        }
-
-        if (persSnap && !persSnap.empty) {
-          const cloudPers: PersonalTransaction[] = [];
-          persSnap.forEach((d) => { const item = d.data() as PersonalTransaction; if (item.id) cloudPers.push(item); });
-          if (cloudPers.length > 0) {
-            setPersonalTransactions((prev) => {
-              const merged = [...prev];
-              cloudPers.forEach((pt) => {
-                const idx = merged.findIndex((p) => p.id === pt.id);
-                if (idx >= 0) merged[idx] = { ...merged[idx], ...pt };
-                else merged.push(pt);
-              });
-              return merged;
-            });
-          }
-        }
-      } catch (e) {
-        console.warn('Firestore initial sync note:', e);
-      }
-    }
-    loadCloudData();
-
-    // Realtime listeners for immediate cross-device sync
-    // Firestore es la fuente de verdad en tiempo real: se reemplaza el estado local
-    // completo con lo que hay en la nube (en vez de solo agregar/actualizar), para
-    // que una empresa o usuario eliminado no vuelva a aparecer al refrescar.
-    const unsubCompanies = onSnapshot(
-      collection(db, 'companies'),
-      (snap) => {
-        const liveComps: Company[] = [];
-        snap.forEach((d) => {
-          const data = d.data() as Company;
-          if (data.id && data.name) liveComps.push(sanitizeCompany(data));
-        });
-        setCompanies(liveComps);
-      },
-      (err) => console.warn('Live companies sync note:', err)
-    );
-
-    const unsubUsers = onSnapshot(
-      collection(db, 'users'),
-      (snap) => {
-        const liveUsers: UserProfile[] = [];
-        snap.forEach((d) => {
-          const data = d.data() as UserProfile;
-          if (data.id && data.email) liveUsers.push(data);
-        });
-        setUsers(liveUsers);
-      },
-      (err) => console.warn('Live users sync note:', err)
-    );
-
-    // Sincronización en tiempo real POR DOCUMENTO: lo nuevo/modificado se aplica y lo
-    // ELIMINADO en cualquier dispositivo también se elimina aquí (antes solo se agregaba).
-    const syncCol = <T extends { id: string }>(name: string, setter: React.Dispatch<React.SetStateAction<T[]>>) =>
-      onSnapshot(
-        collection(db, name),
-        (snap) => {
-          const upserts: T[] = [];
-          const removed = new Set<string>();
-          snap.docChanges().forEach((ch) => {
-            if (ch.type === 'removed') removed.add(ch.doc.id);
-            else {
-              let data = ch.doc.data() as any;
-              if (data && data.id) {
-                if (name === 'branches') data = sanitizeBranch(data);
-                if (name === 'companies') data = sanitizeCompany(data);
-                if (name === 'employees') {
-                  data = {
-                    ...data,
-                    isActive: data.isActive !== false,
-                    department: cleanDepartmentStr(data.department),
-                  };
-                }
-                upserts.push(data);
-              }
-            }
-          });
-          if (upserts.length || removed.size) {
-            setter((prev) => {
-              const res = applyDocChanges(prev, upserts, removed);
-              if (name === 'employees') return ensureEmployeesHavePins(res as any) as any;
-              return res;
-            });
-          }
-        },
-        (err) => {
-          console.warn(`Sync ${name}:`, err);
-          reportCloudError(err);
-        }
-      );
-
-    const unsubCollections = [
-      syncCol<Product>('products', setRawProducts),
-      syncCol<Customer>('customers', setRawCustomers),
-      syncCol<Invoice>('invoices', setRawInvoices),
-      syncCol<Supplier>('suppliers', setRawSuppliers),
-      syncCol<Purchase>('purchases', setRawPurchases),
-      syncCol<CustomerPayment>('customer_payments', setCustomerPayments),
-      syncCol<SupplierPayment>('supplier_payments', setSupplierPayments),
-      syncCol<BankAccount>('bank_accounts', setRawBankAccounts),
-      syncCol<Employee>('employees', setRawEmployees),
-      syncCol<Payroll>('payrolls', setRawPayrolls),
-      syncCol<ProfessionalServiceRecord>('professional_services', setRawProfessionalServices),
-      syncCol<CandidateFolder>('candidate_folders', setRawCandidateFolders),
-      syncCol<CandidateApplicant>('candidates', setRawCandidateApplicants),
-      syncCol<Branch>('branches', setRawBranches),
-    ];
-
-    // Finanzas Personales — Transacciones: fuente de verdad en tiempo real.
-    // Antes dependía del snapshot general (system_state) con retraso, lo que
-    // causaba que al refrescar rápido se restauraran transacciones ya borradas.
-    const unsubPersonalTransactions = onSnapshot(
-      collection(db, 'personal_finances'),
-      (snap) => {
-        const liveTx: PersonalTransaction[] = [];
-        snap.forEach((d) => {
-          const data = d.data() as PersonalTransaction;
-          if (data.id) liveTx.push(data);
-        });
-        setPersonalTransactions(liveTx);
-      },
-      (err) => console.warn('Live personal transactions sync note:', err)
-    );
-
-    // Finanzas Personales — Presupuestos y Metas de Ahorro: documento propio,
-    // ya que antes nunca se guardaban en Firestore (solo quedaban en memoria/localStorage).
-    const unsubPersonalMeta = onSnapshot(
-      doc(db, 'personal_finance_meta', 'data'),
-      (snap) => {
-        if (snap.exists()) {
-          const d = snap.data() as any;
-          setPersonalBudgets(Array.isArray(d.personalBudgets) ? d.personalBudgets : []);
-          setPersonalSavingGoals(Array.isArray(d.personalSavingGoals) ? d.personalSavingGoals : []);
-        } else {
-          setPersonalBudgets([]);
-          setPersonalSavingGoals([]);
-        }
-      },
-      (err) => console.warn('Live personal budgets/goals sync note:', err)
-    );
-
-    return () => {
-      unsubCompanies();
-      unsubUsers();
-      unsubCollections.forEach((u) => u());
-      unsubPersonalTransactions();
-      unsubPersonalMeta();
-    };
-  }, []);
-
-  // Guardado rápido y dedicado de Presupuestos y Metas de Ahorro (0.5s), ya que
-  // antes solo vivían en memoria local y nunca llegaban a Firestore.
+    if (!sessionProfile || !currentCompany.id) return;
+    let active = true;
+    const companyId = currentCompany.id;
+    const stop = onSnapshot(doc(db, 'company_settings', companyId), (snapshot) => {
+      if (!active) return;
+      const accounts = snapshot.data()?.chartOfAccounts || DEFAULT_CHART_OF_ACCOUNTS;
+      settingsSignature.current = stableStringify(accounts);
+      setChartOfAccounts(accounts);
+      setSettingsCompanyId(companyId);
+    }, reportCloudError);
+    return () => { active = false; stop(); };
+  }, [sessionProfile?.id, currentCompany.id]);
   useEffect(() => {
-    const timer = setTimeout(async () => {
-      try {
-        await setDoc(
-          doc(db, 'personal_finance_meta', 'data'),
-          { personalBudgets, personalSavingGoals, updatedAt: new Date().toISOString() },
-          { merge: false }
-        );
-      } catch (err) {
-        console.debug('Autosave de presupuestos/metas personales:', err);
-      }
+    if (!sessionProfile || !currentCompany.id || settingsCompanyId !== currentCompany.id ||
+        !['admin_maestro', 'gerente', 'contador'].includes(currentUser.role)) return;
+    const signature = stableStringify(chartOfAccounts);
+    if (signature === settingsSignature.current) return;
+    const timer = setTimeout(() => {
+      void setDoc(doc(db, 'company_settings', currentCompany.id), {
+        id: currentCompany.id, companyId: currentCompany.id, chartOfAccounts,
+      }).catch(reportCloudError);
     }, 500);
     return () => clearTimeout(timer);
-  }, [personalBudgets, personalSavingGoals]);
+  }, [chartOfAccounts, settingsCompanyId, currentCompany.id, sessionProfile?.id]);
 
-  // User & Access Management (Admin vs Cajero / Roles)
-  const createUser = (newUserData: Omit<UserProfile, 'id'> & { id?: string }) => {
-    const newUser: UserProfile = {
-      ...newUserData,
-      id: newUserData.id || `usr_${Date.now()}`,
-      createdAt: newUserData.createdAt || new Date().toISOString().split('T')[0],
-    };
-    setUsers((prev) => {
-      const idx = prev.findIndex((u) => u.id === newUser.id || u.email.toLowerCase() === newUser.email.toLowerCase());
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = newUser;
-        return copy;
-      }
-      return [...prev, newUser];
-    });
-
-    // Cloud Firestore Sync
-    try {
-      setDoc(doc(db, 'users', newUser.id), {
-        ...newUser,
-        storedInCloud: true,
-      }).catch((e) => console.warn('Firestore user save warning:', e));
-    } catch (e) {
-      console.warn('Firestore write:', e);
+  const [personalMetaReady, setPersonalMetaReady] = useState(false);
+  const personalMetaSignature = React.useRef('');
+  useEffect(() => {
+    if (!sessionProfile) return;
+    let active = true;
+    const sync = (name: string, setter: React.Dispatch<any>) => onSnapshot(
+      scopedCollection(name, sessionProfile),
+      (snap) => { if (active) setter(snap.docs.map((d) => {
+        const { password, ...data } = d.data();
+        return name === 'companies' ? sanitizeCompany(data) : name === 'branches' ? sanitizeBranch(data) : data;
+      })); }, reportCloudError);
+    const stops = [sync('users', setUsers), sync('personal_finances', setPersonalTransactions)];
+    if (sessionProfile.role === 'admin_maestro' || sessionProfile.companyId) {
+      for (const [name, setter] of [
+        ['companies', setCompanies], ['products', setRawProducts], ['customers', setRawCustomers],
+        ['invoices', setRawInvoices], ['suppliers', setRawSuppliers], ['purchases', setRawPurchases],
+        ['customer_payments', setCustomerPayments], ['supplier_payments', setSupplierPayments],
+        ['employees', setRawEmployees], ['payrolls', setRawPayrolls],
+        ['professional_services', setRawProfessionalServices], ['candidate_folders', setRawCandidateFolders],
+        ['candidates', setRawCandidateApplicants], ['branches', setRawBranches],
+        ['attendance', setRawAttendanceRecords], ['leave_requests', setRawLeaveRequests],
+      ] as [string, React.Dispatch<any>][]) stops.push(sync(name, setter));
     }
+    stops.push(onSnapshot(doc(db, 'personal_finance_meta', sessionProfile.id), (snap) => {
+      if (!active) return;
+      const data = snap.data();
+      personalMetaSignature.current = stableStringify({ personalBudgets: data?.personalBudgets || [], personalSavingGoals: data?.personalSavingGoals || [] });
+      setPersonalBudgets(data?.personalBudgets || []);
+      setPersonalSavingGoals(data?.personalSavingGoals || []);
+      setPersonalMetaReady(true);
+    }, reportCloudError));
+    return () => { active = false; stops.forEach((stop) => stop()); };
+  }, [sessionProfile?.id]);
 
-    addNotification(
-      'success',
-      'Acceso Creado Exitosamente',
-      `Se ha creado el usuario ${newUser.name} con perfil ${newUser.systemArchetype}.`
-    );
+  useEffect(() => {
+    if (!sessionProfile || !personalMetaReady) return;
+    const signature = stableStringify({ personalBudgets, personalSavingGoals });
+    if (signature === personalMetaSignature.current) return;
+    const timer = setTimeout(() => {
+      void setDoc(doc(db, 'personal_finance_meta', sessionProfile.id), {
+        personalBudgets, personalSavingGoals, updatedAt: new Date().toISOString(),
+      }).catch(reportCloudError);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [personalBudgets, personalSavingGoals, personalMetaReady, sessionProfile?.id]);
+
+  async function saveAccount(body: unknown) {
+    if (sessionProfile) return accountRequest('/api/accounts', body);
+    const response = await fetch('/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'No se pudo crear la cuenta.');
+    return data;
+  }
+
+  const createUser = async (user: Omit<UserProfile, 'id'> & { id?: string }) => {
+    const result = await saveAccount({ user });
+    setUsers((prev) => [...prev, result.user]);
+    addNotification('success', 'Cuenta creada', 'El usuario ya puede iniciar sesión.');
   };
 
-  const updateUser = (id: string, updates: Partial<UserProfile>) => {
-    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, ...updates } : u)));
-    try {
-      setDoc(doc(db, 'users', id), updates, { merge: true }).catch(reportCloudError);
-    } catch (e) {}
-    addNotification('success', 'Usuario Actualizado', 'Los accesos y datos fueron actualizados correctamente.');
+  const updateUser = async (id: string, updates: Partial<UserProfile>) => {
+    if (id === currentUser.id && currentUser.role !== 'admin_maestro' && (!currentUser.companyId || currentUser.role !== 'gerente')) {
+      // Only cosmetic/onboarding fields are allowed by Firestore for self-service.
+      const { name, avatar, phone, address, department, municipality, isConfigured } = updates;
+      const safe = { name, avatar, phone, address, department, municipality, isConfigured };
+      await setDoc(doc(db, 'users', id), safe, { merge: true });
+    } else {
+      const result = await accountRequest(`/api/accounts/${encodeURIComponent(id)}`, updates, 'PATCH');
+      setUsers((prev) => prev.map((u) => u.id === id ? result.user : u));
+    }
+    addNotification('success', 'Cuenta actualizada', 'Los cambios se guardaron.');
   };
 
   const deleteUser = async (id: string) => {
-    if (users.length <= 1) {
-      addNotification('error', 'Acción Denegada', 'No puedes eliminar el único usuario del sistema.');
-      return;
-    }
-    setUsers((prev) => prev.filter((u) => u.id !== id));
-    if (currentUserId === id) {
-      const fallback = users.find((u) => u.id !== id);
-      if (fallback) setCurrentUserId(fallback.id);
-    }
     try {
-      await deleteDoc(doc(db, 'users', id));
-      addNotification('info', 'Acceso Revocado', 'El usuario ha sido eliminado del sistema.');
-    } catch (e) {
-      console.error('No se pudo eliminar el usuario en la nube:', e);
-      addNotification('error', 'Error al Eliminar', 'Se quitó localmente pero no se pudo borrar en la nube. Puede reaparecer al recargar — revisa tu conexión e inténtalo de nuevo.');
+      await accountRequest(`/api/accounts/${encodeURIComponent(id)}`, undefined, 'DELETE');
+      setUsers((prev) => prev.filter((u) => u.id !== id));
+      addNotification('success', 'Acceso revocado', 'La cuenta fue deshabilitada.');
+    } catch (error) {
+      addNotification('error', 'No se revocó el acceso', error instanceof Error ? error.message : 'Intenta nuevamente.');
+      throw error;
     }
   };
 
-  // Authentication: Login & Logout
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    const trimmedEmail = email.trim().toLowerCase();
-
-    // 1. Direct Master Admin access for David (Super Admin Maestro)
-    if (trimmedEmail === 'davidinn234@gmail.com' || trimmedEmail === 'david') {
-      let davidUser = users.find(
-        (u) => u.email.toLowerCase() === 'davidinn234@gmail.com' || u.id === 'user_david'
-      );
-      if (!davidUser) {
-        // First-ever login for this account: the password typed here becomes
-        // the permanent password (defaults to 'admin' only if left blank).
-        davidUser = {
-          id: 'user_david',
-          name: 'David (Super Admin)',
-          email: 'davidinn234@gmail.com',
-          password: password || 'admin',
-          role: 'admin_maestro',
-          systemArchetype: 'empresa_consolidada_dte',
-          isConfigured: true,
-          jobTitle: 'Super Administrador / Propietario Plataforma',
-          createdAt: new Date().toISOString().split('T')[0],
-          enabledServices: [
-            'finanzas_personales',
-            'emprendedor_pos',
-            'empresa_sin_dte',
-            'empresa_con_dte',
-          ],
-        };
-        setUsers((prev) => [davidUser!, ...prev]);
-      } else {
-        const expectedMasterPassword = davidUser.password || 'admin';
-        if (password !== expectedMasterPassword) {
-          return { success: false, error: 'Contraseña incorrecta. Por favor intente nuevamente.' };
-        }
+    try {
+      const { user } = await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+      const profile = await getDoc(doc(db, 'users', user.uid));
+      if (!profile.exists() || profile.data().disabled === true) {
+        await signOut(auth);
+        return { success: false, error: 'Solicita al administrador que habilite tu cuenta en el ERP.' };
       }
-
-      setCurrentUserId(davidUser.id);
-      setIsAuthenticated(true);
-      setIsSupportMode(false);
-      try {
-        localStorage.setItem('sivarflow_auth_user', davidUser.id);
-      } catch (e) {}
-
-      // Save user & login log in Cloud Firestore
-      try {
-        setDoc(doc(db, 'users', davidUser.id), { ...davidUser, storedInCloud: true, lastLoginAt: new Date().toISOString() }, { merge: true }).catch(reportCloudError);
-        setDoc(doc(db, 'logins', `login_${Date.now()}`), {
-          userId: davidUser.id,
-          userName: davidUser.name,
-          userEmail: davidUser.email,
-          role: davidUser.role,
-          loginAt: new Date().toISOString(),
-          status: 'success'
-        }).catch(reportCloudError);
-      } catch (e) {}
-
-      setActiveModule('admin_profiles');
-      addNotification(
-        'success',
-        '¡Bienvenido, David!',
-        'Has ingresado al Portal de Administración Maestro de FINAMIPE SV.'
-      );
       return { success: true };
+    } catch {
+      return { success: false, error: 'No se pudo iniciar sesión. Verifica tus credenciales y la conexión.' };
     }
-
-    // 2. Standard user check
-    let foundUser = users.find((u) => u.email.toLowerCase() === trimmedEmail);
-    if (!foundUser || !foundUser.password) {
-      try {
-        const usersSnap = await getDocs(collection(db, 'users'));
-        usersSnap.forEach((d) => {
-          const uData = d.data() as UserProfile;
-          if (uData.email && uData.email.toLowerCase() === trimmedEmail) {
-            foundUser = uData;
-          }
-        });
-        if (foundUser) {
-          setUsers((prev) => {
-            const idx = prev.findIndex((u) => u.id === foundUser!.id || u.email.toLowerCase() === trimmedEmail);
-            if (idx >= 0) {
-              const copy = [...prev];
-              copy[idx] = foundUser!;
-              return copy;
-            }
-            return [...prev, foundUser!];
-          });
-        }
-      } catch (e) {
-        console.warn('Firestore fallback user query on login:', e);
-      }
-    }
-
-    if (!foundUser) {
-      return { success: false, error: 'No se encontró ninguna cuenta asociada a este correo electrónico.' };
-    }
-    const expectedPassword = foundUser.password;
-    if (!expectedPassword || password !== expectedPassword) {
-      return { success: false, error: 'Contraseña incorrecta. Por favor intente nuevamente.' };
-    }
-
-    // If the user belongs to a specific company, switch company context immediately!
-    if (foundUser.companyId) {
-      const compExists = companies.some((c) => c.id === foundUser!.companyId);
-      if (!compExists) {
-        try {
-          const compDoc = await getDoc(doc(db, 'companies', foundUser.companyId));
-          if (compDoc.exists()) {
-            const cloudComp = compDoc.data() as Company;
-            setCompanies((prev) => [...prev, cloudComp]);
-            setCurrentCompanyId(cloudComp.id);
-          }
-        } catch (e) {
-          console.warn('Firestore fallback company fetch on login:', e);
-        }
-      } else {
-        setCurrentCompanyId(foundUser.companyId);
-      }
-    }
-
-    setCurrentUserId(foundUser.id);
-    setIsAuthenticated(true);
-    setIsSupportMode(false);
-    try {
-      localStorage.setItem('sivarflow_auth_user', foundUser.id);
-    } catch (e) {}
-
-    // Save user last login & log event in Cloud Firestore
-    try {
-      setDoc(doc(db, 'users', foundUser.id), { lastLoginAt: new Date().toISOString() }, { merge: true }).catch(reportCloudError);
-      setDoc(doc(db, 'logins', `login_${Date.now()}`), {
-        userId: foundUser.id,
-        userName: foundUser.name,
-        userEmail: foundUser.email,
-        role: foundUser.role,
-        loginAt: new Date().toISOString(),
-        status: 'success'
-      }).catch(reportCloudError);
-    } catch (e) {}
-
-    // Adapt module view according to archetype or role
-    if (foundUser.systemArchetype === 'finanzas_personales') {
-      setActiveModule('personal_finances');
-    } else if (foundUser.role === 'cajero') {
-      setActiveModule('pos_terminal');
-    } else if (foundUser.role === 'admin_maestro') {
-      setActiveModule('admin_profiles');
-    } else {
-      setActiveModule('dashboard');
-    }
-
-    addNotification('success', `¡Bienvenido(a), ${foundUser.name}!`, `Sesión iniciada como ${foundUser.role.replace('_', ' ').toUpperCase()}.`);
-    return { success: true };
   };
 
-  const logout = () => {
-    setIsAuthenticated(false);
-    try {
-      localStorage.removeItem('sivarflow_auth_user');
-    } catch (e) {}
-    addNotification('info', 'Sesión Finalizada', 'Has cerrado tu sesión de forma segura.');
-  };
+  const logout = () => { void signOut(auth); };
 
   // Personal Finances Methods
   const addPersonalTransaction = (txData: Omit<PersonalTransaction, 'id' | 'userId'>) => {
@@ -1977,15 +1053,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const resetPersonalFinancesToSampleData = () => {
-    const fresh = getSamplePersonalFinancesData();
-    setPersonalTransactions(fresh.transactions);
-    setPersonalBudgets(fresh.budgets);
-    setPersonalSavingGoals(fresh.goals);
-    addNotification(
-      'info',
-      'Datos de Demostración Cargados',
-      'Se han generado registros del mes actual, mes anterior y arrastre patrimonial.'
-    );
+    addNotification('warning', 'Datos reales protegidos', 'Usa un proyecto de pruebas para cargar datos de demostración.');
   };
 
   // Exhaustive Customization & Full Setup
@@ -3940,6 +3008,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const addDynamicWidget = (widgetData: Omit<DynamicChartWidget, 'id' | 'createdAt'>) => {
     const newWidget: DynamicChartWidget = {
       ...widgetData,
+      companyId: currentCompany.id,
       id: `dw_${Date.now()}`,
       createdAt: new Date().toISOString(),
     };
@@ -3962,30 +3031,7 @@ export const ERPProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // BACKUP & RESET
   // ----------------------------------------------------
   const resetAllDataToSample = () => {
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(LEGACY_STORAGE_KEY);
-    localStorage.removeItem(ANCIENT_STORAGE_KEY);
-    setCompanies(SAMPLE_COMPANIES);
-    setCurrentCompanyId(SAMPLE_COMPANIES[0].id);
-    setBranches(SAMPLE_BRANCHES);
-    setSelectedBranchId('all');
-    setProducts(SAMPLE_PRODUCTS);
-    setCustomers(SAMPLE_CUSTOMERS);
-    setInvoices(SAMPLE_INVOICES);
-    setCustomerPayments([]);
-    setSuppliers(SAMPLE_SUPPLIERS);
-    setPurchases(SAMPLE_PURCHASES);
-    setSupplierPayments([]);
-    setKardexMovements(SAMPLE_KARDEX_MOVEMENTS);
-    setEmployees(SAMPLE_EMPLOYEES);
-    setPayrolls(SAMPLE_PAYROLLS);
-    setBankAccounts(SAMPLE_BANK_ACCOUNTS);
-    setTreasuryMovements([]);
-    setOtherIncomes(SAMPLE_OTHER_INCOMES);
-    setChartOfAccounts(DEFAULT_CHART_OF_ACCOUNTS);
-    setJournalEntries([]);
-    setDynamicWidgets(INITIAL_DYNAMIC_WIDGETS);
-    addNotification('info', 'Datos Restaurados', 'Base de datos de demostración restaurada con éxito.');
+    addNotification('warning', 'Datos reales protegidos', 'Los datos de demostración solo deben cargarse en un proyecto de pruebas separado.');
   };
 
   const exportDatabaseJSON = (): string => {

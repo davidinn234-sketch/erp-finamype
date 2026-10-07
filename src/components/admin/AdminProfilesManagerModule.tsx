@@ -1,3 +1,4 @@
+import { accountRequest } from '../../lib/api';
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { db } from '../../lib/firebase';
@@ -53,7 +54,7 @@ export const AdminProfilesManagerModule: React.FC = () => {
   // Form State for New User
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('123456');
+  const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
   const [selectedArchetype, setSelectedArchetype] = useState<SystemArchetype>('emprendedor_control_interno');
   const [selectedRole, setSelectedRole] = useState<UserRole>('gerente');
@@ -182,15 +183,7 @@ export const AdminProfilesManagerModule: React.FC = () => {
     };
 
     try {
-      // Guardar en Firestore
-      await setDoc(doc(db, 'companies', companyId), newCompany);
-      await setDoc(doc(db, 'branches', initialBranch.id), initialBranch);
-      await setDoc(doc(db, 'users', userId), newProfile);
-
-      // Guardar en contexto local
-      createCompany(newCompany);
-      createBranch(initialBranch);
-      createUser(newProfile);
+      await accountRequest('/api/accounts', { user: newProfile, company: newCompany, branch: initialBranch });
 
       addNotification(
         'success',
@@ -202,14 +195,10 @@ export const AdminProfilesManagerModule: React.FC = () => {
       setName('');
       setEmail('');
       setPhone('');
-      setPassword('123456');
+      setPassword('');
     } catch (err: any) {
       console.error('Firebase save error:', err);
-      // Fallback local save
-      createCompany(newCompany);
-      createBranch(initialBranch);
-      createUser(newProfile);
-      addNotification('warning', 'Guardado Localmente', 'La cuenta y empresa se guardaron de inmediato en memoria.');
+      addNotification('error', 'No se creó la cuenta', 'Verifica los datos y usa una contraseña de al menos 12 caracteres.');
     } finally {
       setIsSaving(false);
     }
@@ -225,7 +214,7 @@ export const AdminProfilesManagerModule: React.FC = () => {
         ? 'Empresa Formal sin DTE (Libros de IVA & Planilla)'
         : 'Empresa Formal con Facturación Electrónica DTE MH';
 
-    const text = `👋 ¡Hola ${u.name}! Ya está creada tu cuenta en FINAMIPE SV:\n\n🌐 Plataforma: https://ais-dev-zt5ox4j3ww7wbwalmkdubu-128537300182.us-east1.run.app\n📧 Correo: ${u.email}\n🔑 Contraseña: ${u.password || 'admin'}\n📦 Servicio Activado: ${serviceName}\n\n¡Cualquier duda quedo a la orden!`;
+    const text = `👋 ¡Hola ${u.name}! Ya está creada tu cuenta en FINAMIPE SV:\n\n🌐 Plataforma: https://ais-dev-zt5ox4j3ww7wbwalmkdubu-128537300182.us-east1.run.app\n📧 Correo: ${u.email}\n🔑 Contraseña: ${'No se muestra; utiliza la contraseña asignada'}\n📦 Servicio Activado: ${serviceName}\n\n¡Cualquier duda quedo a la orden!`;
 
     navigator.clipboard.writeText(text);
     setCopiedUserId(u.id);
@@ -234,7 +223,7 @@ export const AdminProfilesManagerModule: React.FC = () => {
   };
 
   const handleTestLogin = (u: UserProfile) => {
-    login(u.email, u.password || 'admin');
+    addNotification('info', 'Cambio de cuenta', 'Cierra sesión e inicia con las credenciales de la otra cuenta.');
   };
 
   const handleDeleteUser = async (u: UserProfile) => {
@@ -244,10 +233,9 @@ export const AdminProfilesManagerModule: React.FC = () => {
     }
     if (window.confirm(`¿Estás seguro de eliminar el perfil de ${u.name} (${u.email})?`)) {
       try {
-        await deleteDoc(doc(db, 'users', u.id));
+        await deleteUser(u.id);
       } catch (e) {}
-      deleteUser(u.id);
-      addNotification('info', 'Usuario Eliminado', `El perfil de ${u.name} fue removido.`);
+
     }
   };
 
@@ -719,7 +707,7 @@ export const AdminProfilesManagerModule: React.FC = () => {
 
                           <span className="flex items-center gap-1 font-mono bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[11px]">
                             <Lock className="w-3 h-3 text-slate-400" />
-                            {showPassword ? u.password || 'admin' : '••••••••'}
+                            {showPassword ? 'No se muestra; utiliza la contraseña asignada' : '••••••••'}
                             <button
                               type="button"
                               onClick={() =>

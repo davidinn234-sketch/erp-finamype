@@ -20,6 +20,8 @@ import { UserProfile, UserRole } from '../../types';
 export const UserRoleManagement: React.FC = () => {
   const {
     users,
+    currentCompany,
+    addNotification,
     currentUser,
     setCurrentUserId,
     createUser,
@@ -30,6 +32,7 @@ export const UserRoleManagement: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
 
+  const [formPassword, setFormPassword] = useState('');
   const [formName, setFormName] = useState('');
   const [formEmail, setFormEmail] = useState('');
   const [formRole, setFormRole] = useState<UserRole>('cajero');
@@ -95,19 +98,22 @@ export const UserRoleManagement: React.FC = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) return;
 
+    try {
     if (editingUserId) {
-      updateUser(editingUserId, {
+      await updateUser(editingUserId, {
         name: formName.trim(),
         email: formEmail.trim() || `${formName.toLowerCase().replace(/\s+/g, '')}@empresa.sv`,
         role: formRole,
         permissions: formPermissions,
       });
     } else {
-      createUser({
+      await createUser({
+        password: formPassword,
+        companyId: currentCompany.id,
         name: formName.trim(),
         email: formEmail.trim() || `${formName.toLowerCase().replace(/\s+/g, '')}@empresa.sv`,
         role: formRole,
@@ -116,6 +122,10 @@ export const UserRoleManagement: React.FC = () => {
     }
 
     setIsModalOpen(false);
+    setFormPassword('');
+    } catch (error) {
+      addNotification('error', 'No se guardó la cuenta', error instanceof Error ? error.message : 'Intenta nuevamente.');
+    }
   };
 
   const getRoleBadge = (role: UserRole) => {
@@ -261,7 +271,7 @@ export const UserRoleManagement: React.FC = () => {
                       ) : (
                         <button
                           type="button"
-                          onClick={() => setCurrentUserId(u.id)}
+                          onClick={() => addNotification('info', 'Cambio de cuenta', 'Cierra sesión para cambiar de usuario.')}
                           className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-[11px] font-semibold text-slate-600 dark:text-slate-300 transition cursor-pointer"
                         >
                           Usar Sesión
@@ -319,6 +329,7 @@ export const UserRoleManagement: React.FC = () => {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              {!editingUserId && <label className="block">Contraseña inicial<input type="password" required minLength={12} value={formPassword} onChange={(e) => setFormPassword(e.target.value)} autoComplete="new-password" className="block w-full p-2 border rounded" /></label>}
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Nombre Completo del Colaborador: *
