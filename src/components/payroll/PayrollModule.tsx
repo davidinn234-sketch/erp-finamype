@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useERP } from '../../context/ERPContext';
 import {
   Users,
@@ -291,6 +291,24 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
   };
 
   const currentSelectedPayroll = payrolls.find((p) => p.id === selectedPayrollId) || payrolls[0];
+
+  const payrollAttendanceSummary = useMemo(() => {
+    if (!currentSelectedPayroll) return { totalLateEmployees: 0, totalLateDays: 0, totalLateMins: 0 };
+    let totalLateEmployees = 0;
+    let totalLateDays = 0;
+    let totalLateMins = 0;
+
+    currentSelectedPayroll.details.forEach((d) => {
+      const stats = getEmployeePayrollAttendance(d.employeeId, currentSelectedPayroll);
+      if (stats.lateCount > 0) {
+        totalLateEmployees++;
+        totalLateDays += stats.lateCount;
+        totalLateMins += stats.lateMins;
+      }
+    });
+
+    return { totalLateEmployees, totalLateDays, totalLateMins };
+  }, [currentSelectedPayroll, attendanceRecords, attendanceConfig]);
 
   const handleOpenSlipModal = (detail: PayrollDetail) => {
     setSelectedSlipDetail(detail);
@@ -682,6 +700,53 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
             </span>
           </div>
 
+          {/* Fortnight Attendance Warning & Policy Banner */}
+          {payrollAttendanceSummary.totalLateEmployees > 0 ? (
+            <div className="p-3 sm:p-3.5 rounded-[8px] bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-none">
+              <div className="flex items-start sm:items-center gap-2.5">
+                <div className="w-8 h-8 rounded-[6px] bg-amber-500/10 text-amber-700 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-300 dark:border-amber-700 mt-0.5 sm:mt-0">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                      Aviso de Asistencia: {payrollAttendanceSummary.totalLateEmployees} colaborador{payrollAttendanceSummary.totalLateEmployees > 1 ? 'es' : ''} con tardanzas registradas en la quincena
+                    </span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-[4px] bg-white dark:bg-slate-900 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                      Tolerancia oficial: {attendanceConfig.toleranceMinutes || 10} min
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-800/90 dark:text-amber-300/80 mt-0.5">
+                    Se acumularon {payrollAttendanceSummary.totalLateDays} llegadas tarde (+{payrollAttendanceSummary.totalLateMins} min de exceso). <strong>Aviso informativo:</strong> Este reporte notifica a la administración; los descuentos en planilla dependen de las políticas de la empresa.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('attendance')}
+                className="px-2.5 py-1.5 rounded-[6px] bg-white dark:bg-slate-900 hover:bg-amber-100 dark:hover:bg-slate-800 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 text-xs font-semibold shrink-0 transition cursor-pointer self-start sm:self-auto"
+              >
+                Ver Módulo Asistencia →
+              </button>
+            </div>
+          ) : (
+            <div className="p-3 rounded-[8px] bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-[6px] bg-emerald-500/10 text-[#059669] dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-300 dark:border-emerald-700">
+                  <CheckCircle2 className="w-4 h-4 text-[#059669]" />
+                </div>
+                <div>
+                  <span className="text-xs font-semibold text-emerald-900 dark:text-emerald-200">
+                    Control de Asistencia: Puntualidad al 100% en esta quincena
+                  </span>
+                  <p className="text-[11px] text-emerald-800/80 dark:text-emerald-300/80">
+                    Todos los marcajes registrados por PIN se realizaron dentro del horario con tolerancia de {attendanceConfig.toleranceMinutes || 10} minutos.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Payroll Detailed Table */}
           <div className="rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 bg-white dark:bg-slate-900 shadow-none overflow-hidden">
             <div className="overflow-x-auto">
@@ -740,11 +805,11 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => setSelectedAttendanceEmployeeId(d.employeeId)}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/80 text-[11px] font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/60 transition cursor-pointer"
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/80 text-[11px] font-semibold hover:bg-amber-100 transition cursor-pointer"
                                   title="Ver registro de marcaciones y tardanzas del colaborador en la quincena"
                                 >
-                                  <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
-                                  <span>⚠️ {lateCount} tardanza{lateCount > 1 ? 's' : ''} ({lateMins} min)</span>
+                                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                  <span>⚠️ {lateCount} día{lateCount > 1 ? 's' : ''} tarde (+{lateMins} min)</span>
                                 </button>
                               );
                             }
@@ -753,11 +818,11 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => setSelectedAttendanceEmployeeId(d.employeeId)}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700/80 text-[11px] font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition cursor-pointer"
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] bg-emerald-50 dark:bg-emerald-950/60 text-[#059669] dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-semibold hover:bg-emerald-100 transition cursor-pointer"
                                   title="Ver marcaciones de asistencia"
                                 >
-                                  <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
-                                  <span>✓ {punchCount} d. puntual</span>
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-[#059669] shrink-0" />
+                                  <span>✓ {punchCount} d. puntual (0 tarde)</span>
                                 </button>
                               );
                             }
@@ -765,7 +830,7 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
                               <button
                                 type="button"
                                 onClick={() => setSelectedAttendanceEmployeeId(d.employeeId)}
-                                className="text-[10px] text-slate-400 hover:text-[#0F766E] font-mono underline cursor-pointer"
+                                className="text-[11px] text-slate-400 hover:text-[#0F766E] font-medium underline cursor-pointer"
                                 title="Ver historial de marcaciones"
                               >
                                 Ver marcas

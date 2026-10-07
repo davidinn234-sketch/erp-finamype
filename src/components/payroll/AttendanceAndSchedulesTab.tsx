@@ -279,8 +279,8 @@ export const AttendanceAndSchedulesTab: React.FC<Props> = ({ onOpenKiosk }) => {
     });
     addNotification(
       'success',
-      'Marcajes de Prueba Generados',
-      `Se registraron marcajes completos de prueba (entrada, almuerzo, salida) para ${count} colaboradores en la fecha ${selectedDate}.`
+      'Jornada Registrada para el Personal',
+      `Se registraron marcajes de jornada laboral (entrada, almuerzo, salida) para ${count} colaboradores en la fecha ${selectedDate}.`
     );
   };
 
@@ -701,7 +701,7 @@ export const AttendanceAndSchedulesTab: React.FC<Props> = ({ onOpenKiosk }) => {
                                   addNotification('success', 'Entrada Registrada', `${emp.firstName} marcada a tiempo (07:55 AM).`);
                                 }}
                                 className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 transition cursor-pointer"
-                                title="Marcar entrada puntual rápida para prueba"
+                                title="Registrar entrada puntual (Supervisor)"
                               >
                                 +Entrada
                               </button>

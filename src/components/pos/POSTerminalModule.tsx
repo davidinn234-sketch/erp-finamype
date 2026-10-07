@@ -568,29 +568,29 @@ export const POSTerminalModule: React.FC = () => {
   }, [todayInvoices]);
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex flex-col bg-slate-100 dark:bg-slate-950 p-2 sm:p-4 gap-3">
+    <div className="min-h-[calc(100vh-4rem)] flex flex-col bg-[#F6F8F7] dark:bg-slate-950 p-2 sm:p-4 gap-3 font-sans">
       {/* Top Banner: Status & Cashier Info */}
-      <header className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-3 sm:p-4 shadow-sm flex flex-wrap items-center justify-between gap-3">
+      <header className="bg-white dark:bg-slate-900 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 p-3 sm:p-4 shadow-none flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
-            <ScanBarcode className="w-5 h-5" />
+          <div className="w-9 h-9 rounded-[6px] bg-[#0F766E] text-white flex items-center justify-center shadow-xs">
+            <ScanBarcode className="w-5 h-5 stroke-[2]" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight">
+              <h1 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">
                 Terminal de Ventas POS
               </h1>
-              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                ACTIVADO Y LISTO
+              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-[4px] bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[#059669] dark:text-emerald-300 text-[10px] font-bold">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                TERMINAL ACTIVA
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-slate-500 dark:text-slate-400">
-              <span>Cajero: <strong className="text-slate-700 dark:text-slate-200">{currentUser.name}</strong></span>
+              <span>Cajero: <strong className="text-slate-800 dark:text-slate-200">{currentUser.name}</strong></span>
               <span>•</span>
-              <div className="flex items-center gap-1.5 bg-indigo-50/80 dark:bg-indigo-950/50 px-2.5 py-1 rounded-xl border border-indigo-200 dark:border-indigo-800">
-                <Store className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                <span className="font-semibold text-slate-700 dark:text-slate-300">Sucursal de Venta:</span>
+              <div className="flex items-center gap-1.5 bg-[#F6F8F7] dark:bg-slate-800 px-2 py-0.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700">
+                <Store className="w-3.5 h-3.5 text-[#0F766E] dark:text-teal-400 shrink-0" />
+                <span className="font-semibold text-slate-700 dark:text-slate-300">Sucursal:</span>
                 {branches.length > 1 ? (
                   <select
                     id="pos-branch-selector"
@@ -599,7 +599,7 @@ export const POSTerminalModule: React.FC = () => {
                       setPosBranchId(e.target.value);
                       setSelectedBranchId(e.target.value);
                     }}
-                    className="bg-white dark:bg-slate-800 px-2 py-0.5 rounded-lg border border-indigo-300 dark:border-indigo-700 font-bold text-indigo-700 dark:text-indigo-300 focus:outline-none cursor-pointer text-xs"
+                    className="bg-white dark:bg-slate-900 px-1.5 py-0.5 rounded border border-[#E3E8E6] dark:border-slate-700 font-semibold text-[#0F766E] dark:text-teal-300 focus:outline-none cursor-pointer text-xs"
                   >
                     {branches.map((b) => (
                       <option key={b.id} value={b.id} className="text-slate-900 dark:text-white">
@@ -608,13 +608,13 @@ export const POSTerminalModule: React.FC = () => {
                     ))}
                   </select>
                 ) : (
-                  <strong className="text-indigo-700 dark:text-indigo-300 font-bold">
+                  <strong className="text-[#0F766E] dark:text-teal-300 font-semibold">
                     {activeBranch?.name || 'Casa Matriz - Sede Central'} ({activeBranch?.code || 'SUC-01'})
                   </strong>
                 )}
               </div>
               <span>•</span>
-              <span className="font-mono text-[11px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+              <span className="font-mono text-[11px] px-2 py-0.5 rounded-[4px] bg-[#F6F8F7] dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-[#E3E8E6] dark:border-slate-700">
                 {currentCompany.dteActive ? 'Modo DTE MH Oficial' : 'Modo Control Interno'}
               </span>
             </div>
@@ -643,10 +643,10 @@ export const POSTerminalModule: React.FC = () => {
               });
               setIsNewProductModalOpen(true);
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/40 text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition cursor-pointer shadow-xs"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-[#F6F8F7] dark:hover:bg-slate-750 transition cursor-pointer shadow-none"
             title="Registrar nuevo producto asignándole su código de barras"
           >
-            <Package className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+            <Package className="w-3.5 h-3.5 text-[#0F766E] dark:text-teal-400" />
             <span>+ Crear Producto & Código</span>
           </button>
 
@@ -654,12 +654,12 @@ export const POSTerminalModule: React.FC = () => {
           <button
             type="button"
             onClick={() => setShowShiftSummaryModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-750 transition cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-[#F6F8F7] dark:hover:bg-slate-750 transition cursor-pointer shadow-none"
             title="Ver resumen y corte de caja del turno"
           >
-            <History className="w-3.5 h-3.5 text-indigo-500" />
+            <History className="w-3.5 h-3.5 text-[#0F766E]" />
             <span className="hidden sm:inline">Corte del Turno:</span>
-            <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+            <span className="font-mono font-bold text-[#059669] dark:text-emerald-400">
               {formatCurrencyUSD(todayTotalSales)}
             </span>
           </button>
@@ -668,10 +668,10 @@ export const POSTerminalModule: React.FC = () => {
           <button
             type="button"
             onClick={() => setSoundEnabled(!soundEnabled)}
-            className={`p-2 rounded-xl border transition ${
+            className={`p-2 rounded-[6px] border transition cursor-pointer ${
               soundEnabled
-                ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400'
-                : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-400'
+                ? 'bg-teal-50 dark:bg-teal-950/40 border-teal-200 dark:border-teal-800 text-[#0F766E] dark:text-teal-300'
+                : 'bg-white dark:bg-slate-800 border-[#E3E8E6] dark:border-slate-700 text-slate-400'
             }`}
             title={soundEnabled ? 'Sonido de escaneo activo (Clic para silenciar)' : 'Silenciado (Clic para activar)'}
           >
@@ -680,8 +680,8 @@ export const POSTerminalModule: React.FC = () => {
         </div>
       </header>
 
-      {/* Main Barcode Scanner Bar (Central & Dominant) */}
-      <section className="bg-gradient-to-r from-indigo-900 via-slate-900 to-indigo-950 rounded-2xl p-3 sm:p-4 text-white shadow-lg border border-indigo-800/50">
+      {/* Main Barcode Scanner Bar (Orderly & Clean) */}
+      <section className="bg-slate-900 rounded-[8px] p-3 sm:p-4 text-white border border-slate-800 shadow-none">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -690,8 +690,8 @@ export const POSTerminalModule: React.FC = () => {
           className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5"
         >
           <div className="relative flex-1">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-indigo-400">
-              <ScanBarcode className="w-6 h-6 animate-pulse" />
+            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-teal-400">
+              <ScanBarcode className="w-5 h-5 stroke-[2]" />
             </div>
             <input
               ref={barcodeInputRef}
@@ -700,17 +700,17 @@ export const POSTerminalModule: React.FC = () => {
               autoFocus
               value={barcodeInput}
               onChange={(e) => setBarcodeInput(e.target.value)}
-              placeholder="Pase el lector de código de barras aquí o digite el SKU / Código..."
-              className="w-full pl-12 pr-28 py-3.5 rounded-xl bg-slate-950/80 border-2 border-indigo-500/80 text-white placeholder-slate-400 text-sm sm:text-base font-mono font-bold tracking-wider focus:outline-none focus:ring-4 focus:ring-indigo-500/40 focus:border-indigo-400 shadow-inner"
+              placeholder="Escanee código de barras o digite SKU / Código..."
+              className="w-full pl-11 pr-28 py-2.5 rounded-[6px] bg-slate-950 border border-slate-700 text-white placeholder-slate-400 text-sm font-mono font-semibold tracking-wider focus:outline-none focus:border-[#0F766E] focus:ring-1 focus:ring-[#0F766E]"
             />
-            <div className="absolute inset-y-0 right-2 flex items-center gap-1">
-              <span className="hidden md:inline text-[11px] font-mono px-2 py-1 rounded bg-indigo-950/80 text-indigo-300 border border-indigo-700/50">
+            <div className="absolute inset-y-0 right-1.5 flex items-center gap-1">
+              <span className="hidden md:inline text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
                 [ENTER]
               </span>
               <button
                 type="submit"
                 id="pos-barcode-add-btn"
-                className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                className="px-2.5 py-1.5 rounded-[4px] bg-[#0F766E] hover:bg-[#115E59] active:scale-95 text-white text-xs font-semibold transition flex items-center gap-1 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Agregar</span>
@@ -726,28 +726,28 @@ export const POSTerminalModule: React.FC = () => {
               setCameraScanTarget('cart');
               setIsCameraScannerOpen(true);
             }}
-            className="flex items-center justify-center gap-2 px-3.5 py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-950/50 transition active:scale-95 cursor-pointer shrink-0 border border-emerald-400/50"
+            className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-[6px] bg-slate-800 hover:bg-slate-750 text-white font-semibold text-xs border border-slate-700 transition cursor-pointer shrink-0"
             title="Usar la cámara de su teléfono o tableta para escanear productos"
           >
-            <Camera className="w-5 h-5 text-emerald-100 animate-pulse" />
-            <span>📷 Usar Cámara (Móvil)</span>
+            <Camera className="w-4 h-4 text-teal-400" />
+            <span>📷 Cámara Móvil</span>
           </button>
 
           {/* Document type selector: Factura FCF vs CCF vs Ticket */}
-          <div className="flex items-center gap-1.5 bg-slate-950/80 p-1.5 rounded-xl border border-indigo-700/60 shadow-inner flex-wrap">
+          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-[6px] border border-slate-800 flex-wrap">
             <button
               type="button"
               id="pos-doc-fcf-btn"
               onClick={() => setInvoiceType('factura_consumidor_final')}
-              className={`px-3 py-2 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              className={`px-2.5 py-1.5 rounded-[4px] text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
                 invoiceType === 'factura_consumidor_final'
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/40 ring-2 ring-emerald-400'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                  ? 'bg-[#0F766E] text-white shadow-xs'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
               }`}
             >
-              <Receipt className="w-4 h-4 text-emerald-300" />
+              <Receipt className="w-3.5 h-3.5" />
               <span>Factura (FCF)</span>
-              {invoiceType === 'factura_consumidor_final' && <Check className="w-3.5 h-3.5 ml-0.5 text-white" />}
+              {invoiceType === 'factura_consumidor_final' && <Check className="w-3 h-3 ml-0.5 text-white" />}
             </button>
             <button
               type="button"
@@ -758,29 +758,29 @@ export const POSTerminalModule: React.FC = () => {
                   setShowCustomerPickerModal(true);
                 }
               }}
-              className={`px-3 py-2 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              className={`px-2.5 py-1.5 rounded-[4px] text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
                 invoiceType === 'credito_fiscal'
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-900/40 ring-2 ring-blue-400'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                  ? 'bg-slate-750 text-white shadow-xs border border-slate-600'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
               }`}
             >
-              <FileText className="w-4 h-4 text-blue-300" />
+              <FileText className="w-3.5 h-3.5" />
               <span>Crédito Fiscal (CCF)</span>
-              {invoiceType === 'credito_fiscal' && <Check className="w-3.5 h-3.5 ml-0.5 text-white" />}
+              {invoiceType === 'credito_fiscal' && <Check className="w-3 h-3 ml-0.5 text-white" />}
             </button>
             <button
               type="button"
               id="pos-doc-ticket-btn"
               onClick={() => setInvoiceType('ticket_interno')}
-              className={`px-3 py-2 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+              className={`px-2.5 py-1.5 rounded-[4px] text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
                 invoiceType === 'ticket_interno'
-                  ? 'bg-purple-600 text-white shadow-md shadow-purple-900/40 ring-2 ring-purple-400'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                  ? 'bg-slate-750 text-white shadow-xs border border-slate-600'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
               }`}
             >
-              <Store className="w-4 h-4 text-purple-300" />
+              <Store className="w-3.5 h-3.5" />
               <span>Ticket Interno</span>
-              {invoiceType === 'ticket_interno' && <Check className="w-3.5 h-3.5 ml-0.5 text-white" />}
+              {invoiceType === 'ticket_interno' && <Check className="w-3 h-3 ml-0.5 text-white" />}
             </button>
           </div>
         </form>
@@ -788,12 +788,12 @@ export const POSTerminalModule: React.FC = () => {
         {/* Live scanner status feedback message */}
         {lastScannedFeedback && (
           <div
-            className={`mt-2 text-xs flex items-center gap-2 py-1 px-2.5 rounded-lg font-medium transition-all ${
+            className={`mt-2 text-xs flex items-center gap-2 py-1 px-2.5 rounded-[4px] font-medium transition-all ${
               lastScannedFeedback.type === 'success'
-                ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/50'
+                ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800'
                 : lastScannedFeedback.type === 'error'
-                ? 'bg-rose-950/80 text-rose-300 border border-rose-700/50'
-                : 'bg-indigo-950/40 text-indigo-300 border border-indigo-900/50'
+                ? 'bg-rose-950/80 text-rose-300 border border-rose-850'
+                : 'bg-slate-800 text-teal-300 border border-slate-700'
             }`}
           >
             {lastScannedFeedback.type === 'success' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
@@ -830,14 +830,14 @@ export const POSTerminalModule: React.FC = () => {
         )}
       </section>
 
-      {/* Workspace Grid: Left = Active Ticket/Cart, Right = Touch Catalog / Fast Tiles */}
+      {/* Workspace Grid: Left = Active Ticket/Cart, Right = Touch Catalog */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 min-h-0">
         {/* LEFT 7 COLS: Current Invoice Ticket / Carrito */}
-        <div className="lg:col-span-7 flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+        <div className="lg:col-span-7 flex flex-col bg-white dark:bg-slate-900 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 shadow-none overflow-hidden">
           {/* Ticket Header & Customer Tag */}
-          <div className="p-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-850">
+          <div className="p-3 border-b border-[#E3E8E6] dark:border-slate-800 flex items-center justify-between bg-[#F6F8F7] dark:bg-slate-850">
             <div className="flex items-center gap-2">
-              <ShoppingCart className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <ShoppingCart className="w-4 h-4 text-[#0F766E] dark:text-teal-400" />
               <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                 Ticket en Curso ({cart.reduce((acc, i) => acc + i.quantity, 0)} artículos)
               </span>
@@ -848,13 +848,13 @@ export const POSTerminalModule: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowCustomerPickerModal(true)}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 text-xs font-medium bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:border-indigo-400 transition"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700 text-xs font-medium bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:border-[#0F766E] transition cursor-pointer"
               >
-                <User className="w-3 h-3 text-indigo-500" />
+                <User className="w-3 h-3 text-[#0F766E]" />
                 <span className="truncate max-w-[140px] sm:max-w-[200px]">
                   {activeCustomer.name}
                 </span>
-                <span className="text-[10px] text-indigo-600 dark:text-indigo-400 underline ml-1">Cambiar</span>
+                <span className="text-[10px] text-[#0F766E] dark:text-teal-400 underline ml-1">Cambiar</span>
               </button>
 
               {cart.length > 0 && (
@@ -950,25 +950,25 @@ export const POSTerminalModule: React.FC = () => {
           </div>
 
           {/* Financial Calculation & Tender / Payment Section */}
-          <div className="p-3.5 bg-slate-50 dark:bg-slate-850 border-t border-slate-200 dark:border-slate-800 space-y-3">
+          <div className="p-3.5 bg-[#F6F8F7] dark:bg-slate-850 border-t border-[#E3E8E6] dark:border-slate-800 space-y-3">
             {/* Totals Breakdown */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-              <div className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                <span className="text-[10px] uppercase text-slate-400 font-bold block">Subtotal</span>
+              <div className="p-2.5 rounded-[6px] bg-white dark:bg-slate-800 border border-[#E3E8E6] dark:border-slate-700">
+                <span className="text-[10px] uppercase text-[#6B7280] font-semibold block">Subtotal</span>
                 <span className="font-mono font-bold text-slate-800 dark:text-slate-200 text-sm">
                   {formatCurrencyUSD(calculations.subtotalRaw)}
                 </span>
               </div>
 
-              <div className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                <span className="text-[10px] uppercase text-slate-400 font-bold block">IVA 13% (Débito)</span>
-                <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 text-sm">
+              <div className="p-2.5 rounded-[6px] bg-white dark:bg-slate-800 border border-[#E3E8E6] dark:border-slate-700">
+                <span className="text-[10px] uppercase text-[#6B7280] font-semibold block">IVA 13% (Débito)</span>
+                <span className="font-mono font-bold text-slate-800 dark:text-slate-200 text-sm">
                   {formatCurrencyUSD(calculations.iva13)}
                 </span>
               </div>
 
-              <div className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                <span className="text-[10px] uppercase text-slate-400 font-bold block">Descuento (%)</span>
+              <div className="p-2.5 rounded-[6px] bg-white dark:bg-slate-800 border border-[#E3E8E6] dark:border-slate-700">
+                <span className="text-[10px] uppercase text-[#6B7280] font-semibold block">Descuento (%)</span>
                 <div className="flex items-center gap-1">
                   <input
                     type="number"
@@ -983,25 +983,25 @@ export const POSTerminalModule: React.FC = () => {
                 </div>
               </div>
 
-              <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border-2 border-indigo-500/50">
-                <span className="text-[10px] uppercase text-indigo-600 dark:text-indigo-400 font-black block">
+              <div className="p-2.5 rounded-[6px] bg-teal-50 dark:bg-teal-950/60 border border-teal-300 dark:border-teal-800">
+                <span className="text-[10px] uppercase text-[#0F766E] dark:text-teal-400 font-bold block">
                   TOTAL A COBRAR
                 </span>
-                <span className="font-mono font-black text-indigo-700 dark:text-indigo-300 text-base sm:text-lg">
+                <span className="font-mono font-black text-[#0F766E] dark:text-teal-300 text-base sm:text-lg">
                   {formatCurrencyUSD(calculations.totalToPay)}
                 </span>
               </div>
             </div>
 
             {/* Payment Methods Tabs */}
-            <div className="flex items-center gap-1.5 bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center gap-1 bg-white dark:bg-slate-800 p-1 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700">
               <button
                 type="button"
                 onClick={() => setPaymentMethod('efectivo')}
-                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+                className={`flex-1 py-1.5 px-2 rounded-[4px] text-xs font-semibold transition flex items-center justify-center gap-1 cursor-pointer ${
                   paymentMethod === 'efectivo'
-                    ? 'bg-emerald-600 text-white shadow'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    ? 'bg-[#0F766E] text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-[#F6F8F7] dark:hover:bg-slate-700'
                 }`}
               >
                 <Banknote className="w-3.5 h-3.5" />
@@ -1010,10 +1010,10 @@ export const POSTerminalModule: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setPaymentMethod('tarjeta')}
-                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+                className={`flex-1 py-1.5 px-2 rounded-[4px] text-xs font-semibold transition flex items-center justify-center gap-1 cursor-pointer ${
                   paymentMethod === 'tarjeta'
-                    ? 'bg-blue-600 text-white shadow'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    ? 'bg-slate-800 text-white shadow-xs dark:bg-slate-700'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-[#F6F8F7] dark:hover:bg-slate-700'
                 }`}
               >
                 <CreditCard className="w-3.5 h-3.5" />
@@ -1022,22 +1022,22 @@ export const POSTerminalModule: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setPaymentMethod('transferencia')}
-                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+                className={`flex-1 py-1.5 px-2 rounded-[4px] text-xs font-semibold transition flex items-center justify-center gap-1 cursor-pointer ${
                   paymentMethod === 'transferencia'
-                    ? 'bg-purple-600 text-white shadow'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    ? 'bg-slate-800 text-white shadow-xs dark:bg-slate-700'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-[#F6F8F7] dark:hover:bg-slate-700'
                 }`}
               >
                 <TrendingUp className="w-3.5 h-3.5" />
-                <span>Transferencia 365</span>
+                <span>Transferencia</span>
               </button>
               <button
                 type="button"
                 onClick={() => setPaymentMethod('chivo_wallet')}
-                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer ${
+                className={`flex-1 py-1.5 px-2 rounded-[4px] text-xs font-semibold transition flex items-center justify-center gap-1 cursor-pointer ${
                   paymentMethod === 'chivo_wallet'
-                    ? 'bg-cyan-600 text-white shadow'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    ? 'bg-slate-800 text-white shadow-xs dark:bg-slate-700'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-[#F6F8F7] dark:hover:bg-slate-700'
                 }`}
               >
                 <QrCode className="w-3.5 h-3.5" />
@@ -1047,18 +1047,18 @@ export const POSTerminalModule: React.FC = () => {
 
             {/* Cash Tendering & Live Change Calculation */}
             {paymentMethod === 'efectivo' && (
-              <div className="p-3 rounded-2xl bg-white dark:bg-slate-800 border-2 border-emerald-500/40 shadow-sm space-y-2.5">
+              <div className="p-3 rounded-[6px] bg-white dark:bg-slate-800 border border-[#E3E8E6] dark:border-slate-700 shadow-none space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                    <Banknote className="w-4 h-4 text-emerald-600" />
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <Banknote className="w-4 h-4 text-[#0F766E]" />
                     Pago en Efectivo & Vuelto
                   </span>
                   {calculations.isCashEmpty ? (
-                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-[4px] bg-teal-50 dark:bg-teal-950 text-[#0F766E] dark:text-teal-300 border border-teal-200 dark:border-teal-800">
                       Modo: Efectivo Exacto ({formatCurrencyUSD(calculations.totalToPay)})
                     </span>
                   ) : (
-                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-800">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-[4px] bg-[#F6F8F7] dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-[#E3E8E6] dark:border-slate-700">
                       Entregó: {formatCurrencyUSD(calculations.cashNum)}
                     </span>
                   )}
@@ -1067,8 +1067,8 @@ export const POSTerminalModule: React.FC = () => {
                 {/* Cash Input & Quick Bill Buttons */}
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
                   <div className="flex-1">
-                    <label htmlFor="pos-cash-input" className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                      ¿Cuánto entregó el cliente? <span className="font-normal opacity-75">(o seleccione billete)</span>
+                    <label htmlFor="pos-cash-input" className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
+                      Monto recibido: <span className="font-normal opacity-75">(digite o pulse billete)</span>
                     </label>
                     <div className="relative">
                       <span className="absolute inset-y-0 left-0 pl-3 flex items-center font-mono font-bold text-slate-400 text-sm">
@@ -1085,13 +1085,13 @@ export const POSTerminalModule: React.FC = () => {
                           setCashGiven(val);
                         }}
                         placeholder={`${calculations.totalToPay.toFixed(2)} (Exacto)`}
-                        className="w-full pl-8 pr-16 py-2 rounded-xl border-2 border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 font-mono font-black text-slate-900 dark:text-white text-base focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 shadow-inner"
+                        className="w-full pl-8 pr-16 py-2 rounded-[6px] border border-[#CBD5E1] dark:border-slate-600 bg-[#F6F8F7] dark:bg-slate-900 font-mono font-bold text-slate-900 dark:text-white text-base focus:outline-none focus:border-[#0F766E] focus:ring-1 focus:ring-[#0F766E]"
                       />
                       {cashGiven && (
                         <button
                           type="button"
                           onClick={() => setCashGiven('')}
-                          className="absolute inset-y-0 right-1.5 px-2 my-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-700 dark:text-slate-300 text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                          className="absolute inset-y-0 right-1.5 px-2 my-1.5 rounded-[4px] bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-700 dark:text-slate-300 text-xs font-semibold transition flex items-center gap-1 cursor-pointer"
                           title="Restablecer a monto exacto"
                         >
                           <X className="w-3 h-3" />
@@ -1103,16 +1103,16 @@ export const POSTerminalModule: React.FC = () => {
 
                   {/* Quick bill buttons */}
                   <div className="space-y-1">
-                    <span className="text-[10px] font-bold uppercase text-slate-400 block">Billetes Rápidos:</span>
+                    <span className="text-[10px] font-semibold uppercase text-slate-500 block">Billetes Rápidos:</span>
                     <div className="flex items-center gap-1 flex-wrap">
                       <button
                         type="button"
                         id="pos-cash-exact-btn"
                         onClick={setExactCash}
-                        className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition border cursor-pointer ${
+                        className={`px-2.5 py-1.5 rounded-[4px] text-xs font-semibold transition border cursor-pointer ${
                           calculations.isCashEmpty || calculations.cashNum === calculations.totalToPay
-                            ? 'bg-emerald-600 text-white border-emerald-600 shadow'
-                            : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-600 hover:bg-slate-200'
+                            ? 'bg-[#0F766E] text-white border-[#0F766E] shadow-xs'
+                            : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border-[#E3E8E6] dark:border-slate-600 hover:bg-[#F6F8F7]'
                         }`}
                       >
                         Exacto
@@ -1123,10 +1123,10 @@ export const POSTerminalModule: React.FC = () => {
                           type="button"
                           id={`pos-cash-bill-${bill}`}
                           onClick={() => handleQuickCash(bill)}
-                          className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition border cursor-pointer ${
+                          className={`px-2.5 py-1.5 rounded-[4px] text-xs font-semibold transition border cursor-pointer ${
                             !calculations.isCashEmpty && calculations.cashNum === bill
-                              ? 'bg-indigo-600 text-white border-indigo-600 shadow ring-2 ring-indigo-400'
-                              : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-600 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-slate-600'
+                              ? 'bg-[#0F766E] text-white border-[#0F766E] shadow-xs'
+                              : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border-[#E3E8E6] dark:border-slate-600 hover:bg-teal-50 hover:text-[#0F766E]'
                           }`}
                         >
                           ${bill}
@@ -1138,28 +1138,28 @@ export const POSTerminalModule: React.FC = () => {
 
                 {/* Live Change / Vuelto or Shortfall Banner */}
                 {calculations.cashShortfall > 0 && !calculations.isCashEmpty ? (
-                  <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/50 border-2 border-amber-400 dark:border-amber-700 text-amber-900 dark:text-amber-200 flex items-center justify-between">
+                  <div className="p-2.5 rounded-[6px] bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
                       <div>
-                        <p className="font-bold text-xs">Monto en Efectivo Insuficiente</p>
+                        <p className="font-semibold text-xs">Monto en Efectivo Insuficiente</p>
                         <p className="text-[11px] text-amber-700 dark:text-amber-300">
                           Entregó {formatCurrencyUSD(calculations.cashNum)}. Faltan {formatCurrencyUSD(calculations.cashShortfall)} para completar el total de {formatCurrencyUSD(calculations.totalToPay)}.
                         </p>
                       </div>
                     </div>
-                    <span className="font-mono font-black text-amber-700 dark:text-amber-300 text-base">
+                    <span className="font-mono font-bold text-amber-700 dark:text-amber-300 text-base">
                       -{formatCurrencyUSD(calculations.cashShortfall)}
                     </span>
                   </div>
                 ) : (
-                  <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/60 dark:to-teal-950/40 border-2 border-emerald-400 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200 flex items-center justify-between shadow-sm">
+                  <div className="p-2.5 rounded-[6px] bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-base shadow-sm">
+                      <div className="w-8 h-8 rounded-[4px] bg-[#059669] text-white flex items-center justify-center font-bold text-sm">
                         $
                       </div>
                       <div>
-                        <p className="font-black text-xs uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                        <p className="font-bold text-xs uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
                           Vuelto / Cambio a entregar:
                         </p>
                         <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-mono">
@@ -1170,7 +1170,7 @@ export const POSTerminalModule: React.FC = () => {
                       </div>
                     </div>
                     <div className="text-right">
-                      <span className="font-mono font-black text-emerald-700 dark:text-emerald-300 text-2xl sm:text-3xl block leading-tight">
+                      <span className="font-mono font-black text-emerald-700 dark:text-emerald-300 text-xl sm:text-2xl block leading-tight">
                         {formatCurrencyUSD(calculations.changeDue)}
                       </span>
                       <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400">
@@ -1188,15 +1188,15 @@ export const POSTerminalModule: React.FC = () => {
               id="pos-checkout-btn"
               disabled={cart.length === 0 || (paymentMethod === 'efectivo' && !calculations.isSufficientCash)}
               onClick={handleCompleteSale}
-              className={`w-full py-3.5 px-4 rounded-xl font-black text-sm tracking-wide shadow-lg transition flex items-center justify-center gap-2 cursor-pointer ${
+              className={`w-full py-3 px-4 rounded-[6px] font-bold text-sm tracking-wide shadow-none transition flex items-center justify-center gap-2 cursor-pointer ${
                 cart.length === 0
-                  ? 'bg-slate-300 dark:bg-slate-800 text-slate-500 cursor-not-allowed'
+                  ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
                   : paymentMethod === 'efectivo' && !calculations.isSufficientCash
-                  ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/30'
-                  : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30 active:scale-[0.98]'
+                  ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                  : 'bg-[#0F766E] hover:bg-[#115E59] active:bg-[#134E4A] text-white active:scale-[0.99]'
               }`}
             >
-              <Check className="w-5 h-5 shrink-0" />
+              <Check className="w-4 h-4 shrink-0" />
               <span>
                 {cart.length === 0
                   ? 'AGREGUE PRODUCTOS AL TICKET PARA COBRAR'
@@ -1222,13 +1222,13 @@ export const POSTerminalModule: React.FC = () => {
         </div>
 
         {/* RIGHT 5 COLS: Quick Touch Catalog / Simulator */}
-        <div className="lg:col-span-5 flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+        <div className="lg:col-span-5 flex flex-col bg-white dark:bg-slate-900 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 shadow-none overflow-hidden">
           {/* Header with Search and Category Filter */}
-          <div className="p-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 space-y-2">
+          <div className="p-3 border-b border-[#E3E8E6] dark:border-slate-800 bg-[#F6F8F7] dark:bg-slate-850 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <Store className="w-4 h-4 text-indigo-500" />
-                Catálogo Táctil & Simulador Barcode
+                <Store className="w-4 h-4 text-[#0F766E]" />
+                Catálogo Táctil de Productos
               </span>
               <div className="flex items-center gap-2">
                 <button
@@ -1250,10 +1250,10 @@ export const POSTerminalModule: React.FC = () => {
                     });
                     setIsNewProductModalOpen(true);
                   }}
-                  className="px-2 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
+                  className="px-2 py-0.5 rounded-[4px] bg-white dark:bg-slate-800 hover:bg-[#F6F8F7] text-slate-700 dark:text-slate-300 border border-[#E3E8E6] dark:border-slate-700 text-[10px] font-semibold flex items-center gap-1 transition cursor-pointer"
                   title="Registrar producto y asignar código de barras"
                 >
-                  <Plus className="w-3 h-3" />
+                  <Plus className="w-3 h-3 text-[#0F766E]" />
                   <span>Nuevo Prod.</span>
                 </button>
                 <span className="text-[10px] text-slate-400">
@@ -1270,7 +1270,7 @@ export const POSTerminalModule: React.FC = () => {
                 value={catalogSearch}
                 onChange={(e) => setCatalogSearch(e.target.value)}
                 placeholder="Buscar por nombre, SKU o código..."
-                className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                className="w-full pl-9 pr-3 py-1.5 rounded-[6px] border border-[#CBD5E1] dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-[#0F766E]"
               />
             </div>
 
@@ -1279,10 +1279,10 @@ export const POSTerminalModule: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setFilterCategory('all')}
-                className={`px-2.5 py-1 rounded-lg font-bold shrink-0 transition ${
+                className={`px-2.5 py-1 rounded-[4px] font-semibold shrink-0 transition cursor-pointer ${
                   filterCategory === 'all'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
+                    ? 'bg-[#0F766E] text-white shadow-xs'
+                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-[#E3E8E6] dark:border-slate-700'
                 }`}
               >
                 Todos
@@ -1292,10 +1292,10 @@ export const POSTerminalModule: React.FC = () => {
                   key={cat}
                   type="button"
                   onClick={() => setFilterCategory(cat)}
-                  className={`px-2.5 py-1 rounded-lg font-medium shrink-0 transition ${
+                  className={`px-2.5 py-1 rounded-[4px] font-medium shrink-0 transition cursor-pointer ${
                     filterCategory === cat
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
+                      ? 'bg-[#0F766E] text-white shadow-xs'
+                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-[#E3E8E6] dark:border-slate-700'
                   }`}
                 >
                   {cat}
@@ -1320,34 +1320,34 @@ export const POSTerminalModule: React.FC = () => {
                     type: 'success',
                   });
                 }}
-                className="text-left p-2.5 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/60 hover:border-indigo-500 hover:shadow-md dark:hover:border-indigo-500 transition-all flex flex-col justify-between group active:scale-95 cursor-pointer"
+                className="text-left p-2.5 rounded-[6px] border border-[#E3E8E6] dark:border-slate-800 bg-white dark:bg-slate-850 hover:border-[#0F766E] dark:hover:border-teal-700 transition flex flex-col justify-between group active:scale-[0.98] cursor-pointer"
               >
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition truncate max-w-[100px]">
+                    <span className="font-mono text-[9px] px-1 py-0.5 rounded bg-[#F6F8F7] dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:text-[#0F766E] transition truncate max-w-[100px]">
                       ||| {prod.barcode || prod.code}
                     </span>
                     <span
-                      className={`text-[9px] font-bold px-1 rounded ${
+                      className={`text-[9px] font-semibold px-1 rounded ${
                         prod.stock <= prod.minStock
-                          ? 'bg-rose-100 text-rose-700'
-                          : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                          ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
+                          : 'bg-[#F6F8F7] dark:bg-slate-800 text-slate-600 dark:text-slate-300'
                       }`}
                     >
                       {prod.stock} stk
                     </span>
                   </div>
-                  <p className="font-bold text-xs text-slate-900 dark:text-white line-clamp-2 leading-tight">
+                  <p className="font-semibold text-xs text-slate-900 dark:text-white line-clamp-2 leading-tight">
                     {prod.name}
                   </p>
                 </div>
 
-                <div className="mt-2 pt-1 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between">
-                  <span className="font-mono font-black text-indigo-600 dark:text-indigo-400 text-sm">
+                <div className="mt-2 pt-1 border-t border-[#E3E8E6] dark:border-slate-800 flex items-center justify-between">
+                  <span className="font-mono font-bold text-[#0F766E] dark:text-teal-400 text-sm">
                     {formatCurrencyUSD(prod.salePrice)}
                   </span>
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 opacity-0 group-hover:opacity-100 transition">
-                    + Escanear
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-teal-50 dark:bg-teal-950 text-[#0F766E] dark:text-teal-400 opacity-0 group-hover:opacity-100 transition">
+                    + Agregar
                   </span>
                 </div>
               </button>
