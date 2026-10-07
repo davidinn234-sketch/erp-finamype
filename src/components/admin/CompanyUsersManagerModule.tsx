@@ -74,7 +74,7 @@ export const CompanyUsersManagerModule: React.FC = () => {
   // Form State
   const [formName, setFormName] = useState('');
   const [formEmail, setFormEmail] = useState('');
-  const [formPassword, setFormPassword] = useState('123456');
+  const [formPassword, setFormPassword] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formRole, setFormRole] = useState<UserRole>('cajero');
   const [formBranchId, setFormBranchId] = useState<string>(branches[0]?.id || '');
@@ -171,7 +171,7 @@ export const CompanyUsersManagerModule: React.FC = () => {
       .replace(/[^a-z0-9]/g, '');
     const randomNum = Math.floor(10 + Math.random() * 90);
     setFormEmail(`cajero${randomNum}@${baseSlug}.sv`);
-    setFormPassword('123456');
+    setFormPassword('');
     setFormPhone('');
     setFormRole('cajero');
     setFormBranchId(branches[0]?.id || '');
@@ -183,7 +183,7 @@ export const CompanyUsersManagerModule: React.FC = () => {
     setEditingUserId(user.id);
     setFormName(user.name);
     setFormEmail(user.email);
-    setFormPassword(user.password || '123456');
+    setFormPassword('');
     setFormPhone(user.phone || '');
     setFormRole(user.role);
     setFormBranchId(branches[0]?.id || '');
@@ -193,7 +193,7 @@ export const CompanyUsersManagerModule: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formName.trim() || !formEmail.trim() || !formPassword.trim()) {
+    if (!formName.trim() || !formEmail.trim() || (!editingUserId && !formPassword.trim())) {
       addNotification('error', 'Campos Obligatorios', 'Por favor ingresa el nombre, correo y contraseña.');
       return;
     }
@@ -201,23 +201,19 @@ export const CompanyUsersManagerModule: React.FC = () => {
     const trimmedEmail = formEmail.trim().toLowerCase();
     const finalPermissions = [...formPermissions];
 
+    try {
     if (editingUserId) {
       const updates: Partial<UserProfile> = {
         name: formName.trim(),
         email: trimmedEmail,
-        password: formPassword.trim(),
+        ...(formPassword ? { password: formPassword } : {}),
         phone: formPhone.trim() || undefined,
         role: formRole,
         companyId: currentCompany.id,
         permissions: finalPermissions,
       };
 
-      updateUser(editingUserId, updates);
-      try {
-        await setDoc(doc(db, 'users', editingUserId), updates, { merge: true });
-      } catch (err) {
-        console.warn('Error guardando en Firestore:', err);
-      }
+      await updateUser(editingUserId, updates);
 
       addNotification('success', 'Usuario Actualizado', `Los accesos de ${formName} han sido actualizados.`);
     } else {
@@ -227,7 +223,7 @@ export const CompanyUsersManagerModule: React.FC = () => {
         companyId: currentCompany.id,
         name: formName.trim(),
         email: trimmedEmail,
-        password: formPassword.trim(),
+        ...(formPassword ? { password: formPassword } : {}),
         phone: formPhone.trim() || undefined,
         role: formRole,
         permissions: finalPermissions,
@@ -237,17 +233,12 @@ export const CompanyUsersManagerModule: React.FC = () => {
         storedInCloud: true,
       };
 
-      createUser(newUser);
-      try {
-        await setDoc(doc(db, 'users', newUserId), newUser);
-      } catch (err) {
-        console.warn('Error guardando en Firestore:', err);
-      }
+      await createUser(newUser);
 
       setCreatedCredential({
         name: newUser.name,
         email: newUser.email,
-        pass: newUser.password || '123456',
+        pass: formPassword,
         role: newUser.role,
       });
 
@@ -259,6 +250,9 @@ export const CompanyUsersManagerModule: React.FC = () => {
     }
 
     setIsModalOpen(false);
+    } catch (error) {
+      addNotification('error', 'No se guardó la cuenta', error instanceof Error ? error.message : 'Intenta nuevamente.');
+    }
   };
 
   const handleCopyCredentials = (text: string, id: string) => {
@@ -518,7 +512,7 @@ export const CompanyUsersManagerModule: React.FC = () => {
                     <span className="text-[10px] font-bold text-slate-400">Contraseña:</span>
                     <div className="flex items-center gap-1.5 font-mono">
                       <span className="font-black text-slate-900 dark:text-white select-all">
-                        {showPass ? user.password || '123456' : '••••••'}
+                        {showPass ? 'No se muestra; utiliza la contraseña asignada' : '••••••'}
                       </span>
                       <button
                         onClick={() =>
@@ -567,7 +561,7 @@ export const CompanyUsersManagerModule: React.FC = () => {
                   type="button"
                   onClick={() =>
                     handleCopyCredentials(
-                      `Usuario: ${user.email} | Clave: ${user.password || '123456'}`,
+                      `Usuario: ${user.email} | Clave: ${'No se muestra; utiliza la contraseña asignada'}`,
                       user.id
                     )
                   }
@@ -590,17 +584,12 @@ export const CompanyUsersManagerModule: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      setCurrentUserId(user.id);
-                      addNotification(
-                        'info',
-                        'Modo Auditoría Activado',
-                        `Ahora estás viendo el sistema con los permisos de ${user.name} (${user.role.toUpperCase()}).`
-                      );
+                      addNotification('info', 'Cambio de cuenta', 'Cierra sesión e inicia con las credenciales de la otra cuenta.');
                     }}
                     className="px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
-                    title="Simular cómo ve el sistema este colaborador"
+                    title="Cambiar de cuenta requiere iniciar sesión"
                   >
-                    <span>Auditar Sesión</span>
+                    <span>Cambiar de cuenta</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 )}
@@ -772,7 +761,7 @@ export const CompanyUsersManagerModule: React.FC = () => {
                   <input
                     type="text"
                     required
-                    placeholder="123456"
+                    placeholder="Mínimo 12 caracteres"
                     value={formPassword}
                     onChange={(e) => setFormPassword(e.target.value)}
                     className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-black"

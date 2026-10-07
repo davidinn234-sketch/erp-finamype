@@ -819,6 +819,7 @@ export interface JournalEntry {
 // MÓDULO 6: AI BUSINESS COPILOT & DYNAMIC CHARTS
 // ----------------------------------------------------
 export interface DynamicChartWidget {
+  companyId?: string;
   id: string;
   title: string;
   description: string;

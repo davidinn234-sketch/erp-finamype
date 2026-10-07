@@ -1,3 +1,4 @@
+import { getAuth } from 'firebase/auth';
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAnalytics, isSupported } from "firebase/analytics";
 import { initializeFirestore, doc, setDoc, getDocFromServer } from "firebase/firestore";
@@ -19,6 +20,7 @@ export const firestoreDatabaseId = "ai-studio-nexuserpsalvador-619c5a84-1f5d-483
 // Initialize Firebase
 export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const firebaseApp = app;
+export const auth = getAuth(app);
 
 // Initialize Analytics safely for web environments
 export let analytics: ReturnType<typeof getAnalytics> | null = null;
@@ -48,7 +50,8 @@ export const db = initializeFirestore(
 // Connection test helper mandated by Firebase skill
 export async function testFirebaseConnection(): Promise<boolean> {
   try {
-    const testDocRef = doc(db, "test", "connection");
+    if (!auth.currentUser) return false;
+    const testDocRef = doc(db, "test", auth.currentUser.uid);
     await setDoc(
       testDocRef,
       {
