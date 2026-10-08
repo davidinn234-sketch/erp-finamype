@@ -84,17 +84,15 @@ export const FloatingAICopilot: React.FC = () => {
 
   // Consolidated financial calculations for context
   const totalLiquid = (bankAccounts || []).reduce((acc, b) => acc + (b.currentBalance || 0), 0);
-  const monthlyBurnRate = 4800; // Average fixed monthly commitments
-  const runwayMonths = monthlyBurnRate > 0 ? Number((totalLiquid / monthlyBurnRate).toFixed(1)) : 12;
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome-msg',
       sender: 'assistant',
       text: `¡Hola! Soy **FinaPyme AI**, tu Copiloto Financiero, Operativo y Estratégico en FinaPyme ERP.
-Puedo realizar acciones reales en tu empresa con solo pedírmelo:
-• **Registrar ventas, gastos o facturas** al instante.
-• **Dar de alta un nuevo cliente** en tu cartera CRM.
+Puedo ayudarte a preparar operaciones y analizar los registros de tu empresa:
+• **Preparar ventas, gastos o facturas** para que los revises antes de guardarlos.
+• **Preparar los datos de un nuevo cliente** para tu cartera CRM.
 • **Evaluar inversiones estratégicas** (como compras al por mayor con descuento y su impacto en tu liquidez).
 • **Generar gráficos y reportes interactivos** a la medida.
 • **Responder preguntas de negocio** (ej: *"¿cuánto vendimos en efectivo este mes?"*).
@@ -153,8 +151,6 @@ Puedo realizar acciones reales en tu empresa con solo pedírmelo:
       const companyContext = {
         companyName: currentCompany?.name || 'Mi Empresa SV',
         totalLiquid,
-        monthlyBurnRate,
-        runwayMonths,
         bankAccounts: bankAccounts.map((b) => ({
           name: b.accountName,
           bank: b.bankName,
@@ -171,11 +167,9 @@ Puedo realizar acciones reales en tu empresa con solo pedírmelo:
         body: JSON.stringify({ prompt: query, companyContext }),
       });
 
-      if (!res.ok) {
-        throw new Error(`Error en servidor IA: ${res.status}`);
-      }
-
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || 'No se pudo conectar con el asistente. Inténtalo de nuevo.');
+      if (!data?.replyText || !data?.actionType) throw new Error('El asistente recibió una respuesta incompleta. Inténtalo de nuevo.');
 
       let executed = false;
 
@@ -206,7 +200,7 @@ Puedo realizar acciones reales en tu empresa con solo pedírmelo:
         {
           id: `err-${Date.now()}`,
           sender: 'assistant',
-          text: `Lo siento, ocurrió un error al procesar tu solicitud: ${error.message || 'Error de conexión'}. Puedes intentar nuevamente con un prompt directo.`,
+          text: error.message || 'No se pudo conectar con el asistente. Comprueba tu conexión e inténtalo de nuevo.',
           timestamp: 'Ahora',
         },
       ]);

@@ -1452,7 +1452,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({
       {/* MODAL: REGISTRAR / EDITAR CLIENTE (CRM) */}
       {/* ---------------------------------------------------- */}
       {isCustomerModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
           <div className="w-full max-w-2xl my-8 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-6 space-y-4 text-xs max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
               <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
@@ -1775,7 +1775,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({
       {/* MODAL: EMITIR DOCUMENTO TRIBUTARIO (DTE SV) */}
       {/* ---------------------------------------------------- */}
       {isNewSaleModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
           <div className="w-full max-w-3xl my-8 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
             <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60">
               <div className="flex items-center gap-2">
@@ -1795,6 +1795,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({
               </div>
               <button
                 onClick={onCloseNewSaleModal}
+                aria-label="Cerrar formulario de venta"
                 className="p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -2186,7 +2187,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({
       {/* MODAL: VER DTE OFICIAL DE EL SALVADOR */}
       {/* ---------------------------------------------------- */}
       {selectedInvoiceForView && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto">
           <div className="w-full max-w-2xl my-8 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white text-slate-900 shadow-2xl p-6 space-y-6">
             {/* Action Bar */}
             <div className="flex items-center justify-between border-b pb-4">
@@ -2325,7 +2326,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({
       {/* MODAL: REGISTRAR ABONO CXC */}
       {/* ---------------------------------------------------- */}
       {paymentModalInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-6 space-y-4 text-xs">
             <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">

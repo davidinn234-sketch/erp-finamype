@@ -20,16 +20,20 @@ import {
   Target,
   Database,
   X,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { FinaPymeTermsAndProjectModal } from './FinaPymeTermsAndProjectModal';
 import { canAccessModule } from '../../lib/accessPolicy';
 
 interface SidebarProps {
+  isCollapsed?: boolean;
+  onToggleCollapsed?: () => void;
   isOpenMobile: boolean;
   onCloseMobile: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile, isCollapsed, onToggleCollapsed }) => {
   const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
   const {
     activeModule,
@@ -211,13 +215,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
 
       {/* Main Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-[100] w-72 max-w-[85vw] lg:w-68 lg:sticky lg:top-0 lg:h-screen flex flex-col justify-between border-r border-[#0b3b36] bg-[#0F4C45] text-white transition-transform duration-200 ease-in-out ${
+        id="erp-sidebar"
+        className={`${isCollapsed ? 'sidebar-collapsed' : ''} fixed inset-y-0 left-0 z-[100] w-72 max-w-[85vw] lg:w-68 lg:sticky lg:top-0 lg:h-screen flex flex-col justify-between border-r border-[#0b3b36] bg-[#0F4C45] text-white transition-[width,transform] duration-200 ease-in-out ${
           isOpenMobile ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'
         }`}
       >
         {/* Top Header & Navigation Links */}
         <div className="flex-1 min-h-0 flex flex-col">
-          <div className="p-4 border-b border-[#0b3b36] flex items-center justify-between shrink-0">
+          <div className="sidebar-top p-4 border-b border-[#0b3b36] flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-teal-300"></span>
               <span className="font-semibold text-xs text-teal-100 uppercase tracking-wider">
@@ -225,6 +230,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
               </span>
             </div>
             <div className="flex items-center gap-1.5">
+              <button type="button" onClick={onToggleCollapsed} aria-label={isCollapsed ? 'Expandir menú lateral' : 'Contraer menú lateral'} className="hidden lg:flex p-1.5 rounded hover:bg-white/10">
+                {isCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+              </button>
               <span className="text-[10px] text-teal-200 font-medium px-1.5 py-0.5 rounded bg-teal-900/60 border border-teal-700/50">
                 ERP SV
               </span>
@@ -257,6 +265,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
                 <button
                   key={item.id}
                   id={`nav-${item.id}`}
+                  aria-label={item.label}
+                  title={isCollapsed ? item.label : undefined}
                   onClick={() => handleSelectModule(item.id)}
                   className={`w-full flex items-center justify-between p-2 rounded-[6px] text-left transition-colors cursor-pointer select-none ${
                     isActive
@@ -312,6 +322,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
                       <button
                         key={item.id}
                         id={`nav-${item.id}`}
+                  aria-label={item.label}
+                  title={isCollapsed ? item.label : undefined}
                         onClick={() => handleSelectModule(item.id)}
                         className={`w-full flex items-center justify-between p-2 rounded-[6px] text-left transition-colors cursor-pointer select-none ${
                           isActive

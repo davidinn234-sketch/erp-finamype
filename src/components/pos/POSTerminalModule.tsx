@@ -568,7 +568,7 @@ export const POSTerminalModule: React.FC = () => {
   }, [todayInvoices]);
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex flex-col bg-[#F6F8F7] dark:bg-slate-950 p-2 sm:p-4 gap-3 font-sans">
+    <div data-testid="pos-workspace" className="pos-workspace min-h-[calc(100vh-4rem)] flex flex-col bg-[#F6F8F7] dark:bg-slate-950 p-2 sm:p-4 gap-3 font-sans">
       {/* Top Banner: Status & Cashier Info */}
       <header className="bg-white dark:bg-slate-900 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 p-3 sm:p-4 shadow-none flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -831,7 +831,7 @@ export const POSTerminalModule: React.FC = () => {
       </section>
 
       {/* Workspace Grid: Left = Active Ticket/Cart, Right = Touch Catalog */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 min-h-0">
+      <div className="pos-panels flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 min-h-0">
         {/* LEFT 7 COLS: Current Invoice Ticket / Carrito */}
         <div className="lg:col-span-7 flex flex-col bg-white dark:bg-slate-900 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 shadow-none overflow-hidden">
           {/* Ticket Header & Customer Tag */}
@@ -871,9 +871,9 @@ export const POSTerminalModule: React.FC = () => {
           </div>
 
           {/* Table of Scanned Products */}
-          <div className="flex-1 overflow-y-auto max-h-[360px] p-2 space-y-1.5 divide-y divide-slate-100 dark:divide-slate-800">
+          <div className="pos-ticket-list flex-1 overflow-y-auto max-h-[360px] p-2 space-y-1.5 divide-y divide-slate-100 dark:divide-slate-800">
             {cart.length === 0 ? (
-              <div className="h-64 flex flex-col items-center justify-center text-center p-6 text-slate-400">
+              <div className="pos-empty-ticket h-64 flex flex-col items-center justify-center text-center p-6 text-slate-400">
                 <ScanBarcode className="w-12 h-12 text-slate-300 dark:text-slate-700 mb-2 animate-bounce" />
                 <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
                   Ningún producto escaneado todavía
@@ -950,7 +950,7 @@ export const POSTerminalModule: React.FC = () => {
           </div>
 
           {/* Financial Calculation & Tender / Payment Section */}
-          <div className="p-3.5 bg-[#F6F8F7] dark:bg-slate-850 border-t border-[#E3E8E6] dark:border-slate-800 space-y-3">
+          <div className="pos-payment p-3.5 bg-[#F6F8F7] dark:bg-slate-850 border-t border-[#E3E8E6] dark:border-slate-800 space-y-3">
             {/* Totals Breakdown */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
               <div className="p-2.5 rounded-[6px] bg-white dark:bg-slate-800 border border-[#E3E8E6] dark:border-slate-700">
@@ -1305,7 +1305,7 @@ export const POSTerminalModule: React.FC = () => {
           </div>
 
           {/* Grid of Clickable Product Cards (Instant Scan Simulator) */}
-          <div className="flex-1 overflow-y-auto p-2 grid grid-cols-2 sm:grid-cols-2 gap-2 max-h-[500px]">
+          <div className="pos-catalog flex-1 overflow-y-auto p-2 grid grid-cols-2 sm:grid-cols-2 gap-2 max-h-[500px]">
             {filteredProducts.map((prod) => (
               <button
                 key={prod.id}
@@ -1358,7 +1358,7 @@ export const POSTerminalModule: React.FC = () => {
 
       {/* MODAL 1: Thermal Receipt & Sale Completed Modal */}
       {isCompletedSaleModalOpen && completedInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn">
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full overflow-hidden flex flex-col max-h-[90vh]">
             {/* Modal Header */}
             <div className="p-4 bg-emerald-600 text-white flex items-center justify-between">
@@ -1526,7 +1526,7 @@ export const POSTerminalModule: React.FC = () => {
 
       {/* MODAL 2: Customer Picker (For CCF or specific clients) */}
       {showCustomerPickerModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn">
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-lg w-full p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -1596,7 +1596,7 @@ export const POSTerminalModule: React.FC = () => {
 
       {/* MODAL 3: Shift / Corte de Caja Summary */}
       {showShiftSummaryModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn">
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-md w-full p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2">
@@ -1660,7 +1660,7 @@ export const POSTerminalModule: React.FC = () => {
 
       {/* MODAL 4: Registrar Nuevo Producto con Código de Barras Directo */}
       {isNewProductModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn">
           <div className="w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-6 space-y-4 text-xs">
             <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2">

@@ -73,7 +73,7 @@ import { HistoricalFinancialAnalytics } from './HistoricalFinancialAnalytics';
 import { Invoice, Customer, Product, Branch } from '../../types';
 import { marketingSaleAmount, recordedMarketingInvoices, marketingChannels } from '../../lib/marketingReports';
 
-const COLORS = ['#0F766E', '#0F4C45', '#115E59', '#64748B', '#059669', '#334155', '#0D9488', '#475569'];
+const COLORS = ['#2563eb', '#14b8a6', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#10b981', '#475569'];
 
 export const MarketingDashboard: React.FC = () => {
   const {
@@ -516,7 +516,7 @@ export const MarketingDashboard: React.FC = () => {
   }, [simBudget, simCpl, simConvRate, simMarginPct, marketingKPIs.ticketPromedio]);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 bg-[#F6F8F7] dark:bg-slate-950 min-h-screen text-[#111827] dark:text-slate-100 font-sans pb-20">
+    <div className="finapyme-dashboard space-y-6 max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 bg-[#F6F8F7] dark:bg-slate-950 min-h-screen text-[#111827] dark:text-slate-100 font-sans pb-20">
       {/* ==================================================== */}
       {/* 1. TOP PAGE HEADER: Switcher + Title + Primary Action */}
       {/* ==================================================== */}

@@ -632,7 +632,7 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 bg-[#F6F8F7] dark:bg-slate-950 min-h-screen text-[#111827] dark:text-slate-100 font-sans">
+    <div className="finapyme-dashboard space-y-6 max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 bg-[#F6F8F7] dark:bg-slate-950 min-h-screen text-[#111827] dark:text-slate-100 font-sans">
       {/* ---------------------------------------------------- */}
       {/* 1. TOP PAGE HEADER: Title + Description + Primary Action */}
       {/* ---------------------------------------------------- */}

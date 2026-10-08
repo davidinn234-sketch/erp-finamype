@@ -5,11 +5,12 @@ import { getAdminApp } from './firebaseAdmin.js';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { userAccessRouter } from './userAccess.js';
+import { aiFailure } from './aiErrors.js';
 
 dotenv.config();
 
 const app = express();
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 
 app.use(express.json({ limit: '10mb' }));
 app.use('/api/admin/users', userAccessRouter);
@@ -25,6 +26,7 @@ function getAIClient(): GoogleGenAI {
     aiClient = new GoogleGenAI({
       apiKey,
       httpOptions: {
+        timeout: 30000,
         headers: {
           'User-Agent': 'aistudio-build',
         },
@@ -98,10 +100,9 @@ ${context ? JSON.stringify(context, null, 2) : 'No se adjuntó contexto'}`;
 
     return res.json({ reply: response.text || 'No se pudo generar una respuesta.' });
   } catch (error: any) {
-    console.error('Error in /api/ai/chat:', error);
-    return res.status(500).json({
-      error: error.message || 'Error al conectar con SivarAI Copilot.',
-    });
+    const failure = aiFailure(error);
+    console.error('AI chat failed:', failure.code);
+    return res.status(failure.status).json({ error: failure.error, code: failure.code });
   }
 });
 
@@ -172,8 +173,9 @@ Debes responder ÚNICAMENTE en JSON con el esquema especificado:
     const parsedData = JSON.parse(response.text?.trim() || '{}');
     return res.json(parsedData);
   } catch (error: any) {
-    console.error('AI dynamic-chart failed:', error?.message);
-    return res.status(503).json({ error: 'El asistente no está disponible. No se registró ninguna operación ni se generaron datos de demostración.' });
+    const failure = aiFailure(error);
+    console.error('AI dynamic-chart failed:', failure.code);
+    return res.status(failure.status).json({ error: failure.error, code: failure.code });
   }
 });
 
@@ -187,7 +189,7 @@ app.post('/api/ai/copilot', async (req, res) => {
 
     const ai = getAIClient();
     const systemInstruction = `Eres "SivarAI Copilot", el Agente de Inteligencia Artificial y Consultor Empresarial de Élite integrado directamente en SivarFlow ERP (El Salvador).
-Tienes facultades completas de AUTOPILOTO OPERATIVO y CONSULTORÍA FINANCIERA ESTRATÉGICA.
+Preparas PROPUESTAS DE OPERACIONES y CONSULTORÍA FINANCIERA ESTRATÉGICA. No ejecutas ni guardas operaciones: el usuario debe revisarlas en el módulo correspondiente. Nunca afirmes que ya registraste una venta o compra. Usa únicamente las cifras del contexto; si falta un dato, dilo y solicítalo, sin inventar importes ni asumir gastos fijos.
 
 Tu misión es clasificar la intención del usuario en una de las siguientes 6 ACCIONES y generar la estructura JSON correspondiente:
 
@@ -262,8 +264,9 @@ Formato de respuesta: Devuelve ÚNICAMENTE un JSON con:
     const parsed = JSON.parse(response.text?.trim() || '{}');
     return res.json(parsed);
   } catch (error: any) {
-    console.error('AI copilot failed:', error?.message);
-    return res.status(503).json({ error: 'El asistente no está disponible. No se registró ninguna operación ni se generaron datos de demostración.' });
+    const failure = aiFailure(error);
+    console.error('AI copilot failed:', failure.code);
+    return res.status(failure.status).json({ error: failure.error, code: failure.code });
   }
 });
 
@@ -315,10 +318,9 @@ Devuelve un JSON estructurado con:
     const diagnosis = JSON.parse(response.text?.trim() || '{}');
     return res.json(diagnosis);
   } catch (error: any) {
-    console.error('Error in /api/ai/financial-diagnosis:', error);
-    return res.status(500).json({
-      error: error.message || 'Error al generar el diagnóstico financiero.',
-    });
+    const failure = aiFailure(error);
+    console.error('AI financial-diagnosis failed:', failure.code);
+    return res.status(failure.status).json({ error: failure.error, code: failure.code });
   }
 });
 

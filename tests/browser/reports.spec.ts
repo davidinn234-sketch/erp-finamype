@@ -43,3 +43,55 @@ test('forecasting shows no fabricated history and allows an explicit downloadabl
   await expect(page.getByRole('heading', { name: 'Escenario manual', exact: true })).toBeVisible();
   const downloadPromise = page.waitForEvent('download'); await page.getByRole('button', { name: 'Excel (CSV)', exact: true }).click(); expect((await downloadPromise).suggestedFilename()).toMatch(/^proyeccion-.*\.csv$/);
 });
+
+test('header shortcuts open the sale and purchase forms from the dashboard', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const search = await page.locator('#global-search-btn').boundingBox();
+  const actions = await page.locator('.header-desktop-actions').boundingBox();
+  expect(search!.x + search!.width).toBeLessThanOrEqual(actions!.x);
+  await page.screenshot({ path: '.tools/previews/dashboard.png' });
+  await page.locator('#quick-new-sale-btn').click();
+  await expect(page.getByRole('heading', { name: /Nueva Venta|Emisión de Documento/ })).toBeVisible();
+  await page.screenshot({ path: '.tools/previews/formulario-venta.png' });
+  await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
+  await page.locator('#nav-dashboard').click();
+  await page.locator('#quick-new-purchase-btn').click();
+  await expect(page.getByText('Registro de Compra / Gasto con Validación Fiscal SV', { exact: true })).toBeVisible();
+});
+
+test('desktop sidebar collapses persistently and the POS checkout fits a laptop at normal zoom', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await login(page);
+  await page.locator('#desktop-sidebar-toggle').click();
+  await expect(page.locator('#erp-sidebar')).toHaveClass(/sidebar-collapsed/);
+  await page.reload();
+  await expect(page.locator('#erp-sidebar')).toHaveClass(/sidebar-collapsed/);
+  await page.locator('#nav-pos_terminal').click();
+  await expect(page.locator('#pos-checkout-btn')).toBeVisible();
+  const checkout = await page.locator('#pos-checkout-btn').boundingBox();
+  expect(checkout!.y + checkout!.height).toBeLessThanOrEqual(768);
+  const workspace = await page.getByTestId('pos-workspace').boundingBox();
+  await page.screenshot({ path: '.tools/previews/pos-laptop.png' });
+  expect(workspace!.width).toBeGreaterThan(1200);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1366);
+  await page.locator('#desktop-sidebar-toggle').click();
+  await expect(page.locator('#erp-sidebar')).not.toHaveClass(/sidebar-collapsed/);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1366);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('#pos-checkout-btn')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+test('assistant explains missing Gemini configuration instead of a generic server error', async ({ page }) => {
+  await login(page);
+  await page.locator('#floating-erp-assistant-btn').click();
+  const input = page.getByPlaceholder(/^Escribe tu instrucción/);
+  await input.fill('Hola');
+  const request = page.waitForResponse(response => response.url().endsWith('/api/ai/copilot'));
+  await input.press('Enter');
+  const response = await request;
+  expect(response.status()).toBe(503);
+  expect((await response.json()).code).toBe('AI_NOT_CONFIGURED');
+  await expect(page.getByText(/El asistente necesita una clave de Gemini configurada/)).toBeVisible();
+});

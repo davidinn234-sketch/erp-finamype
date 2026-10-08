@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
+import { canAccessModule } from '../../lib/accessPolicy';
 import {
   Building2,
   User,
@@ -26,9 +27,13 @@ import {
   Check,
   Package,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 
 interface HeaderProps {
+  isSidebarCollapsed?: boolean;
+  onToggleSidebar?: () => void;
   isSidebarOpenMobile?: boolean;
   onOpenMobileMenu?: () => void;
   onToggleMobileMenu?: () => void;
@@ -40,6 +45,8 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
+  isSidebarCollapsed,
+  onToggleSidebar,
   isSidebarOpenMobile,
   onOpenMobileMenu,
   onToggleMobileMenu,
@@ -73,7 +80,7 @@ export const Header: React.FC<HeaderProps> = ({
       : branches.find((b) => b.id === selectedBranchId)?.name || 'Sucursal Principal';
 
   return (
-    <header className="sticky top-0 z-[90] flex items-center justify-between border-b border-[#0b3b36] bg-[#0F4C45] text-white px-3 sm:px-4 lg:px-6 py-2.5 transition-colors shadow-xs">
+    <header id="erp-topbar" className="sticky top-0 z-[90] flex items-center justify-between border-b border-[#0b3b36] bg-[#0F4C45] text-white px-3 sm:px-4 lg:px-6 py-2.5 transition-colors shadow-xs">
       {/* ==================================================== */}
       {/* MOBILE HEADER: Una sola barra limpia (Menú, Empresa/Sucursal, Avatar) */}
       {/* Sin cajas con borde dentro de la barra */}
@@ -133,9 +140,14 @@ export const Header: React.FC<HeaderProps> = ({
       {/* ==================================================== */}
       {/* DESKTOP HEADER (hidden en móvil, flex en lg) */}
       {/* ==================================================== */}
-      <div className="hidden lg:flex items-center gap-4 min-w-0">
+      <div className="header-desktop-identity hidden lg:flex items-center gap-4 min-w-0">
+        <button type="button" id="desktop-sidebar-toggle" onClick={onToggleSidebar}
+          aria-label={isSidebarCollapsed ? 'Expandir menú lateral' : 'Contraer menú lateral'}
+          aria-expanded={!isSidebarCollapsed} className="p-2 rounded-lg hover:bg-white/10 transition shrink-0">
+          {isSidebarCollapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
+        </button>
         {/* Single Main Logo */}
-        <div className="flex items-center gap-2 pr-3 border-r border-[#0b3b36] shrink-0">
+        <div className="header-desktop-brand flex items-center gap-2 pr-3 border-r border-[#0b3b36] shrink-0">
           <div className="w-8 h-8 rounded-[6px] bg-[#0F766E] flex items-center justify-center text-white shadow-xs">
             <Layers className="w-4 h-4" />
           </div>
@@ -178,6 +190,8 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Global Quick Search Bar */}
         <button
           id="global-search-btn"
+          aria-label="Buscar facturas, clientes o atajos"
+          title="Buscar facturas, clientes o atajos"
           onClick={onOpenCommandPalette}
           className="flex items-center gap-2 px-3 py-1.5 rounded-[6px] border border-teal-700/60 bg-teal-950/40 hover:bg-teal-950/70 text-teal-200/80 text-xs transition cursor-pointer"
         >
@@ -285,11 +299,11 @@ export const Header: React.FC<HeaderProps> = ({
       )}
 
       {/* Desktop Right Side Actions */}
-      <div className="hidden lg:flex items-center gap-2 sm:gap-2.5">
+      <div className="header-desktop-actions hidden lg:flex items-center gap-2 sm:gap-2.5">
         {/* Quick Transaction Action buttons: EXACTLY ONE PRIMARY (#0F766E) */}
         <div className="flex items-center gap-2">
           {/* THE ONLY PRIMARY ACTION BUTTON */}
-          <button
+          {(canAccessModule(currentUser, 'sales') || canAccessModule(currentUser, 'pos_terminal')) && <button
             id="quick-new-sale-btn"
             onClick={onOpenNewSaleModal}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] bg-[#0F766E] hover:bg-[#115E59] text-white text-xs font-semibold shadow-none transition cursor-pointer"
@@ -297,9 +311,9 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Plus className="w-3.5 h-3.5" />
             <span>+ Nueva venta</span>
-          </button>
+          </button>}
 
-          <button
+          {canAccessModule(currentUser, 'purchases') && <button
             id="quick-new-purchase-btn"
             onClick={onOpenNewPurchaseModal}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] border border-teal-700/60 bg-teal-900/40 hover:bg-teal-900/70 text-teal-100 hover:text-white text-xs font-medium transition cursor-pointer"
@@ -307,9 +321,9 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <ShoppingBag className="w-3.5 h-3.5 text-teal-300" />
             <span>+ Compra</span>
-          </button>
+          </button>}
 
-          <button
+          {canAccessModule(currentUser, 'purchases') && <button
             id="quick-new-product-btn"
             onClick={() => setActiveModule('purchases')}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] border border-teal-700/60 bg-teal-900/40 hover:bg-teal-900/70 text-teal-100 hover:text-white text-xs font-medium transition cursor-pointer"
@@ -317,9 +331,9 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Package className="w-3.5 h-3.5 text-teal-300" />
             <span>+ Producto</span>
-          </button>
+          </button>}
 
-          <button
+          {canAccessModule(currentUser, 'pos_terminal') && <button
             id="header-open-pos-terminal-btn"
             type="button"
             onClick={() => setActiveModule('pos_terminal')}
@@ -328,7 +342,7 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <ScanBarcode className="w-3.5 h-3.5 text-teal-300" />
             <span>Caja POS</span>
-          </button>
+          </button>}
         </div>
 
         {/* Cybersecurity & IP Audit Badge Button */}

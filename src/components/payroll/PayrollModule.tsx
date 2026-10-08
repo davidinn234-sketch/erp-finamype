@@ -1165,7 +1165,7 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
 
       {/* MODAL: Generar Planilla */}
       {isNewPayrollModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="w-full max-w-md rounded-[8px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-6 space-y-4 text-xs">
             <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
@@ -1275,7 +1275,7 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
 
       {/* MODAL: Nuevo Colaborador */}
       {isNewEmployeeModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
           <div className="w-full max-w-lg my-8 rounded-[8px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-6 space-y-4 text-xs">
             <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
@@ -1474,7 +1474,7 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
 
       {/* MODAL: Editar Colaborador & PIN */}
       {isEditEmployeeModalOpen && editingEmployee && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in">
           <div className="w-full max-w-lg my-8 rounded-[8px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-6 space-y-4 text-xs">
             <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
               <div>
@@ -1697,7 +1697,7 @@ export const PayrollModule: React.FC<PayrollModuleProps> = ({
           : (selectedEmp as any)?.employeeName || 'Colaborador';
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
             <div className="w-full max-w-2xl my-8 rounded-[8px] border border-[#E3E8E6] dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-5 sm:p-6 space-y-4 text-xs">
               <div className="flex items-start justify-between border-b pb-3 border-[#E3E8E6] dark:border-slate-800">
                 <div className="flex items-center gap-2.5">

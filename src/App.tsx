@@ -32,10 +32,12 @@ import { Menu, Layers } from 'lucide-react';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { SecurityAndPrivacyBanner } from './components/common/SecurityAndPrivacyBanner';
 import { FinaPymeTermsAndProjectModal } from './components/common/FinaPymeTermsAndProjectModal';
+import { canAccessModule } from './lib/accessPolicy';
 
 const MainLayout: React.FC = () => {
   const {
     activeModule,
+    setActiveModule,
     isDarkMode,
     isAuthenticated,
     isAuthLoading,
@@ -51,7 +53,24 @@ const MainLayout: React.FC = () => {
   } = useERP();
 
   const [isSidebarOpenMobile, setIsSidebarOpenMobile] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => localStorage.getItem('finapyme-sidebar-collapsed') === 'true');
+  const toggleSidebar = () => setIsSidebarCollapsed(previous => {
+    localStorage.setItem('finapyme-sidebar-collapsed', String(!previous));
+    return !previous;
+  });
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  useEffect(() => {
+    const header = document.getElementById('erp-topbar');
+    if (!header) return;
+    const update = () => {
+      const support = document.getElementById('erp-support-banner');
+      document.documentElement.style.setProperty('--erp-header-height', `${header.getBoundingClientRect().height + (support?.getBoundingClientRect().height || 0)}px`);
+    };
+    const observer = new ResizeObserver(update);
+    observer.observe(header);
+    update();
+    return () => observer.disconnect();
+  }, [isAuthenticated, currentUser.role, currentUser.systemArchetype, isSupportMode]);
 
   // Prevent background scrolling on mobile when sidebar is open without disabling touch gestures
   useEffect(() => {
@@ -69,6 +88,12 @@ const MainLayout: React.FC = () => {
   const [isNewSaleModalOpen, setIsNewSaleModalOpen] = useState(false);
   const [isNewPurchaseModalOpen, setIsNewPurchaseModalOpen] = useState(false);
   const [isNewPayrollModalOpen, setIsNewPayrollModalOpen] = useState(false);
+  const openSale = () => {
+    if (canAccessModule(currentUser, 'sales')) { setActiveModule('sales'); setIsNewSaleModalOpen(true); }
+    else setActiveModule('pos_terminal');
+  };
+  const openPurchase = () => { setActiveModule('purchases'); if (canAccessModule(currentUser, 'purchases')) setIsNewPurchaseModalOpen(true); };
+  const openPayroll = () => { setActiveModule('payroll'); if (canAccessModule(currentUser, 'payroll')) setIsNewPayrollModalOpen(true); };
   const [isSecurityTermsOpen, setIsSecurityTermsOpen] = useState(false);
   const [securityModalTab, setSecurityModalTab] = useState<'manifesto' | 'terms' | 'security' | 'team'>('security');
 
@@ -120,7 +145,7 @@ const MainLayout: React.FC = () => {
     <div className={`min-h-screen ${isDarkMode ? 'dark' : ''}`}>
       {/* Support Mode Top Floating Notification Banner */}
       {isSupportMode && (
-        <div className="sticky top-0 z-50 bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 text-white px-4 py-2.5 flex items-center justify-between text-xs sm:text-sm font-medium shadow-lg border-b border-amber-500/40">
+        <div id="erp-support-banner" className="sticky top-0 z-50 bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 text-white px-4 py-2.5 flex items-center justify-between text-xs sm:text-sm font-medium shadow-lg border-b border-amber-500/40">
           <div className="flex items-center gap-2.5">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
             <span>
@@ -140,6 +165,8 @@ const MainLayout: React.FC = () => {
         <div className="flex flex-1 relative">
           {/* Main Navigation Sidebar */}
           <Sidebar
+            isCollapsed={isSidebarCollapsed}
+            onToggleCollapsed={toggleSidebar}
             isOpenMobile={isSidebarOpenMobile}
             onCloseMobile={() => setIsSidebarOpenMobile(false)}
           />
@@ -148,13 +175,15 @@ const MainLayout: React.FC = () => {
           <div className="flex-1 flex flex-col min-w-0">
             {/* Sticky Header with Tenant Switcher & Quick Search */}
             <Header
+              isSidebarCollapsed={isSidebarCollapsed}
+              onToggleSidebar={toggleSidebar}
               isSidebarOpenMobile={isSidebarOpenMobile}
               onOpenMobileMenu={() => setIsSidebarOpenMobile(true)}
               onToggleMobileMenu={() => setIsSidebarOpenMobile((prev) => !prev)}
               onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-              onOpenNewSaleModal={() => setIsNewSaleModalOpen(true)}
-              onOpenNewPurchaseModal={() => setIsNewPurchaseModalOpen(true)}
-              onOpenNewPayrollModal={() => setIsNewPayrollModalOpen(true)}
+              onOpenNewSaleModal={openSale}
+              onOpenNewPurchaseModal={openPurchase}
+              onOpenNewPayrollModal={openPayroll}
               onOpenSecurityModal={() => {
                 setSecurityModalTab('security');
                 setIsSecurityTermsOpen(true);
@@ -162,16 +191,16 @@ const MainLayout: React.FC = () => {
             />
 
             {/* Dynamic Active Module Render */}
-            <main className="flex-1 pb-16">
+            <main className={`flex-1 min-w-0 ${activeModule === 'pos_terminal' ? 'pb-0' : 'pb-16'}`}>
               <ErrorBoundary key={activeModule} fallbackTitle="Error al cargar módulo de navegación">
                 {activeModule === 'personal_finances' && <PersonalFinancesModule />}
                 {activeModule === 'pos_terminal' && <POSTerminalModule />}
 
                 {activeModule === 'dashboard' && (
                   <ExecutiveDashboard
-                    onOpenNewSale={() => setIsNewSaleModalOpen(true)}
-                    onOpenNewPurchase={() => setIsNewPurchaseModalOpen(true)}
-                    onOpenNewPayroll={() => setIsNewPayrollModalOpen(true)}
+                    onOpenNewSale={openSale}
+                    onOpenNewPurchase={openPurchase}
+                    onOpenNewPayroll={openPayroll}
                   />
                 )}
 
@@ -226,9 +255,9 @@ const MainLayout: React.FC = () => {
         <CommandPaletteModal
           isOpen={isCommandPaletteOpen}
           onClose={() => setIsCommandPaletteOpen(false)}
-          onOpenNewSale={() => setIsNewSaleModalOpen(true)}
-          onOpenNewPurchase={() => setIsNewPurchaseModalOpen(true)}
-          onOpenNewPayroll={() => setIsNewPayrollModalOpen(true)}
+          onOpenNewSale={openSale}
+          onOpenNewPurchase={openPurchase}
+          onOpenNewPayroll={openPayroll}
         />
 
         {/* Extensive System Customization Modal */}
