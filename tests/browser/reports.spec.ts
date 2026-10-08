@@ -137,3 +137,30 @@ test('assistant explains missing Gemini configuration instead of a generic serve
   expect((await response.json()).code).toBe('AI_NOT_CONFIGURED');
   await expect(page.getByText(/El asistente necesita una clave de Gemini configurada/)).toBeVisible();
 });
+
+test('POS confirms a saved sale once and preserves a rejected ticket', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await login(page);
+  await page.getByRole('button', { name: 'Entendido y Aceptar', exact: true }).click();
+  await page.locator('#nav-pos_terminal').click();
+  await page.locator('#pos-quick-prod-pos-test-0').click();
+  const before = await db.collection('invoices').where('companyId', '==', companyId).get();
+  const previousCash = (await db.doc('bank_accounts/reports-cash').get()).data()!.currentBalance;
+  await page.locator('#pos-checkout-btn').focus();
+  await page.keyboard.press('F12');
+  await page.keyboard.press('F12');
+  await expect(page.getByRole('heading', { name: '¡Venta Registrada Exitosamente!', exact: true })).toBeVisible();
+  const invoices = await db.collection('invoices').where('companyId', '==', companyId).get();
+  expect(invoices.size).toBe(before.size + 1);
+  expect((await db.doc('bank_accounts/reports-cash').get()).data()!.currentBalance).toBe(previousCash + 10);
+  expect((await db.doc('products/pos-test-0').get()).data()!.stock).toBe(99);
+  await page.getByRole('button', { name: 'Nueva Venta (Escáner)', exact: false }).click();
+  await page.locator('#pos-quick-prod-pos-test-1').click();
+  // Another cash register sells the last units after this one adds the product.
+  await db.doc('products/pos-test-1').update({ stock: 0 });
+  await page.locator('#pos-checkout-btn').click();
+  await expect(page.getByText(/Inventario insuficiente para Producto de prueba 2/).first()).toBeVisible();
+  await expect(page.getByTestId('pos-ticket-item-pos-test-1')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '¡Venta Registrada Exitosamente!', exact: true })).toHaveCount(0);
+  expect((await db.collection('invoices').where('companyId', '==', companyId).get()).size).toBe(invoices.size);
+});

@@ -80,11 +80,23 @@ export const POSTerminalModule: React.FC = () => {
 
   // State: Cart & Sale
   const [cart, setCart] = useState<CartItem[]>([]);
+  const salePending = useRef(false);
+  const [isSavingSale, setIsSavingSale] = useState(false);
   const [barcodeInput, setBarcodeInput] = useState('');
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('walk_in');
   const [invoiceType, setInvoiceType] = useState<InvoiceType>('factura_consumidor_final');
   const [paymentMethod, setPaymentMethod] = useState<'efectivo' | 'tarjeta' | 'transferencia' | 'chivo_wallet'>('efectivo');
+  const [incomeAccountId, setIncomeAccountId] = useState('');
+  const previousPaymentMethod = useRef(paymentMethod);
+  useEffect(() => {
+    if (previousPaymentMethod.current !== paymentMethod || !bankAccounts.some(account => account.id === incomeAccountId)) {
+      const cash = (type: string) => type === 'caja_general' || type === 'caja_chica';
+      const preferred = bankAccounts.find(account => paymentMethod === 'efectivo' ? cash(account.accountType) : !cash(account.accountType));
+      setIncomeAccountId(preferred?.id || bankAccounts[0]?.id || '');
+      previousPaymentMethod.current = paymentMethod;
+    }
+  }, [bankAccounts, paymentMethod, incomeAccountId]);
   const [cashGiven, setCashGiven] = useState<string>('');
   const [saleDiscountPercent, setSaleDiscountPercent] = useState<number>(0);
   const [filterCategory, setFilterCategory] = useState<string>('all');
@@ -356,6 +368,7 @@ export const POSTerminalModule: React.FC = () => {
 
   // Add Product to Cart (or increment quantity if already present)
   const addProductToCart = (product: Product) => {
+    if (salePending.current) return;
     setCart((prevCart) => {
       const existingIndex = prevCart.findIndex((item) => item.product.id === product.id);
       if (existingIndex >= 0) {
@@ -434,7 +447,12 @@ export const POSTerminalModule: React.FC = () => {
   };
 
   // Finalize Sale & Emit Official Invoice
-  const handleCompleteSale = () => {
+  const handleCompleteSale = async () => {
+    if (salePending.current || isCompletedSaleModalOpen) return;
+    if (!incomeAccountId) {
+      setLastScannedFeedback({ text: 'Crea una cuenta en Tesorería para recibir el pago de esta venta.', type: 'error' });
+      return;
+    }
     if (cart.length === 0) {
       setLastScannedFeedback({
         text: 'El ticket está vacío. Escanee al menos un producto.',
@@ -455,6 +473,9 @@ export const POSTerminalModule: React.FC = () => {
       return;
     }
 
+    salePending.current = true;
+    setIsSavingSale(true);
+    try {
     const today = new Date().toISOString().split('T')[0];
     const prefix = invoiceType === 'credito_fiscal' ? 'CCF' : invoiceType === 'ticket_interno' ? 'TCK' : 'FCF';
     const nextCorrelative = `${prefix}-${String(invoices.length + 101).padStart(6, '0')}`;
@@ -504,7 +525,7 @@ export const POSTerminalModule: React.FC = () => {
       }`,
     };
 
-    const newInv = createInvoice(invoicePayload);
+    const newInv = await createInvoice(invoicePayload, incomeAccountId);
     playAudioCue('cash_chime');
     setCompletedInvoice(newInv);
     setLastSaleTender({
@@ -513,6 +534,10 @@ export const POSTerminalModule: React.FC = () => {
       change: paymentMethod === 'efectivo' ? calculations.changeDue : 0,
     });
     setIsCompletedSaleModalOpen(true);
+    } catch (error) {
+      setLastScannedFeedback({ text: error instanceof Error ? error.message : 'No se pudo guardar la venta. El ticket sigue disponible para revisar.', type: 'error' });
+      playAudioCue('error');
+    } finally { salePending.current = false; setIsSavingSale(false); }
   };
 
   // Keyboard shortcut listener: F12 or Enter to complete sale
@@ -520,7 +545,7 @@ export const POSTerminalModule: React.FC = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isCompletedSaleModalOpen || showCustomerPickerModal || showShiftSummaryModal) {
         if (e.key === 'Escape') {
-          setIsCompletedSaleModalOpen(false);
+          if (isCompletedSaleModalOpen) handleNextSale();
           setShowCustomerPickerModal(false);
           setShowShiftSummaryModal(false);
         }
@@ -957,6 +982,13 @@ export const POSTerminalModule: React.FC = () => {
           {/* Financial Calculation & Tender / Payment Section */}
           <div role="region" aria-label="Cobro de la venta" className="pos-payment lg:col-span-3 lg:order-3 p-3.5 bg-[#F6F8F7] dark:bg-slate-850 border border-[#E3E8E6] dark:border-slate-800 rounded-[8px] space-y-3">
             <div className="pos-payment-details space-y-3">
+            <div>
+              <label htmlFor="pos-income-account" className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">Cuenta que recibe el pago</label>
+              <select id="pos-income-account" value={incomeAccountId} onChange={event => setIncomeAccountId(event.target.value)} disabled={isSavingSale} className="w-full min-w-0 p-2 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs">
+                {!bankAccounts.length && <option value="">Crea una cuenta en Tesorería</option>}
+                {bankAccounts.map(account => <option key={account.id} value={account.id}>{account.accountName}</option>)}
+              </select>
+            </div>
             {/* Totals Breakdown */}
             <div className="pos-payment-totals grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
               <div className="p-2.5 rounded-[6px] bg-white dark:bg-slate-800 border border-[#E3E8E6] dark:border-slate-700">
@@ -1193,7 +1225,8 @@ export const POSTerminalModule: React.FC = () => {
             <button
               type="button"
               id="pos-checkout-btn"
-              disabled={cart.length === 0 || (paymentMethod === 'efectivo' && !calculations.isSufficientCash)}
+              disabled={isSavingSale || !incomeAccountId || cart.length === 0 || (paymentMethod === 'efectivo' && !calculations.isSufficientCash)}
+              aria-busy={isSavingSale}
               onClick={handleCompleteSale}
               className={`w-full py-3 px-4 rounded-[6px] font-bold text-sm tracking-wide shadow-none transition flex items-center justify-center gap-2 cursor-pointer ${
                 cart.length === 0
@@ -1205,7 +1238,7 @@ export const POSTerminalModule: React.FC = () => {
             >
               <Check className="w-4 h-4 shrink-0" />
               <span>
-                {cart.length === 0
+                {isSavingSale ? 'GUARDANDO VENTA…' : cart.length === 0
                   ? 'AGREGUE PRODUCTOS AL TICKET PARA COBRAR'
                   : paymentMethod === 'efectivo' && !calculations.isSufficientCash
                   ? `FALTAN ${formatCurrencyUSD(calculations.cashShortfall)} — INGRESE MONTO SUFICIENTE`

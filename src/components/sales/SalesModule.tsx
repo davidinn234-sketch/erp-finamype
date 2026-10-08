@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useERP } from '../../context/ERPContext';
 import {
   Receipt,
@@ -370,9 +370,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({
     setQuickCustomerNrc('');
   };
 
-  const handleSubmitInvoice = (e: React.FormEvent) => {
+  const submissionPending = useRef(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSubmitInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustomer) return;
+    if (submissionPending.current) return;
+    submissionPending.current = true; setIsSaving(true);
+    try {
 
     const correlativePrefix =
       invoiceType === 'credito_fiscal'
@@ -395,7 +401,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({
     const isPaidNow = paymentCondition === 'contado';
     const branchObj = branches.find((b) => b.id === invoiceBranchId) || branches[0];
 
-    const created = createInvoice({
+    const created = await createInvoice({
       branchId: branchObj?.id,
       branchName: branchObj?.name,
       type: invoiceType,
@@ -428,6 +434,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({
 
     onCloseNewSaleModal();
     setSelectedInvoiceForView(created);
+    } catch { /* Context reports the failure; keep this form open. */ }
+    finally { submissionPending.current = false; setIsSaving(false); }
   };
 
   const handleOpenPayment = (inv: Invoice) => {
@@ -436,11 +444,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({
     setPaymentReceiptNumber(`REC-${Date.now().toString().slice(-5)}`);
   };
 
-  const handleConfirmPayment = (e: React.FormEvent) => {
+  const handleConfirmPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!paymentModalInvoice) return;
+    if (submissionPending.current) return;
+    submissionPending.current = true; setIsSaving(true);
+    try {
 
-    registerCustomerPayment({
+    await registerCustomerPayment({
       invoiceId: paymentModalInvoice.id,
       invoiceNumber: paymentModalInvoice.correlativeNumber,
       customerId: paymentModalInvoice.customerId,
@@ -453,6 +464,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({
     });
 
     setPaymentModalInvoice(null);
+    } catch { /* Context reports the failure; keep this form open. */ }
+    finally { submissionPending.current = false; setIsSaving(false); }
   };
 
   const handleOpenCreateCustomer = () => {
@@ -1747,6 +1760,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({
                 </button>
                 <button
                   type="submit"
+                  disabled={isSaving}
                   className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold cursor-pointer shadow-md"
                 >
                   {editingCustomer ? 'Actualizar Cliente' : 'Guardar Cliente en CRM'}
@@ -2159,6 +2173,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({
                 </button>
                 <button
                   type="submit"
+                  disabled={isSaving}
                   className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md cursor-pointer flex items-center gap-1.5"
                 >
                   <ShieldCheck className="w-4 h-4" />
@@ -2422,6 +2437,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({
                 </button>
                 <button
                   type="submit"
+                  disabled={isSaving}
                   className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer shadow-md"
                 >
                   Confirmar Cobro & Asentar

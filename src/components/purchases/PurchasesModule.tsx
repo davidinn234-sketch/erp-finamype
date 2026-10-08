@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useERP } from '../../context/ERPContext';
 import {
   ShoppingBag,
@@ -200,15 +200,21 @@ export const PurchasesModule: React.FC<PurchasesModuleProps> = ({
     );
   };
 
-  const handleSubmitPurchase = (e: React.FormEvent) => {
+  const submissionPending = useRef(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSubmitPurchase = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSupplier) return;
+    if (submissionPending.current) return;
+    submissionPending.current = true; setIsSaving(true);
+    try {
 
     const now = new Date();
     const dueDate = new Date();
     dueDate.setDate(now.getDate() + (selectedSupplier.paymentTermDays || 15));
 
-    createPurchase({
+    await createPurchase({
       docType: purchaseDocType,
       documentNumber: purchaseDocNumber || `CCF-${Date.now().toString().slice(-6)}`,
       date: now.toISOString().split('T')[0],
@@ -236,6 +242,8 @@ export const PurchasesModule: React.FC<PurchasesModuleProps> = ({
     });
 
     onCloseNewPurchaseModal();
+    } catch { /* Context reports the failure; keep this form open. */ }
+    finally { submissionPending.current = false; setIsSaving(false); }
   };
 
   const handleOpenPayment = (pur: Purchase) => {
@@ -244,11 +252,14 @@ export const PurchasesModule: React.FC<PurchasesModuleProps> = ({
     setPaymentRefNumber(`TRF-${Date.now().toString().slice(-6)}`);
   };
 
-  const handleConfirmPayment = (e: React.FormEvent) => {
+  const handleConfirmPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!paymentModalPurchase) return;
+    if (submissionPending.current) return;
+    submissionPending.current = true; setIsSaving(true);
+    try {
 
-    registerSupplierPayment({
+    await registerSupplierPayment({
       purchaseId: paymentModalPurchase.id,
       purchaseNumber: paymentModalPurchase.documentNumber,
       supplierId: paymentModalPurchase.supplierId,
@@ -261,6 +272,8 @@ export const PurchasesModule: React.FC<PurchasesModuleProps> = ({
     });
 
     setPaymentModalPurchase(null);
+    } catch { /* Context reports the failure; keep this form open. */ }
+    finally { submissionPending.current = false; setIsSaving(false); }
   };
 
   const cxpPurchases = purchases.filter((p) => p.status !== 'pagada' && p.status !== 'anulada');
@@ -981,6 +994,7 @@ export const PurchasesModule: React.FC<PurchasesModuleProps> = ({
                 </button>
                 <button
                   type="submit"
+                  disabled={isSaving}
                   className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer"
                 >
                   Guardar Compra & Actualizar Kardex
@@ -1101,6 +1115,7 @@ export const PurchasesModule: React.FC<PurchasesModuleProps> = ({
                 </button>
                 <button
                   type="submit"
+                  disabled={isSaving}
                   className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold cursor-pointer"
                 >
                   Confirmar Pago & Asentar

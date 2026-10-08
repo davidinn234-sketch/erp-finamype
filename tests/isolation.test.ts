@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, assertFails, assertSucceeds, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where, writeBatch, type Firestore } from 'firebase/firestore';
 import { recordPayment, moveFunds, settlePayroll, reversePayment } from '../src/lib/financialOperations';
+import { persistInvoice, persistPurchase } from '../src/lib/documentOperations';
+import type { Invoice, Purchase } from '../src/types';
 import { generatePayrollAccountingEntry } from '../src/utils/accountingEngine';
 import { SAMPLE_PAYROLLS } from '../src/utils/sampleData';
 import { validatePayment, assertTenantRecords } from '../src/lib/tenantPolicy';
@@ -21,7 +23,7 @@ beforeEach(async () => {
     }
     for (const companyId of ['a', 'b']) {
       await setDoc(doc(db, 'companies', companyId), { id: companyId, primaryAdminUserId: companyId === 'a' ? 'alice' : 'bob' });
-      await setDoc(doc(db, 'products', companyId), { id: companyId, companyId, stock: 10 });
+      await setDoc(doc(db, 'products', companyId), { id: companyId, companyId, name: 'Producto A', stock: 10, currentCost: 5, salePrice: 10, isService: false });
       await setDoc(doc(db, 'employees', companyId), { id: companyId, companyId, baseSalary: 500 });
     }
     await setDoc(doc(db, 'personal_finances', 'alice-tx'), { id: 'alice-tx', userId: 'alice', amount: 10 });
@@ -179,4 +181,51 @@ test('payroll settlement affects the bank once even with concurrent payment atte
   assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
   assert.equal((await getDoc(doc(db, 'bank_accounts', 'bank-a'))).data()?.currentBalance, 50);
   assert.equal((await getDoc(doc(db, 'payrolls', 'pay-a'))).data()?.status, 'pagada');
+});
+
+function sale(id: string, quantity = 2): Invoice {
+  return { id, companyId: 'a', branchId: 'branch-a', branchName: 'Principal', type: 'ticket_interno', correlativeNumber: id, date: '2026-10-08', dueDate: '2026-10-08', customerId: 'customer-a', customerName: 'Cliente', customerNit: '', customerIsGranContribuyente: false, paymentCondition: 'contado', status: 'pagada', items: [{ id: 'line-1', productId: 'a', productCode: 'A', description: 'Producto A', quantity, unitPrice: 10, unitCost: 5, total: quantity * 10 }], sumasGravadas: quantity * 10, sumasExentas: 0, sumasNoSujetas: 0, iva13: 0, ivaRetenido1: 0, ivaPercibido1: 0, totalPagar: quantity * 10, saldoPendiente: 0, createdAt: '2026-10-08' };
+}
+
+test('sale saves its invoice, current inventory, actual bank and ledger together', async () => {
+  const db = alice();
+  const saved = await persistInvoice(sale('sale-a'), 1, 'bank-a2', undefined, false, db);
+  assert.equal((await getDoc(doc(db, 'products', 'a'))).data()?.stock, 8);
+  assert.equal((await getDoc(doc(db, 'bank_accounts', 'bank-a2'))).data()?.currentBalance, 20);
+  assert.equal((await getDoc(doc(db, 'bank_accounts', 'bank-a'))).data()?.currentBalance, 100);
+  const entry = (await getDoc(doc(db, 'journal_entries', saved.accountingEntryId!))).data();
+  assert.equal(entry?.isBalanced, true);
+  assert.equal(entry?.lines[0].accountName, 'bank-a2');
+  assert.equal((await getDocs(query(collection(db, 'kardex_movements'), where('companyId', '==', 'a')))).size, 1);
+});
+
+test('overselling or a foreign bank rejects the whole sale without altering stock or cash', async () => {
+  const db = alice();
+  await assert.rejects(persistInvoice(sale('oversell', 11), 1, 'bank-a', undefined, false, db), /Inventario insuficiente/);
+  await assert.rejects(persistInvoice(sale('foreign'), 1, 'bank-b', undefined, false, db));
+  assert.equal((await getDoc(doc(db, 'products', 'a'))).data()?.stock, 10);
+  assert.equal((await getDoc(doc(db, 'bank_accounts', 'bank-a'))).data()?.currentBalance, 100);
+  assert.equal((await getDocs(query(collection(db, 'invoices'), where('companyId', '==', 'a')))).size, 1);
+  assert.equal((await getDocs(query(collection(db, 'journal_entries'), where('companyId', '==', 'a')))).size, 0);
+});
+
+test('simultaneous sales cannot both consume the same remaining stock', async () => {
+  const db = alice();
+  const results = await Promise.allSettled([persistInvoice(sale('race-1', 7), 1, 'bank-a', undefined, false, db), persistInvoice(sale('race-2', 7), 2, 'bank-a', undefined, false, db)]);
+  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+  assert.equal((await getDoc(doc(db, 'products', 'a'))).data()?.stock, 3);
+  assert.equal((await getDoc(doc(db, 'bank_accounts', 'bank-a'))).data()?.currentBalance, 170);
+});
+
+test('purchase combines repeated product lines and saves weighted cost and payable together', async () => {
+  const db = alice();
+  const purchase: Purchase = { id: 'purchase-a', companyId: 'a', docType: 'ccf_compra', documentNumber: 'CMP-01', date: '2026-10-08', dueDate: '2026-10-08', supplierId: 'supplier-a', supplierName: 'Proveedor', supplierNit: '', supplierNrc: '', supplierIsGranContribuyente: false, status: 'registrada', items: [{ id: 'line-1', productId: 'a', description: 'Producto A', quantity: 2, unitCost: 4, total: 8 }, { id: 'line-2', productId: 'a', description: 'Producto A', quantity: 3, unitCost: 6, total: 18 }], comprasGravadas: 26, comprasExentas: 0, comprasSujetoExcluido: 0, ivaCreditoFiscal: 0, retencionRenta10: 0, retencionIva1: 0, percepcionIva1: 0, totalPagar: 26, saldoPendiente: 26, isServicesPurchase: false, createdAt: '2026-10-08' };
+  const saved = await persistPurchase(purchase, 1, db);
+  const product = (await getDoc(doc(db, 'products', 'a'))).data();
+  assert.equal(product?.stock, 15);
+  assert.equal(product?.currentCost, 5.07);
+  assert.equal((await getDoc(doc(db, 'purchases', saved.id))).data()?.saldoPendiente, 26);
+  assert.equal((await getDoc(doc(db, 'journal_entries', saved.accountingEntryId!))).data()?.isBalanced, true);
+  await assert.rejects(persistPurchase({ ...purchase, id: 'invalid', totalPagar: 25 }, 2, db), /totales contables/);
+  assert.equal((await getDoc(doc(db, 'products', 'a'))).data()?.stock, 15);
 });

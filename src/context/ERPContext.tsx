@@ -68,6 +68,7 @@ import { auth, db, testFirebaseConnection } from '../lib/firebase';
 import { doc, setDoc, getDoc, getDocs, collection, deleteDoc, onSnapshot, query, where, writeBatch } from 'firebase/firestore';
 import { emptyChart, ensureEngineAccounts } from '../lib/chartDefaults';
 import { recordPayment, moveFunds, settlePayroll, reversePayment } from '../lib/financialOperations';
+import { persistInvoice, persistPurchase } from '../lib/documentOperations';
 import { signOut } from 'firebase/auth';
 import { useAuthSession } from '../lib/useAuthSession';
 import { canAccessModule, initialModule } from '../lib/accessPolicy';
@@ -176,11 +177,11 @@ interface ERPContextType {
   customers: Customer[];
   invoices: Invoice[];
   customerPayments: CustomerPayment[];
-  createInvoice: (invoice: Omit<Invoice, 'id' | 'companyId' | 'createdAt'>) => Invoice;
+  createInvoice: (invoice: Omit<Invoice, 'id' | 'companyId' | 'createdAt'>, accountId?: string) => Promise<Invoice>;
   updateInvoice: (id: string, updates: Partial<Invoice>) => void;
   deleteInvoice: (id: string) => void;
   cancelInvoice: (id: string) => void;
-  registerCustomerPayment: (payment: Omit<CustomerPayment, 'id' | 'companyId'>) => void;
+  registerCustomerPayment: (payment: Omit<CustomerPayment, 'id' | 'companyId'>) => Promise<void>;
   deleteCustomerPayment: (id: string) => void;
   createCustomer: (customer: Omit<Customer, 'id'>) => Customer;
   updateCustomer: (id: string, updates: Partial<Customer>) => void;
@@ -195,10 +196,10 @@ interface ERPContextType {
   purchases: Purchase[];
   supplierPayments: SupplierPayment[];
   kardexMovements: KardexMovement[];
-  createPurchase: (purchase: Omit<Purchase, 'id' | 'companyId' | 'createdAt'>) => Purchase;
+  createPurchase: (purchase: Omit<Purchase, 'id' | 'companyId' | 'createdAt'>) => Promise<Purchase>;
   updatePurchase: (id: string, updates: Partial<Purchase>) => void;
   deletePurchase: (id: string) => void;
-  registerSupplierPayment: (payment: Omit<SupplierPayment, 'id' | 'companyId'>) => void;
+  registerSupplierPayment: (payment: Omit<SupplierPayment, 'id' | 'companyId'>) => Promise<void>;
   deleteSupplierPayment: (id: string) => void;
   createSupplier: (supplier: Omit<Supplier, 'id'>) => void;
   updateSupplier: (id: string, updates: Partial<Supplier>) => void;
@@ -1089,176 +1090,24 @@ const ERPStateProvider: React.FC<{ children: ReactNode; session: ReturnType<type
     addNotification('warning', 'Producto Eliminado', 'El producto ha sido removido del catálogo.');
   };
 
-  const createInvoice = (invoiceData: Omit<Invoice, 'id' | 'companyId' | 'createdAt'>): Invoice => {
-    const invoiceId = `inv_${crypto.randomUUID()}`;
-    const nextEntryNumber = journalEntries.length + 1;
-
-    // Asignar sucursal activa si no está definida
-    let finalBranchId = invoiceData.branchId;
-    let finalBranchName = invoiceData.branchName;
-    if (!finalBranchId && selectedBranchId !== 'all') {
-      const activeBranch = branches.find((b) => b.id === selectedBranchId);
-      if (activeBranch) {
-        finalBranchId = activeBranch.id;
-        finalBranchName = activeBranch.name;
-      }
-    } else if (!finalBranchId && branches.length > 0) {
-      finalBranchId = branches[0].id;
-      finalBranchName = branches[0].name;
-    }
-
-    const newInvoice: Invoice = {
-      ...invoiceData,
-      branchId: finalBranchId,
-      branchName: finalBranchName,
-      id: invoiceId,
-      companyId: currentCompany.id,
-      createdAt: new Date().toISOString(),
-    };
-
-    // Auto-registro o actualización en CRM
-    const existingCust = customers.find(
-      (c) =>
-        (c.id && c.id === newInvoice.customerId) ||
-        (newInvoice.customerNit && c.nit === newInvoice.customerNit && c.nit.length > 5) ||
-        (newInvoice.customerName && c.name.toLowerCase().trim() === newInvoice.customerName.toLowerCase().trim())
-    );
-
-    if (!existingCust && newInvoice.customerName && newInvoice.customerName.trim().length > 0) {
-      const autoCust: Customer = {
-        companyId: currentCompany.id,
-        id: newInvoice.customerId && newInvoice.customerId.startsWith('cust_') ? newInvoice.customerId : `cust_${crypto.randomUUID()}`,
-        name: newInvoice.customerName,
-        tradeName: newInvoice.customerName,
-        nit: newInvoice.customerNit || '0614-000000-000-0',
-        nrc: newInvoice.customerNrc || '',
-        address: 'Registrado automáticamente desde Venta / Facturación',
-        phone: '',
-        email: '',
-        isGranContribuyente: newInvoice.customerIsGranContribuyente || false,
-        creditLimit: 1500,
-        paymentTermDays: newInvoice.paymentCondition === 'contado' ? 0 : 30,
-        stage: 'frecuente',
-        rating: 5,
-        acquisitionChannel: 'tienda_fisica',
-        department: currentCompany.department || 'San Salvador',
-        municipality: currentCompany.municipality || 'San Salvador Centro',
-        notesTimeline: [
-          {
-            id: `cn_${crypto.randomUUID()}`,
-            date: newInvoice.date,
-            type: 'acuerdo',
-            content: `Cliente registrado automáticamente con la venta #${newInvoice.correlativeNumber} ($${newInvoice.totalPagar.toFixed(2)}).`,
-            author: currentUser.name,
-          },
-        ],
-      };
-      setCustomers((prev) => [autoCust, ...prev]);
-      newInvoice.customerId = autoCust.id;
-    } else if (existingCust) {
-      setCustomers((prev) =>
-        prev.map((c) => {
-          if (c.id === existingCust.id) {
-            const nextStage = c.stage === 'prospecto' || c.stage === 'cotizacion' ? 'frecuente' : c.stage;
-            const newNote: CustomerNote = {
-              id: `cn_${crypto.randomUUID()}`,
-              date: newInvoice.date,
-              type: 'acuerdo',
-              content: `Venta registrada: ${newInvoice.type.toUpperCase()} #${newInvoice.correlativeNumber} por $${newInvoice.totalPagar.toFixed(2)}.`,
-              author: currentUser.name,
-            };
-            return {
-              ...c,
-              stage: nextStage,
-              notesTimeline: c.notesTimeline ? [newNote, ...c.notesTimeline] : [newNote],
-            };
-          }
-          return c;
-        })
-      );
-    }
-
-    // 1. Asiento Contable Automático
-    const entry = generateSaleAccountingEntry(newInvoice, nextEntryNumber);
-    newInvoice.accountingEntryId = entry.id;
-
-    // 2. Si es al contado, afectar bancos/caja
-    if (newInvoice.paymentCondition === 'contado') {
-      const defaultBank = bankAccounts[0];
-      if (defaultBank) {
-        setBankAccounts((prev) =>
-          prev.map((b) =>
-            b.id === defaultBank.id
-              ? { ...b, currentBalance: Number((b.currentBalance + newInvoice.totalPagar).toFixed(2)) }
-              : b
-          )
-        );
-
-        // Movimiento de tesorería
-        const tMovement: TreasuryMovement = {
-          id: `tmov_${crypto.randomUUID()}`,
-          companyId: currentCompany.id,
-          branchId: newInvoice.branchId,
-          branchName: newInvoice.branchName,
-          bankAccountId: defaultBank.id,
-          bankAccountName: defaultBank.accountName,
-          date: newInvoice.date,
-          type: 'ingreso_venta',
-          amount: newInvoice.totalPagar,
-          referenceNumber: newInvoice.correlativeNumber,
-          description: `Venta Contado ${newInvoice.type.toUpperCase()} #${newInvoice.correlativeNumber}`,
-          isReconciled: true,
-          accountingEntryId: entry.id,
-        };
-        setTreasuryMovements((prev) => [tMovement, ...prev]);
-      }
-    }
-
-    // 3. Kardex y Rebaja de Inventario
-    const kMovements: KardexMovement[] = [];
-    newInvoice.items.forEach((item) => {
-      const product = products.find((p) => p.id === item.productId);
-      if (product && !product.isService) {
-        const newStock = Math.max(0, product.stock - item.quantity);
-        setProducts((prev) =>
-          prev.map((p) => (p.id === product.id ? { ...p, stock: newStock } : p))
-        );
-
-
-        kMovements.push({
-          id: `kdx_${Date.now()}_${item.id}`,
-          companyId: currentCompany.id,
-          productId: product.id,
-          productName: product.name,
-          date: newInvoice.date,
-          type: 'salida_venta',
-          referenceDoc: newInvoice.correlativeNumber,
-          quantity: item.quantity,
-          unitCost: product.currentCost,
-          totalCost: Number((item.quantity * product.currentCost).toFixed(2)),
-          balanceQuantity: newStock,
-          balanceUnitCost: product.currentCost,
-          balanceTotalCost: Number((newStock * product.currentCost).toFixed(2)),
-          notes: `Venta a ${newInvoice.customerName}`,
-        });
-      }
-    });
-
-    setInvoices((prev) => [newInvoice, ...prev]);
-    setJournalEntries((prev) => [entry, ...prev]);
-    if (kMovements.length > 0) {
-      setKardexMovements((prev) => [...kMovements, ...prev]);
-    }
-
-
-
-    addNotification(
-      'success',
-      'Factura Emitida & Asentada',
-      `${newInvoice.type.toUpperCase()} #${newInvoice.correlativeNumber} por ${newInvoice.totalPagar.toLocaleString('en-US', { style: 'currency', currency: 'USD' })} registrada en CRM y Nube.`
-    );
-
-    return newInvoice;
+  const createInvoice = async (data: Omit<Invoice, 'id' | 'companyId' | 'createdAt'>, accountId?: string): Promise<Invoice> => {
+    try {
+      const branch = branches.find(item => item.id === (data.branchId || selectedBranchId)) || branches[0];
+      const invoice: Invoice = { ...data, id: 'inv_' + crypto.randomUUID(), companyId: currentCompany.id, branchId: data.branchId || branch?.id, branchName: data.branchName || branch?.name, createdAt: new Date().toISOString() };
+      const existing = customers.find(customer => customer.id === invoice.customerId || (invoice.customerNit && customer.nit === invoice.customerNit && customer.nit.length > 5) || (invoice.customerName && customer.name.trim().toLowerCase() === invoice.customerName.trim().toLowerCase()));
+      const note: CustomerNote = { id: 'cn_' + crypto.randomUUID(), date: invoice.date, type: 'acuerdo', content: 'Venta #' + invoice.correlativeNumber + ' por $' + invoice.totalPagar.toFixed(2), author: currentUser.name };
+      const customer: Customer | undefined = existing ? { ...existing, notesTimeline: [note] } : invoice.customerName.trim() ? {
+        id: 'cust_' + crypto.randomUUID(), companyId: currentCompany.id, name: invoice.customerName, tradeName: invoice.customerName,
+        nit: invoice.customerNit || '', nrc: invoice.customerNrc || '', address: '', phone: '', email: '',
+        isGranContribuyente: invoice.customerIsGranContribuyente || false, creditLimit: 0, paymentTermDays: invoice.paymentCondition === 'contado' ? 0 : 30,
+        stage: 'frecuente', rating: 5, acquisitionChannel: 'tienda_fisica', department: currentCompany.department || '', municipality: currentCompany.municipality || '', notesTimeline: [note],
+      } : undefined;
+      if (customer) invoice.customerId = customer.id;
+      const account = accountId || bankAccounts.find(bank => bank.accountType === 'caja_general' || bank.accountType === 'caja_chica')?.id || bankAccounts[0]?.id;
+      const saved = await persistInvoice(invoice, journalEntries.length + 1, account, customer, !!existing);
+      addNotification('success', 'Venta guardada', 'El documento, la caja, el inventario y la contabilidad se guardaron juntos.');
+      return saved;
+    } catch (error) { reportCloudError(error); throw error; }
   };
 
   const updateInvoice = (id: string, updates: Partial<Invoice>) => {
@@ -1316,7 +1165,7 @@ const ERPStateProvider: React.FC<{ children: ReactNode; session: ReturnType<type
     try {
       await recordPayment(currentCompany.id, payment, 'customer', journalEntries.length + 1);
       addNotification('success', 'Cobro guardado', 'Se actualizaron la deuda, el banco y la contabilidad.');
-    } catch (error) { reportCloudError(error); }
+    } catch (error) { reportCloudError(error); throw error; }
   };
 
   const cancelInvoice = (id: string) => {
@@ -1372,96 +1221,21 @@ const ERPStateProvider: React.FC<{ children: ReactNode; session: ReturnType<type
     addNotification('success', 'Bitácora Proveedor Guardada', 'Nota de negociación registrada.');
   };
 
-  const createPurchase = (purchaseData: Omit<Purchase, 'id' | 'companyId' | 'createdAt'>): Purchase => {
-    const purchaseId = `pur_${crypto.randomUUID()}`;
-    const nextEntryNumber = journalEntries.length + 1;
-
-    // Asignar sucursal activa si no está definida
-    let finalBranchId = purchaseData.branchId;
-    let finalBranchName = purchaseData.branchName;
-    if (!finalBranchId && selectedBranchId !== 'all') {
-      const activeBranch = branches.find((b) => b.id === selectedBranchId);
-      if (activeBranch) {
-        finalBranchId = activeBranch.id;
-        finalBranchName = activeBranch.name;
-      }
-    } else if (!finalBranchId && branches.length > 0) {
-      finalBranchId = branches[0].id;
-      finalBranchName = branches[0].name;
-    }
-
-    const newPurchase: Purchase = {
-      ...purchaseData,
-      branchId: finalBranchId,
-      branchName: finalBranchName,
-      id: purchaseId,
-      companyId: currentCompany.id,
-      createdAt: new Date().toISOString(),
-    };
-
-    // 1. Asiento Contable Automático
-    const entry = generatePurchaseAccountingEntry(newPurchase, nextEntryNumber);
-    newPurchase.accountingEntryId = entry.id;
-
-    // 2. Kardex e incremento de inventario
-    const kMovements: KardexMovement[] = [];
-    newPurchase.items.forEach((item) => {
-      const product = products.find((p) => p.id === item.productId);
-      if (product && !product.isService) {
-        const newStock = product.stock + item.quantity;
-        const newTotalCost = Number((product.stock * product.currentCost + item.quantity * item.unitCost).toFixed(2));
-        const newWeightedAverageCost = Number((newTotalCost / newStock).toFixed(2));
-
-        setProducts((prev) =>
-          prev.map((p) =>
-            p.id === product.id
-              ? { ...p, stock: newStock, currentCost: newWeightedAverageCost }
-              : p
-          )
-        );
-
-
-        kMovements.push({
-          id: `kdx_${Date.now()}_${item.id}`,
-          companyId: currentCompany.id,
-          productId: product.id,
-          productName: product.name,
-          date: newPurchase.date,
-          type: 'entrada_compra',
-          referenceDoc: newPurchase.documentNumber,
-          quantity: item.quantity,
-          unitCost: item.unitCost,
-          totalCost: Number((item.quantity * item.unitCost).toFixed(2)),
-          balanceQuantity: newStock,
-          balanceUnitCost: newWeightedAverageCost,
-          balanceTotalCost: newTotalCost,
-          notes: `Compra a ${newPurchase.supplierName}`,
-        });
-      }
-    });
-
-    setPurchases((prev) => [newPurchase, ...prev]);
-    setJournalEntries((prev) => [entry, ...prev]);
-    if (kMovements.length > 0) {
-      setKardexMovements((prev) => [...kMovements, ...prev]);
-    }
-
-
-
-    addNotification(
-      'success',
-      'Compra Registrada',
-      `Documento ${newPurchase.docType.toUpperCase()} #${newPurchase.documentNumber} por $${newPurchase.totalPagar.toFixed(2)} registrado en Kardex e IVA Compras.`
-    );
-
-    return newPurchase;
+  const createPurchase = async (data: Omit<Purchase, 'id' | 'companyId' | 'createdAt'>): Promise<Purchase> => {
+    try {
+      const branch = branches.find(item => item.id === (data.branchId || selectedBranchId)) || branches[0];
+      const purchase: Purchase = { ...data, id: 'pur_' + crypto.randomUUID(), companyId: currentCompany.id, branchId: data.branchId || branch?.id, branchName: data.branchName || branch?.name, createdAt: new Date().toISOString() };
+      const saved = await persistPurchase(purchase, journalEntries.length + 1);
+      addNotification('success', 'Compra guardada', 'El documento, el inventario y la contabilidad se guardaron juntos.');
+      return saved;
+    } catch (error) { reportCloudError(error); throw error; }
   };
 
   const registerSupplierPayment = async (payment: Omit<SupplierPayment, 'id' | 'companyId'>) => {
     try {
       await recordPayment(currentCompany.id, payment, 'supplier', journalEntries.length + 1);
       addNotification('success', 'Abono guardado', 'Se actualizaron la deuda, el banco y la contabilidad.');
-    } catch (error) { reportCloudError(error); }
+    } catch (error) { reportCloudError(error); throw error; }
   };
 
   const updatePurchase = (id: string, updates: Partial<Purchase>) => {
