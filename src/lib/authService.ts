@@ -4,6 +4,7 @@ import { doc, getDoc, initializeFirestore, writeBatch, connectFirestoreEmulator 
 import { auth, db, firebaseConfig, firestoreDatabaseId } from './firebase';
 import type { Branch, Company, UserProfile } from '../types';
 import { DEFAULT_FISCAL_CONFIG } from '../utils/salvadoranTax';
+import { isPlatformOwner } from './accessPolicy';
 
 export function authErrorMessage(error: unknown): string {
   const code = (error as { code?: string })?.code;
@@ -28,7 +29,7 @@ export async function loginAccount(email: string, password: string) {
   const profile = await getDoc(doc(db, 'users', credential.user.uid));
   if (!profile.exists()) {
     await signOut(auth);
-    throw new Error('Tu acceso de Firebase todavía no tiene un perfil asociado. Es necesario completar la migración de tu cuenta.');
+    throw new Error('Tu cuenta no tiene un perfil habilitado. Pide al administrador de Fina Pyme que revise tu acceso.');
   }
 }
 
@@ -59,7 +60,8 @@ export async function provisionAccount(
     const user: UserProfile = {
       ...fields, id: identity.user.uid, email: identity.user.email!,
       role: publicSignup || fields.role === 'admin_maestro' ? 'gerente' : fields.role,
-      createdAt: new Date().toISOString().split('T')[0], storedInCloud: true,
+      createdAt: new Date().toISOString(), storedInCloud: true,
+      registrationSource: publicSignup ? 'self' : isPlatformOwner(auth.currentUser?.email, (await auth.currentUser!.getIdTokenResult()).claims) ? 'platform_admin' : 'company_admin',
     };
     const writer = publicSignup
       ? initializeFirestore(temporaryApp, { ignoreUndefinedProperties: true }, firestoreDatabaseId)
@@ -71,7 +73,7 @@ export async function provisionAccount(
       company = {
         ...companyInput, id: `comp_${crypto.randomUUID()}`,
         primaryAdminUserId: user.id, fiscalConfig: companyInput.fiscalConfig || DEFAULT_FISCAL_CONFIG,
-        createdAt: new Date().toISOString().split('T')[0],
+        createdAt: new Date().toISOString(),
       };
       user.companyId = company.id;
       batch.set(doc(writer, 'companies', company.id), company);

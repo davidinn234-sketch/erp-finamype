@@ -41,27 +41,7 @@ import {
   PurchaseStatus,
 } from '../types';
 import {
-  SAMPLE_COMPANIES,
-  SAMPLE_BRANCHES,
-  SAMPLE_USERS,
-  SAMPLE_PRODUCTS,
-  SAMPLE_CUSTOMERS,
-  SAMPLE_SUPPLIERS,
-  SAMPLE_EMPLOYEES,
-  SAMPLE_BANK_ACCOUNTS,
-  SAMPLE_INVOICES,
-  SAMPLE_PURCHASES,
-  SAMPLE_PAYROLLS,
-  SAMPLE_KARDEX_MOVEMENTS,
-  SAMPLE_JOURNAL_ENTRIES,
-  INITIAL_DYNAMIC_WIDGETS,
-  SAMPLE_OTHER_INCOMES,
-  SAMPLE_PROFESSIONAL_SERVICES,
-  SAMPLE_CANDIDATE_FOLDERS,
-  SAMPLE_CANDIDATE_APPLICANTS,
   DEFAULT_ATTENDANCE_CONFIG,
-  SAMPLE_ATTENDANCE_RECORDS,
-  SAMPLE_LEAVE_REQUESTS,
   getSamplePersonalFinancesData,
 } from '../utils/sampleData';
 import {
@@ -90,6 +70,8 @@ import { emptyChart, ensureEngineAccounts } from '../lib/chartDefaults';
 import { recordPayment, moveFunds, settlePayroll, reversePayment } from '../lib/financialOperations';
 import { signOut } from 'firebase/auth';
 import { useAuthSession } from '../lib/useAuthSession';
+import { canAccessModule, initialModule } from '../lib/accessPolicy';
+import { authenticatedFetch } from '../lib/authenticatedFetch';
 import { provisionAccount, loginAccount, authErrorMessage, resetAccountPassword } from '../lib/authService';
 import { useTenantCollection } from '../lib/useTenantCollection';
 import { canReadCompanyCollection, assertTenantRecords, validatePayment, COMPANY_COLLECTIONS } from '../lib/tenantPolicy';
@@ -425,7 +407,11 @@ const ERPStateProvider: React.FC<{ children: ReactNode; session: ReturnType<type
     } catch (e) {}
   }, [isDarkMode]);
 
-  const [activeModule, setActiveModule] = useState<string>('dashboard');
+  const [activeModule, setActiveModuleState] = useState<string>(initialModule(currentUser));
+  const setActiveModule = (module: string) => {
+    if (canAccessModule(currentUser, module)) setActiveModuleState(module);
+    else addNotification('error', 'Acceso restringido', 'Tu cuenta no tiene acceso a este módulo.');
+  };
 
   const [rawBranches, setRawBranches] = useTenantCollection<Branch>('branches', companyScope('branches'), reportCloudError);
   const [rawProducts, setRawProducts] = useTenantCollection<Product>('products', companyScope('products'), reportCloudError);
@@ -466,7 +452,8 @@ const ERPStateProvider: React.FC<{ children: ReactNode; session: ReturnType<type
   // Selected current Company & User
   const currentCompany = useMemo(() => {
     return companies.find(company => company.id === currentCompanyId) || {
-      ...SAMPLE_COMPANIES[0], id: '', name: '', tradeName: '', primaryAdminUserId: undefined,
+      id: '', name: '', tradeName: '', nit: '', nrc: '', giro: '', address: '', department: '', phone: '', email: '',
+      isGranContribuyente: false, currency: 'USD', fiscalYear: new Date().getFullYear(), fiscalConfig: DEFAULT_FISCAL_CONFIG,
     };
   }, [companies, currentCompanyId]);
   const userRole = currentUser.role;
@@ -702,11 +689,41 @@ const ERPStateProvider: React.FC<{ children: ReactNode; session: ReturnType<type
     let active = true;
     const stop: (() => void)[] = [];
     if (session.platformAdmin) {
+      let profiles: UserProfile[] = [];
+      let identities: UserProfile[] = [];
+      let loadedProfiles = false;
+      const publishUsers = () => {
+        if (active) setUsers([...profiles, ...identities.filter(identity => !profiles.some(profile => profile.id === identity.id))]);
+      };
+      const refreshDirectory = async () => {
+        try {
+          const all: UserProfile[] = [];
+          let nextPageToken: string | undefined;
+          do {
+            const suffix = nextPageToken ? `?pageToken=${encodeURIComponent(nextPageToken)}` : '';
+            const response = await authenticatedFetch(`/api/admin/users/directory${suffix}`, { method: 'GET' });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.error || 'No se pudo consultar el directorio.');
+            for (const identity of payload.identities) all.push({ ...identity, role: 'gerente', accessStatus: 'missing_profile' });
+            nextPageToken = payload.nextPageToken;
+          } while (nextPageToken && active);
+          if (active) { identities = all; publishUsers(); }
+        } catch (error) { if (active) reportCloudError(error); }
+      };
+      void refreshDirectory();
+      const refreshTimer = setInterval(refreshDirectory, 60000);
+      stop.push(() => clearInterval(refreshTimer));
       stop.push(onSnapshot(collection(db, 'companies'), snapshot => {
         if (active) setCompanies(snapshot.docs.map(d => sanitizeCompany({ ...d.data(), id: d.id })));
       }, reportCloudError));
       stop.push(onSnapshot(collection(db, 'users'), snapshot => {
-        if (active) setUsers(snapshot.docs.map(d => { const { password, ...data } = d.data(); return { ...data, id: d.id } as UserProfile; }));
+        if (!active) return;
+        if (loadedProfiles) for (const change of snapshot.docChanges()) {
+          if (change.type === 'added') addNotification('info', 'Nueva cuenta registrada', `${change.doc.data().name || change.doc.data().email} ya aparece en tu directorio de usuarios.`);
+        }
+        if (!snapshot.metadata.fromCache) loadedProfiles = true;
+        profiles = snapshot.docs.map(d => { const { password, ...data } = d.data(); return { ...data, id: d.id, accessStatus: 'active' } as UserProfile; });
+        publishUsers();
       }, reportCloudError));
     } else if (currentUser.companyId) {
       stop.push(onSnapshot(doc(db, 'companies', currentUser.companyId), snapshot => {
@@ -754,7 +771,7 @@ const ERPStateProvider: React.FC<{ children: ReactNode; session: ReturnType<type
       setSettingsScope(currentCompanyId);
     }, reportCloudError);
     return () => { active = false; unsubscribe(); };
-  }, [currentCompanyId, isAuthenticated, currentUser.role]);
+  }, [currentCompanyId, isAuthenticated, currentUser.role, JSON.stringify(currentUser.permissions)]);
 
   // User & Access Management (Admin vs Cajero / Roles)
   const registerPersonalAccount = async (data: Omit<UserProfile, 'id'>) => {
@@ -796,8 +813,8 @@ const ERPStateProvider: React.FC<{ children: ReactNode; session: ReturnType<type
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    setActiveModule(currentUser.systemArchetype === 'finanzas_personales' ? 'personal_finances' : currentUser.role === 'cajero' ? 'pos_terminal' : session.platformAdmin ? 'admin_profiles' : 'dashboard');
-  }, [isAuthenticated, currentUser.systemArchetype, currentUser.role]);
+    setActiveModuleState(initialModule(currentUser));
+  }, [isAuthenticated, currentUser.systemArchetype, currentUser.role, JSON.stringify(currentUser.permissions)]);
 
   // Personal Finances Methods
   const addPersonalTransaction = (txData: Omit<PersonalTransaction, 'id' | 'userId'>) => {

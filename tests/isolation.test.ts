@@ -7,6 +7,7 @@ import { recordPayment, moveFunds, settlePayroll, reversePayment } from '../src/
 import { generatePayrollAccountingEntry } from '../src/utils/accountingEngine';
 import { SAMPLE_PAYROLLS } from '../src/utils/sampleData';
 import { validatePayment, assertTenantRecords } from '../src/lib/tenantPolicy';
+import { canAccessModule, isPlatformOwner } from '../src/lib/accessPolicy';
 
 let environment: RulesTestEnvironment;
 before(async () => { environment = await initializeTestEnvironment({ projectId: 'demo-fina-pyme', firestore: { host: '127.0.0.1', port: 8080, rules: readFileSync('firestore.rules', 'utf8') } }); });
@@ -50,7 +51,7 @@ test('company queries require the tenant constraint; foreign records are inacces
 });
 test('personal transactions and metadata are private even from the platform administrator', async () => {
   await assertSucceeds(getDocs(query(collection(alice(), 'personal_finances'), where('userId', '==', 'alice'))));
-  for (const context of [environment.authenticatedContext('bob'), environment.authenticatedContext('master', { platformAdmin: true })]) {
+  for (const context of [environment.authenticatedContext('bob'), environment.authenticatedContext('master', { platformAdmin: true, email: 'davidinn234@gmail.com' })]) {
     const db = context.firestore() as unknown as Firestore;
     await assertFails(getDoc(doc(db, 'personal_finances', 'alice-tx')));
     await assertFails(getDoc(doc(db, 'personal_finance_meta', 'alice')));
@@ -65,6 +66,34 @@ test('roles, identity and company cannot be self-escalated', async () => {
   await assertFails(getDoc(doc(cashier, 'employees', 'a')));
   await assertFails(setDoc(doc(cashier, 'users', 'new-user'), { id: 'new-user', name: 'Nuevo', email: 'new@example.com', companyId: 'a', role: 'gerente' }));
 });
+
+test('only the designated email with its server claim can administer the platform', async () => {
+  const owner = environment.authenticatedContext('master', { email: 'davidinn234@gmail.com', platformAdmin: true }).firestore() as unknown as Firestore;
+  await assertSucceeds(getDocs(collection(owner, 'users')));
+  for (const claims of [{ email: 'someone@example.com', platformAdmin: true }, { email: 'davidinn234@gmail.com' }]) {
+    const outsider = environment.authenticatedContext('outsider', claims).firestore() as unknown as Firestore;
+    await assertFails(getDocs(collection(outsider, 'users')));
+    await assertFails(getDocs(collection(outsider, 'companies')));
+  }
+  assert.equal(isPlatformOwner('someone@example.com', { platformAdmin: true }), false);
+  assert.equal(isPlatformOwner('davidinn234@gmail.com', {}), false);
+});
+
+test('employee module permissions restrict both navigation and stored company data', async () => {
+  await environment.withSecurityRulesDisabled(async context => {
+    const db = context.firestore() as unknown as Firestore;
+    await setDoc(doc(db, 'users', 'limited'), { id: 'limited', email: 'limited@example.com', name: 'CRM', role: 'cajero', companyId: 'a', permissions: ['sales_crm'] });
+  });
+  const db = environment.authenticatedContext('limited').firestore() as unknown as Firestore;
+  await assertSucceeds(getDoc(doc(db, 'invoices', 'inv-a')));
+  await assertFails(getDoc(doc(db, 'employees', 'a')));
+  await assertFails(getDoc(doc(db, 'purchases', 'pur-a')));
+  await assertFails(getDoc(doc(db, 'invoices', 'inv-b')));
+  await assertFails(setDoc(doc(db, 'payrolls', 'forbidden'), { id: 'forbidden', companyId: 'a' }));
+  const profile = { id: 'limited', name: 'CRM', email: 'limited@example.com', role: 'cajero' as const, companyId: 'a', permissions: ['sales_crm'] };
+  assert.equal(canAccessModule(profile, 'sales'), true);
+  for (const module of ['pos_terminal', 'dashboard', 'payroll', 'settings', 'company_users', 'admin_profiles']) assert.equal(canAccessModule(profile, module), false);
+});
 test('public company signup atomically creates its own profile, company and branch', async () => {
   const db = environment.authenticatedContext('new-owner', { email: 'new@example.com' }).firestore() as unknown as Firestore;
   const batch = writeBatch(db);
@@ -74,6 +103,17 @@ test('public company signup atomically creates its own profile, company and bran
   await assertSucceeds(batch.commit());
   await assertSucceeds(getDoc(doc(db, 'companies', 'new-company')));
   await assertFails(setDoc(doc(db, 'users', 'someone-else'), { id: 'someone-else', name: 'Otro', email: 'else@example.com', role: 'gerente', companyId: 'b' }));
+});
+
+test('platform owner can atomically provision another manager and its new empty company', async () => {
+  const db = environment.authenticatedContext('master', { email: 'davidinn234@gmail.com', platformAdmin: true }).firestore() as unknown as Firestore;
+  const batch = writeBatch(db);
+  batch.set(doc(db, 'companies', 'provisioned'), { id: 'provisioned', primaryAdminUserId: 'new-manager' });
+  batch.set(doc(db, 'users', 'new-manager'), { id: 'new-manager', name: 'Gerente', email: 'manager@example.com', role: 'gerente', companyId: 'provisioned' });
+  batch.set(doc(db, 'branches', 'provisioned'), { id: 'provisioned', companyId: 'provisioned' });
+  batch.set(doc(db, 'bank_accounts', 'provisioned'), { id: 'provisioned', companyId: 'provisioned', accountType: 'caja_general', initialBalance: 0, currentBalance: 0 });
+  await assertSucceeds(batch.commit());
+  assert.equal((await getDoc(doc(db, 'bank_accounts', 'provisioned'))).data()?.currentBalance, 0);
 });
 test('parallel customer payments cannot overpay; bank, debt and entries agree', async () => {
   const db = alice();

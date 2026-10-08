@@ -1,4 +1,5 @@
 import type { UserProfile } from '../types';
+import { PLATFORM_OWNER_EMAIL, profilePermissions } from './accessPolicy';
 
 export const COMPANY_COLLECTIONS = [
   'branches', 'products', 'customers', 'invoices', 'customer_payments',
@@ -10,9 +11,25 @@ export const COMPANY_COLLECTIONS = [
 
 export function canReadCompanyCollection(profile: UserProfile | null, name: string) {
   if (!profile) return false;
-  if (profile.role === 'admin_maestro' || profile.role === 'gerente' || profile.role === 'contador') return true;
+  if (profile.role === 'admin_maestro') return profile.email.toLowerCase() === PLATFORM_OWNER_EMAIL;
+  if (profile.role === 'gerente') return true;
   if (profile.role === 'kiosko_asistencia') return ['attendance', 'branches', 'attendance_directory'].includes(name);
-  return ['branches', 'products', 'customers', 'invoices', 'customer_payments', 'bank_accounts', 'treasury_movements', 'kardex_movements'].includes(name);
+  if (name === 'branches') return true;
+  const permissions = profilePermissions(profile);
+  const has = (...keys: string[]) => keys.some(key => permissions.includes(key));
+  const sales = has('pos_sales', 'pos_terminal', 'sales_crm', 'sales', 'customer_view', 'cxc_management');
+  const buying = has('purchases', 'purchases_scm', 'inventory_edit');
+  const ledger = has('accounting', 'accounting_access', 'iva_books');
+  const treasury = has('treasury', 'treasury_access');
+  if (['products', 'kardex_movements'].includes(name)) return sales || buying || has('inventory', 'inventory_view');
+  if (['customers', 'invoices', 'customer_payments'].includes(name)) return sales || ledger || has('dashboard', 'marketing', 'forecasting');
+  if (['suppliers', 'purchases', 'supplier_payments'].includes(name)) return buying || ledger || has('dashboard', 'forecasting');
+  if (['bank_accounts', 'treasury_movements'].includes(name)) return sales || treasury || ledger || has('dashboard', 'forecasting', 'payroll', 'payroll_access');
+  if (name === 'journal_entries') return ledger || has('dashboard', 'forecasting');
+  if (name === 'other_incomes') return treasury || ledger || has('dashboard');
+  if (['employees', 'payrolls', 'professional_services', 'candidate_folders', 'candidates', 'attendance', 'leave_requests'].includes(name)) return has('payroll', 'payroll_access');
+  if (name === 'dynamic_widgets') return has('dashboard', 'marketing');
+  return false;
 }
 
 export function assertTenantRecords(records: unknown, companyId: string): asserts records is { id: string; companyId: string }[] {

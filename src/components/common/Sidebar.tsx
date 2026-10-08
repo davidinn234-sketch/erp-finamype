@@ -22,6 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import { FinaPymeTermsAndProjectModal } from './FinaPymeTermsAndProjectModal';
+import { canAccessModule } from '../../lib/accessPolicy';
 
 interface SidebarProps {
   isOpenMobile: boolean;
@@ -188,27 +189,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, onCloseMobile })
     currentUser?.role === 'admin_maestro' ||
     currentUser?.role === 'gerente';
 
-  const hasPermission = (permissionKey: string): boolean => {
-    if (isCompanyOwnerOrManager) return true;
-    if (!currentUser?.permissions || currentUser.permissions.length === 0) return false;
-    return currentUser.permissions.includes(permissionKey);
-  };
-
-  const filteredNavItems = navigationItems.filter((item) => {
-    if (userRole === 'admin_maestro') return true;
-
-    if (userRole === 'vendedor') {
-      if (['sales', 'dashboard', 'academy'].includes(item.id)) return true;
-      return hasPermission(item.id);
-    }
-
-    if (userRole === 'cajero') {
-      if (['pos_terminal', 'dashboard', 'academy'].includes(item.id)) return true;
-      return hasPermission(item.id);
-    }
-
-    return item.roles.includes(userRole) || hasPermission(item.id);
-  });
+  const filteredNavItems = navigationItems.filter(item => canAccessModule(currentUser, item.id));
 
   const filteredErpItems = filteredNavItems.filter((i) =>
     erpOperationalItems.some((e) => e.id === i.id)

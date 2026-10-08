@@ -71,6 +71,7 @@ import { formatCurrencyUSD } from '../../utils/salvadoranTax';
 import { DynamicChartBuilderModal } from './DynamicChartBuilderModal';
 import { HistoricalFinancialAnalytics } from './HistoricalFinancialAnalytics';
 import { Invoice, Customer, Product, Branch } from '../../types';
+import { marketingSaleAmount, recordedMarketingInvoices, marketingChannels } from '../../lib/marketingReports';
 
 const COLORS = ['#0F766E', '#0F4C45', '#115E59', '#64748B', '#059669', '#334155', '#0D9488', '#475569'];
 
@@ -94,7 +95,7 @@ export const MarketingDashboard: React.FC = () => {
   // FILTROS PRINCIPALES AUTÓNOMOS DEL DASHBOARD DE MARKETING
   // ----------------------------------------------------
   const [mktBranchId, setMktBranchId] = useState<string>('all');
-  const [mktYear, setMktYear] = useState<number>(2026);
+  const [mktYear, setMktYear] = useState<number>(new Date().getFullYear());
   const [mktMonth, setMktMonth] = useState<string>('all');
   const [mktDay, setMktDay] = useState<string>('all');
   const [mktChannel, setMktChannel] = useState<string>('all');
@@ -117,7 +118,7 @@ export const MarketingDashboard: React.FC = () => {
   const [simConvRate, setSimConvRate] = useState<number>(12); // 12% conversión
   const [simMarginPct, setSimMarginPct] = useState<number>(35); // 35% margen bruto
 
-  const MKT_YEARS = [2026, 2025, 2024, 2023, 2022];
+  const MKT_YEARS = Array.from(new Set([new Date().getFullYear(), ...invoices.map(i => Number(i.date?.slice(0, 4))).filter(Boolean)])).sort((a, b) => b - a);
   const MKT_MONTHS = [
     { key: 'all', short: 'Todos', name: 'Todos los meses' },
     { key: '01', short: 'Ene', name: 'Enero' },
@@ -179,7 +180,7 @@ export const MarketingDashboard: React.FC = () => {
 
   // Facturas filtradas por los filtros autónomos de marketing
   const filteredInvoices = useMemo(() => {
-    let list = (invoices || []).filter((i) => i && i.status !== 'anulada');
+    let list = recordedMarketingInvoices(invoices || []);
 
     // Filtro por sucursal
     if (mktBranchId !== 'all') {
@@ -244,10 +245,7 @@ export const MarketingDashboard: React.FC = () => {
   // 1. MÉTRICAS CLAVE DE RENDIMIENTO COMERCIAL & MARKETING (KPIS)
   // ----------------------------------------------------
   const marketingKPIs = useMemo(() => {
-    const totalVentas = filteredInvoices.reduce((sum, inv) => {
-      const sumas = (inv.sumasGravadas || 0) + (inv.sumasExentas || 0) + (inv.sumasNoSujetas || 0);
-      return sum + (sumas > 0 ? sumas : inv.totalPagar || 0);
-    }, 0);
+    const totalVentas = filteredInvoices.reduce((sum, inv) => sum + marketingSaleAmount(inv), 0);
 
     const totalTransacciones = filteredInvoices.length;
     const ticketPromedio = totalTransacciones > 0 ? totalVentas / totalTransacciones : 0;
@@ -264,20 +262,19 @@ export const MarketingDashboard: React.FC = () => {
     const recurringCustomers = Object.values(customerOrderCounts).filter((count) => count > 1).length;
     const tasaRecurrencia = uniqueCustomers > 0 ? (recurringCustomers / uniqueCustomers) * 100 : 0;
 
-    // Estimación de inversión publicitaria y captación
-    // Base publicitaria proporcional al volumen de ventas (~5% del ingreso)
-    const inversionPublicitaria = Math.round(Math.max(150, totalVentas * 0.052));
-    const nuevosClientes = Math.max(1, uniqueCustomers - recurringCustomers);
+    // Paid advertising costs and campaign attribution have not been recorded.
+    const inversionPublicitaria = 0; // No advertising expense records exist yet.
+    const nuevosClientes = Math.max(0, uniqueCustomers - recurringCustomers);
     const cac = nuevosClientes > 0 ? inversionPublicitaria / nuevosClientes : 0;
 
     // LTV (Customer Lifetime Value) promedio histórico
-    const totalAllInvoices = (invoices || []).reduce((sum, i) => sum + (i.totalPagar || 0), 0);
+    const totalAllInvoices = recordedMarketingInvoices(invoices || []).reduce((sum, i) => sum + marketingSaleAmount(i), 0);
     const allCustomersCount = Math.max(1, (customers || []).length);
     const ltvPromedio = totalAllInvoices / allCustomersCount;
     const ratioLtvCac = cac > 0 ? ltvPromedio / cac : 0;
 
     // ROAS (Return On Ad Spend)
-    const ventasPauta = totalVentas * 0.78; // 78% atribuible a canales comerciales
+    const ventasPauta = 0; // Attribution to paid campaigns has not been recorded.
     const roas = inversionPublicitaria > 0 ? (ventasPauta / inversionPublicitaria) : 0;
 
     return {
@@ -298,27 +295,14 @@ export const MarketingDashboard: React.FC = () => {
 
   // Sparklines para las 8 tarjetas de KPIs de marketing
   const mktSparklines = useMemo(() => {
-    const base = [
-      { m: 'Ene', v: 4200, t: 38, c: 24, r: 18, p: 210, cac: 9.8, ltv: 320, roas: 3.8 },
-      { m: 'Feb', v: 4600, t: 41, c: 26, r: 20, p: 230, cac: 9.5, ltv: 330, roas: 3.9 },
-      { m: 'Mar', v: 5100, t: 44, c: 29, r: 22, p: 250, cac: 9.2, ltv: 345, roas: 4.1 },
-      { m: 'Abr', v: 5400, t: 45, c: 31, r: 23, p: 270, cac: 9.0, ltv: 350, roas: 4.0 },
-      { m: 'May', v: 6200, t: 48, c: 35, r: 25, p: 310, cac: 8.8, ltv: 365, roas: 4.3 },
-      { m: 'Jun', v: 5900, t: 47, c: 33, r: 24, p: 290, cac: 8.9, ltv: 360, roas: 4.2 },
-      { m: 'Jul', v: 6400, t: 49, c: 37, r: 26, p: 320, cac: 8.6, ltv: 375, roas: 4.4 },
-      { m: 'Ago', v: 6800, t: 50, c: 39, r: 28, p: 340, cac: 8.4, ltv: 385, roas: 4.5 },
-      {
-        m: 'Sep',
-        v: marketingKPIs.totalVentas || 7100,
-        t: Math.round(marketingKPIs.ticketPromedio || 52),
-        c: marketingKPIs.uniqueCustomers || 42,
-        r: Math.round(marketingKPIs.tasaRecurrencia || 30),
-        p: marketingKPIs.inversionPublicitaria || 360,
-        cac: Number((marketingKPIs.cac || 8.2).toFixed(1)),
-        ltv: Math.round(marketingKPIs.ltvPromedio || 395),
-        roas: Number((marketingKPIs.roas || 4.6).toFixed(1)),
-      },
-    ];
+    const base = Array.from({ length: 12 }, (_, month) => {
+      const records = filteredInvoices.filter(invoice => Number(invoice.date?.slice(5, 7)) === month + 1);
+      const v = records.reduce((sum, invoice) => sum + marketingSaleAmount(invoice), 0);
+      const counts = new Map<string, number>();
+      records.forEach(invoice => { if (invoice.customerId) counts.set(invoice.customerId, (counts.get(invoice.customerId) || 0) + 1); });
+      const c = counts.size;
+      return { v, t: records.length ? v / records.length : 0, c, r: c ? [...counts.values()].filter(count => count > 1).length / c * 100 : 0, p: 0, cac: 0, ltv: c ? v / c : 0, roas: 0 };
+    });
     return {
       ventas: base.map((b) => ({ val: b.v })),
       ticket: base.map((b) => ({ val: b.t })),
@@ -329,40 +313,12 @@ export const MarketingDashboard: React.FC = () => {
       ltv: base.map((b) => ({ val: b.ltv })),
       roas: base.map((b) => ({ val: b.roas })),
     };
-  }, [marketingKPIs]);
+  }, [filteredInvoices]);
 
   // ----------------------------------------------------
   // 2. DESGLOSE POR CANALES DE MARKETING Y RETORNO (ROAS)
   // ----------------------------------------------------
-  const channelsData = useMemo(() => {
-    const rawChannels = [
-      { id: 'meta_ads', name: 'Meta Ads (FB/IG)', baseSpend: 280, share: 0.35, color: '#0F766E' },
-      { id: 'google_ads', name: 'Google Ads (Search/Maps)', baseSpend: 190, share: 0.24, color: '#115E59' },
-      { id: 'whatsapp', name: 'WhatsApp Business Directo', baseSpend: 60, share: 0.20, color: '#059669' },
-      { id: 'tiktok', name: 'TikTok Ads & Viral', baseSpend: 90, share: 0.11, color: '#334155' },
-      { id: 'referidos', name: 'Referidos / Boca a Boca', baseSpend: 30, share: 0.07, color: '#0D9488' },
-      { id: 'tienda_fisica', name: 'Orgánico / Tienda Física', baseSpend: 20, share: 0.03, color: '#64748B' },
-    ];
-
-    const totalV = Math.max(1000, marketingKPIs.totalVentas);
-
-    return rawChannels.map((c) => {
-      const sales = Math.round(totalV * c.share);
-      const spend = c.baseSpend;
-      const roas = spend > 0 ? Number((sales / spend).toFixed(2)) : 0;
-      const leads = Math.round(spend / 2.2);
-      const orders = Math.max(1, Math.round(sales / (marketingKPIs.ticketPromedio || 45)));
-
-      return {
-        ...c,
-        sales,
-        spend,
-        roas,
-        leads,
-        orders,
-      };
-    });
-  }, [marketingKPIs]);
+  const channelsData = useMemo(() => marketingChannels(filteredInvoices, customers), [filteredInvoices, customers]);
 
   // ----------------------------------------------------
   // 3. TOP 10 CLIENTES VIP (SEGMENTACIÓN & VALOR COMERCIAL)
@@ -389,8 +345,8 @@ export const MarketingDashboard: React.FC = () => {
       const avgTicket = stats.count > 0 ? stats.total / stats.count : 0;
 
       // Calcular días desde última compra
-      const now = new Date(2026, 8, 28); // Sep 28, 2026
-      let daysSinceLast = 15;
+      const now = new Date(); // Sep 28, 2026
+      let daysSinceLast = 0;
       if (stats.lastDate) {
         const pDate = new Date(stats.lastDate);
         const diffMs = now.getTime() - pDate.getTime();
@@ -489,9 +445,10 @@ export const MarketingDashboard: React.FC = () => {
 
       // Ordenar por fecha descendente
       const dates = custInvs.map((i) => i.date).filter(Boolean).sort().reverse();
-      const lastDateStr = dates[0] || '2026-06-01';
+      const lastDateStr = dates[0];
+      if (!lastDateStr) return;
       const pDate = new Date(lastDateStr);
-      const now = new Date(2026, 8, 28);
+      const now = new Date();
       const diffDays = Math.max(0, Math.floor((now.getTime() - pDate.getTime()) / (1000 * 60 * 60 * 24)));
 
       if (diffDays <= 30) activos++;
@@ -854,8 +811,8 @@ export const MarketingDashboard: React.FC = () => {
                 className="bg-transparent text-[13px] font-medium text-[#111827] dark:text-slate-100 outline-none cursor-pointer pr-1"
               >
                 <option value="all">Todos los canales</option>
-                <option value="meta_ads">Meta Ads (FB/IG)</option>
-                <option value="google_ads">Google Ads</option>
+                <option value="meta_ads">Facebook / Instagram</option>
+                <option value="google_ads">Sitio web</option>
                 <option value="whatsapp">WhatsApp Business</option>
                 <option value="tiktok">TikTok</option>
                 <option value="referidos">Referidos</option>
@@ -1009,11 +966,11 @@ export const MarketingDashboard: React.FC = () => {
                 Oportunidad táctica de pauta & conversión comercial
               </span>
               <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#0F766E] bg-teal-50 dark:bg-teal-950/60 px-2 py-0.5 rounded-full border border-teal-200 dark:border-teal-800">
-                Canal líder: Meta Ads ({channelsData[0]?.roas || 4.2}x ROAS)
+                Datos de tu empresa
               </span>
             </div>
             <p className="text-[13px] text-[#6B7280] dark:text-slate-400 mt-0.5">
-              El canal <strong>Meta Ads</strong> y <strong>WhatsApp Business</strong> concentran el 55% de la captación. Los clientes generan mayor facturación los días <strong>{salesByDayOfWeek.reduce((max, d) => (d.sales > max.sales ? d : max), salesByDayOfWeek[0]).name}</strong>. Se aconseja pautar 24h antes.
+              Las ventas y los clientes se calculan con tus registros. La inversión publicitaria todavía no está registrada; usa el simulador para explorar un presupuesto.
             </p>
           </div>
         </div>
@@ -1065,9 +1022,9 @@ export const MarketingDashboard: React.FC = () => {
               </div>
               <div className="flex items-center gap-1.5 mt-2 text-[12px]">
                 <span className="text-[#059669] font-medium flex items-center">
-                  ▲ +14.2%
+                  —
                 </span>
-                <span className="text-[#6B7280] dark:text-slate-400">vs período anterior</span>
+                <span className="text-[#6B7280] dark:text-slate-400">Datos del período</span>
               </div>
             </div>
             {/* Sparkline mini-chart */}
@@ -1096,7 +1053,7 @@ export const MarketingDashboard: React.FC = () => {
               </div>
               <div className="flex items-center gap-1.5 mt-2 text-[12px]">
                 <span className="text-[#059669] font-medium flex items-center">
-                  ▲ +5.8%
+                  —
                 </span>
                 <span className="text-[#6B7280] dark:text-slate-400">por transacción</span>
               </div>
@@ -1127,7 +1084,7 @@ export const MarketingDashboard: React.FC = () => {
               </div>
               <div className="flex items-center gap-1.5 mt-2 text-[12px]">
                 <span className="text-[#059669] font-medium flex items-center">
-                  ▲ +8.1%
+                  —
                 </span>
                 <span className="text-[#6B7280] dark:text-slate-400">compraron en período</span>
               </div>
@@ -1158,7 +1115,7 @@ export const MarketingDashboard: React.FC = () => {
               </div>
               <div className="flex items-center gap-1.5 mt-2 text-[12px]">
                 <span className="text-[#059669] font-medium flex items-center">
-                  ▲ +3.4%
+                  —
                 </span>
                 <span className="text-[#6B7280] dark:text-slate-400">fidelización recurrente</span>
               </div>
@@ -1185,13 +1142,13 @@ export const MarketingDashboard: React.FC = () => {
                 </div>
               </div>
               <div className="text-[28px] font-semibold text-[#111827] dark:text-white [font-variant-numeric:tabular-nums] mt-1 leading-none">
-                {formatCurrencyUSD(marketingKPIs.inversionPublicitaria)}
+                Sin registrar
               </div>
               <div className="flex items-center gap-1.5 mt-2 text-[12px]">
                 <span className="text-[#64748B] font-medium flex items-center">
-                  {((marketingKPIs.inversionPublicitaria / Math.max(1, marketingKPIs.totalVentas)) * 100).toFixed(1)}%
+                  —
                 </span>
-                <span className="text-[#6B7280] dark:text-slate-400">del total facturado</span>
+                <span className="text-[#6B7280] dark:text-slate-400">Falta registrar gastos de publicidad</span>
               </div>
             </div>
             {/* Sparkline mini-chart */}
@@ -1209,18 +1166,18 @@ export const MarketingDashboard: React.FC = () => {
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-[12px] font-medium text-[#6B7280] dark:text-slate-400">
-                  CAC estimado
+                  Costo de adquisición (CAC)
                 </span>
                 <div className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 text-[#64748B] flex items-center justify-center">
                   <Target className="w-4 h-4 stroke-[1.75]" />
                 </div>
               </div>
               <div className="text-[28px] font-semibold text-[#111827] dark:text-white [font-variant-numeric:tabular-nums] mt-1 leading-none">
-                {formatCurrencyUSD(marketingKPIs.cac)}
+                Sin registrar
               </div>
               <div className="flex items-center gap-1.5 mt-2 text-[12px]">
                 <span className="text-[#059669] font-medium flex items-center">
-                  ▼ -4.5%
+                  —
                 </span>
                 <span className="text-[#6B7280] dark:text-slate-400">costo por adquisición</span>
               </div>
@@ -1240,7 +1197,7 @@ export const MarketingDashboard: React.FC = () => {
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-[12px] font-medium text-[#6B7280] dark:text-slate-400">
-                  LTV promedio
+                  Compra acumulada por cliente
                 </span>
                 <div className="w-9 h-9 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-[#059669] flex items-center justify-center">
                   <DollarSign className="w-4 h-4 stroke-[1.75]" />
@@ -1251,9 +1208,9 @@ export const MarketingDashboard: React.FC = () => {
               </div>
               <div className="flex items-center gap-1.5 mt-2 text-[12px]">
                 <span className="text-[#059669] font-medium flex items-center">
-                  ▲ +11.2%
+                  —
                 </span>
-                <span className="text-[#6B7280] dark:text-slate-400">ciclo de vida</span>
+                <span className="text-[#6B7280] dark:text-slate-400">ventas registradas</span>
               </div>
             </div>
             {/* Sparkline mini-chart */}
@@ -1278,11 +1235,11 @@ export const MarketingDashboard: React.FC = () => {
                 </div>
               </div>
               <div className="text-[28px] font-semibold text-[#0F766E] [font-variant-numeric:tabular-nums] mt-1 leading-none">
-                {marketingKPIs.roas.toFixed(1)}x
+                Sin registrar
               </div>
               <div className="flex items-center gap-1.5 mt-2 text-[12px]">
                 <span className="text-[#059669] font-medium flex items-center">
-                  ▲ +0.6x
+                  —
                 </span>
                 <span className="text-[#6B7280] dark:text-slate-400">retorno por cada $1 en pauta</span>
               </div>
@@ -1365,7 +1322,7 @@ export const MarketingDashboard: React.FC = () => {
                 Rendimiento por canal de marketing
               </h3>
               <p className="text-[12px] text-[#6B7280]">
-                Inversión en pauta publicitaria vs Ingresos por ventas generadas ($ USD)
+                Ventas registradas según el origen del cliente ($ USD)
               </p>
             </div>
 
@@ -1425,7 +1382,6 @@ export const MarketingDashboard: React.FC = () => {
                     formatter={(value) => (value === 'sales' ? 'Ventas Generadas ($)' : 'Inversión en Pauta ($)')}
                   />
                   <Bar dataKey="sales" name="sales" fill="#0F766E" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="spend" name="spend" fill="#64748B" radius={[4, 4, 0, 0]} />
                 </BarChart>
               ) : channelChartType === 'lines' ? (
                 <LineChart data={channelsData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
@@ -1443,7 +1399,6 @@ export const MarketingDashboard: React.FC = () => {
                     formatter={(value) => (value === 'sales' ? 'Ventas Generadas ($)' : 'Inversión en Pauta ($)')}
                   />
                   <Line type="monotone" dataKey="sales" name="sales" stroke="#0F766E" strokeWidth={2.5} dot={{ r: 4, fill: '#0F766E' }} />
-                  <Line type="monotone" dataKey="spend" name="spend" stroke="#64748B" strokeWidth={2.5} dot={{ r: 4, fill: '#64748B' }} />
                 </LineChart>
               ) : (
                 <AreaChart data={channelsData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
@@ -1471,7 +1426,6 @@ export const MarketingDashboard: React.FC = () => {
                     formatter={(value) => (value === 'sales' ? 'Ventas Generadas ($)' : 'Inversión en Pauta ($)')}
                   />
                   <Area type="monotone" dataKey="sales" name="sales" stroke="#0F766E" fillOpacity={1} fill="url(#colorMktSales)" strokeWidth={2} />
-                  <Area type="monotone" dataKey="spend" name="spend" stroke="#64748B" fillOpacity={1} fill="url(#colorMktSpend)" strokeWidth={2} />
                 </AreaChart>
               )}
             </ResponsiveContainer>
@@ -1483,9 +1437,9 @@ export const MarketingDashboard: React.FC = () => {
           <div className="space-y-3">
             <div className="flex items-center justify-between pb-2 border-b border-[#E3E8E6] dark:border-slate-800">
               <h3 className="text-[15px] font-semibold text-[#111827] dark:text-white">
-                Eficacia & ROAS por canal
+                Ventas por canal
               </h3>
-              <span className="text-[12px] text-[#6B7280]">Retorno pauta</span>
+              <span className="text-[12px] text-[#6B7280]">Publicidad sin registrar</span>
             </div>
 
             <div className="space-y-2 overflow-y-auto max-h-72 pr-1">
@@ -1499,7 +1453,7 @@ export const MarketingDashboard: React.FC = () => {
                     <div>
                       <span className="font-semibold text-[#111827] dark:text-white block">{c.name}</span>
                       <span className="text-[11px] text-[#6B7280] font-mono">
-                        {c.leads} leads • {c.orders} ventas
+                        {c.orders} ventas registradas
                       </span>
                     </div>
                   </div>
@@ -1509,7 +1463,7 @@ export const MarketingDashboard: React.FC = () => {
                       {formatCurrencyUSD(c.sales)}
                     </span>
                     <span className="text-[10px] font-medium text-[#0F766E] bg-teal-50 dark:bg-teal-950/60 px-1.5 py-0.5 rounded border border-teal-200">
-                      ROAS {c.roas}x
+                      ROAS sin datos
                     </span>
                   </div>
                 </div>
@@ -1518,8 +1472,7 @@ export const MarketingDashboard: React.FC = () => {
           </div>
 
           <div className="pt-3 border-t border-[#E3E8E6] dark:border-slate-800 text-[12px] text-[#6B7280] flex items-center justify-between">
-            <span>Meta Ads y WhatsApp concentran el 55% de la captación.</span>
-            <span className="font-semibold text-[#0F766E]">Prioritario</span>
+            <span>El canal corresponde al origen registrado del cliente.</span>
           </div>
         </div>
       </section>

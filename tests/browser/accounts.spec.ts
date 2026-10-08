@@ -19,7 +19,7 @@ test.beforeAll(async () => {
   await database.doc('personal_finances/private-alice').set({ id: 'private-alice', userId: aliceId, type: 'ingreso', amount: 123, category: 'Salario', concept: 'Ingreso privado de Alice', date: new Date().toISOString().slice(0, 10), paymentMethod: 'efectivo' });
   await database.doc(`personal_finance_meta/${aliceId}`).set({ userId: aliceId, personalBudgets: [{ id: 'budget-alice', category: 'Presupuesto privado de Alice', budgetedAmount: 25 }], personalSavingGoals: [] });
   for (const [name, role, companyId] of [['master-access', 'gerente', ''], ['manager-access', 'gerente', 'access-company'], ['worker-access', 'cajero', 'access-company'], ['outside-access', 'cajero', 'other-company']]) {
-    const email = `${name}@sin-buzon.sv`;
+    const email = name === 'master-access' ? 'davidinn234@gmail.com' : `${name}@sin-buzon.sv`;
     const identity = await auth.getUserByEmail(email).catch(error => {
       if (error.code !== 'auth/user-not-found') throw error;
       return auth.createUser({ email, password: 'testPassword123' });
@@ -29,6 +29,13 @@ test.beforeAll(async () => {
     await database.doc(`users/${identity.uid}`).set({ id: identity.uid, email, name, role, ...(companyId ? { companyId } : {}), isConfigured: true });
     if (name === 'master-access') await auth.setCustomUserClaims(identity.uid, { platformAdmin: true });
   }
+  await database.doc('companies/access-company').set({ id: 'access-company', name: 'Empresa de accesos', tradeName: 'Empresa de accesos', primaryAdminUserId: accessIds['manager-access'], systemArchetype: 'emprendedor_control_interno', fiscalYear: new Date().getFullYear(), currency: 'USD' });
+  for (const [name, permissions] of [['only-pos', ['pos_sales']], ['only-crm', ['sales_crm']], ['false-master', ['sales_crm']]] as const) {
+    const identity = await auth.getUserByEmail(`${name}@sin-buzon.sv`).catch(() => auth.createUser({ email: `${name}@sin-buzon.sv`, password: 'testPassword123' }));
+    await database.doc(`users/${identity.uid}`).set({ id: identity.uid, email: identity.email, name, role: 'cajero', companyId: 'access-company', permissions: [...permissions], systemArchetype: 'emprendedor_control_interno', isConfigured: true });
+    if (name === 'false-master') await auth.setCustomUserClaims(identity.uid, { platformAdmin: true });
+  }
+  await auth.getUserByEmail('missing-profile@sin-buzon.sv').catch(() => auth.createUser({ email: 'missing-profile@sin-buzon.sv', password: 'testPassword123' }));
 });
 async function login(page: import('@playwright/test').Page, email: string) {
   await page.locator('#login-email-input').fill(email);
@@ -101,12 +108,147 @@ test('public business registration creates a separate company and an empty cash 
   const profile = (await database.doc(`users/${identity.uid}`).get()).data()!;
   expect(profile.password).toBeUndefined();
   expect(profile.role).toBe('gerente');
+  expect(profile.registrationSource).toBe('self');
+  expect(identity.customClaims?.platformAdmin).not.toBe(true);
+  await expect(page.getByText('Portal de Administración Maestro', { exact: true })).toHaveCount(0);
   const company = (await database.doc(`companies/${profile.companyId}`).get()).data()!;
   expect(company.primaryAdminUserId).toBe(identity.uid);
   const cash = await database.collection('bank_accounts').where('companyId', '==', profile.companyId).get();
   expect(cash.size).toBe(1);
   expect(cash.docs[0].data().currentBalance).toBe(0);
   expect((await database.collection('products').where('companyId', '==', profile.companyId).get()).size).toBe(0);
+  for (const name of ['invoices', 'purchases', 'payrolls', 'journal_entries']) expect((await database.collection(name).where('companyId', '==', profile.companyId).get()).size).toBe(0);
+  await page.reload();
+  await expect(page.locator('#nav-marketing')).toBeVisible();
+  await page.locator('#nav-marketing').click();
+  await expect(page.getByText('Sin registrar', { exact: true })).toHaveCount(3);
+  await expect(page.getByText('$150.00', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Portal de Administración Maestro', { exact: true })).toHaveCount(0);
+});
+
+async function ownerLogin(page: import('@playwright/test').Page) {
+  await page.goto('/');
+  await page.locator('#login-email-input').fill('davidinn234@gmail.com');
+  await page.locator('#login-password-input').fill('testPassword123');
+  await page.locator('#login-submit-btn').click();
+  await expect(page.getByText('Portal de Administración Maestro', { exact: true })).toBeVisible();
+}
+
+test('registering after owner logout cannot inherit the owner session or tenant', async ({ page }) => {
+  await ownerLogin(page);
+  await page.getByTitle('Cerrar Sesión', { exact: true }).click();
+  await expect(page.locator('#login-email-input')).toBeVisible();
+  const email = `after-owner-${Date.now()}@sin-buzon.sv`;
+  await page.getByRole('button', { name: 'Registrar Cuenta', exact: true }).click();
+  await page.locator('#register-business-input').fill('Empresa independiente');
+  await page.locator('#register-name-input').fill('Gerente independiente');
+  await page.locator('form input[type="email"]').fill(email);
+  await page.locator('#register-password-input').fill('testPassword123');
+  await page.getByRole('button', { name: 'Crear Mi Cuenta & Comenzar' }).click();
+  await expect(page.locator('#nav-dashboard')).toBeVisible();
+  await expect(page.getByText('Portal de Administración Maestro', { exact: true })).toHaveCount(0);
+  const identity = await auth.getUserByEmail(email);
+  expect(identity.customClaims?.platformAdmin).not.toBe(true);
+  const profile = (await database.doc(`users/${identity.uid}`).get()).data()!;
+  expect(profile.role).toBe('gerente');
+  expect(profile.companyId).not.toBe('access-company');
+  expect((await database.collection('invoices').where('companyId', '==', profile.companyId).get()).empty).toBe(true);
+  await page.reload();
+  await expect(page.locator('#nav-dashboard')).toBeVisible();
+  await expect(page.getByText('Portal de Administración Maestro', { exact: true })).toHaveCount(0);
+});
+
+test('owner sees public registrations immediately and sees identities without granting a missing profile', async ({ page, browser }) => {
+  await ownerLogin(page);
+  await page.getByRole('button', { name: /^Usuarios \(/ }).click();
+  await expect(page.getByRole('row').filter({ hasText: 'missing-profile@sin-buzon.sv' })).toContainText('Sin perfil');
+  const context = await browser.newContext();
+  const signup = await context.newPage();
+  try {
+    const email = `live-directory-${Date.now()}@sin-buzon.sv`;
+    await signup.goto('/');
+    await signup.getByRole('button', { name: 'Registrar Cuenta', exact: true }).click();
+    await signup.getByRole('button', { name: /^Finanzas Personales/ }).click();
+    await signup.locator('#register-name-input').fill('Registro visible');
+    await signup.locator('form input[type="email"]').fill(email);
+    await signup.locator('#register-password-input').fill('testPassword123');
+    await signup.getByRole('button', { name: 'Crear Mi Cuenta & Comenzar' }).click();
+    await expect(signup.locator('#personal-portal-logout-btn')).toBeVisible();
+    await expect(page.getByRole('row').filter({ hasText: email })).toContainText('Registro público');
+    await expect(page.getByText('Nueva cuenta registrada', { exact: true })).toBeVisible();
+  } finally { await context.close(); }
+});
+
+for (const name of ['only-pos', 'only-crm', 'false-master']) test(`${name} only enters the assigned modules of its company`, async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#login-email-input').fill(`${name}@sin-buzon.sv`);
+  await page.locator('#login-password-input').fill('testPassword123');
+  await page.locator('#login-submit-btn').click();
+  await expect(page.getByRole('button', { name: name === 'only-pos' ? /Punto de Venta POS/ : /Ventas & Clientes/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: name === 'only-pos' ? /Ventas & Clientes/ : /Punto de Venta POS/ })).toHaveCount(0);
+  for (const label of [/Dashboard Corporativo/, /Contabilidad NIIF/, /RRHH & Planilla/, /Gestión de Perfiles/]) await expect(page.getByRole('button', { name: label })).toHaveCount(0);
+  await expect(page.getByText('Portal de Administración Maestro', { exact: true })).toHaveCount(0);
+});
+
+test('global Auth directory rejects company managers and forged owner claims', async ({ request }) => {
+  expect((await request.get('/api/admin/users/directory')).status()).toBe(401);
+  for (const email of ['manager-access@sin-buzon.sv', 'false-master@sin-buzon.sv']) {
+    const token = await accessToken(request, email);
+    expect((await request.get('/api/admin/users/directory', { headers: { Authorization: `Bearer ${token}` } })).status()).toBe(403);
+  }
+  const token = await accessToken(request, 'davidinn234@gmail.com');
+  const response = await request.get('/api/admin/users/directory', { headers: { Authorization: `Bearer ${token}` } });
+  expect(response.status()).toBe(200);
+  const data = await response.json();
+  expect(data.identities.some((identity: { email: string }) => identity.email === 'missing-profile@sin-buzon.sv')).toBe(true);
+  for (const identity of data.identities) expect(Object.keys(identity).every(key => ['id', 'email', 'name', 'createdAt', 'disabled'].includes(key))).toBe(true);
+});
+
+test('owner creates an empty business while retaining the owner session', async ({ page }) => {
+  await ownerLogin(page);
+  await page.getByRole('button', { name: /Dar de Alta Nuevo Cliente/ }).click();
+  const email = `owner-provision-${Date.now()}@sin-buzon.sv`;
+  await page.getByPlaceholder(/Librería & Variedades/).fill('Empresa creada por David');
+  await page.getByPlaceholder('Ej: Mauricio Quintanilla').fill('Gerente creado');
+  await page.getByPlaceholder('cliente@gmail.com o empresa@sv').fill(email);
+  await page.locator('form input[type="password"]').fill('testPassword123');
+  await page.getByRole('button', { name: /Dar de Alta Empresa en CERO/ }).click();
+  await expect.poll(async () => (await auth.getUserByEmail(email).catch(() => null))?.uid).toBeTruthy();
+  await expect(page.getByText('Portal de Administración Maestro', { exact: true })).toBeVisible();
+  const identity = await auth.getUserByEmail(email);
+  await expect.poll(async () => (await database.doc(`users/${identity.uid}`).get()).exists).toBe(true);
+  const profile = (await database.doc(`users/${identity.uid}`).get()).data()!;
+  expect(profile.registrationSource).toBe('platform_admin');
+  expect(profile.role).toBe('gerente');
+  expect((await database.collection('invoices').where('companyId', '==', profile.companyId).get()).empty).toBe(true);
+  await page.getByRole('button', { name: 'Cerrar confirmación de empresa', exact: true }).click();
+  await page.getByRole('button', { name: /^Usuarios \(/ }).click();
+  await expect(page.getByRole('row').filter({ hasText: email })).toContainText('Creado desde tu administración');
+});
+
+test('company manager creates an employee without leaving the company or inheriting employee permissions', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#login-email-input').fill('manager-access@sin-buzon.sv');
+  await page.locator('#login-password-input').fill('testPassword123');
+  await page.locator('#login-submit-btn').click();
+  await page.locator('#nav-company_users').click();
+  await page.getByRole('button', { name: /Crear Nuevo Perfil/ }).click();
+  const email = `company-provision-${Date.now()}@sin-buzon.sv`;
+  await page.getByPlaceholder('Ej: Sofía Hernández').fill('Empleado de la empresa');
+  await page.getByPlaceholder('cajero@mitienda.sv').fill(email);
+  await page.getByPlaceholder('Mínimo 6 caracteres').fill('testPassword123');
+  await page.getByRole('button', { name: 'Crear Colaborador', exact: true }).click();
+  await expect.poll(async () => (await auth.getUserByEmail(email).catch(() => null))?.uid).toBeTruthy();
+  const identity = await auth.getUserByEmail(email);
+  await expect.poll(async () => (await database.doc(`users/${identity.uid}`).get()).exists).toBe(true);
+  const profile = (await database.doc(`users/${identity.uid}`).get()).data()!;
+  expect(profile.registrationSource).toBe('company_admin');
+  expect(profile.companyId).toBe('access-company');
+  expect(profile.role).toBe('cajero');
+  expect(profile.permissions).toEqual(['pos_sales']);
+  expect(profile.password).toBeUndefined();
+  await expect(page.locator('#nav-company_users')).toBeVisible();
+  await expect(page.getByText('Portal de Administración Maestro', { exact: true })).toHaveCount(0);
 });
 
 async function accessToken(request: import('@playwright/test').APIRequestContext, email: string, password = 'testPassword123') {
@@ -135,7 +277,7 @@ test('a company manager can assign an initial password without a mailbox or a pr
 
 test('the principal administrator assigns a password through the directory and the fictional address can sign in', async ({ page, request }) => {
   await page.goto('/');
-  await page.locator('#login-email-input').fill('master-access@sin-buzon.sv');
+  await page.locator('#login-email-input').fill('davidinn234@gmail.com');
   await page.locator('#login-password-input').fill('testPassword123');
   await page.locator('#login-submit-btn').click();
   await page.getByRole('button', { name: /^Usuarios \(/ }).click();

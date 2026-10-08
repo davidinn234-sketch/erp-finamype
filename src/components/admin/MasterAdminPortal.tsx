@@ -228,7 +228,7 @@ export const MasterAdminPortal: React.FC = () => {
       setActiveTab('empresas');
     } catch (err) {
       console.error(err);
-      addNotification('error', 'Error al Crear', 'Ocurrió un inconveniente al guardar la empresa.');
+      addNotification('error', 'No se creó la empresa', err instanceof Error ? err.message : 'Comprueba la conexión e inténtalo de nuevo.');
     } finally {
       setIsSubmitting(false);
     }
@@ -319,7 +319,7 @@ Ya hemos habilitado la cuenta de tu empresa *${comp.tradeName || comp.name}*:
   const activeCount = companies.filter((c) => c.subscriptionStatus === 'activo').length;
   const trialCount = companies.filter((c) => c.subscriptionStatus === 'prueba').length;
   const suspendedCount = companies.filter((c) => c.subscriptionStatus === 'suspendido').length;
-  const estimatedMrr = companies.reduce((acc, c) => acc + (c.subscriptionPrice || 14.99), 0);
+  const estimatedMrr = companies.reduce((acc, c) => acc + (c.subscriptionPrice || 0), 0);
 
   return (
     <div id="master-admin-portal" className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
@@ -1161,7 +1161,7 @@ Ya hemos habilitado la cuenta de tu empresa *${comp.tradeName || comp.name}*:
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/80">
-                    {users.map((u) => {
+                    {[...users].sort((a, b) => (Date.parse(b.createdAt || '') || 0) - (Date.parse(a.createdAt || '') || 0)).map((u) => {
                       const comp = companies.find((c) => c.id === u.companyId);
                       const isSuper = u.id === currentUser.id;
 
@@ -1173,6 +1173,7 @@ Ya hemos habilitado la cuenta de tu empresa *${comp.tradeName || comp.name}*:
                             </div>
                             <div>
                               <span>{u.name}</span>
+                              <div className="text-[10px] text-slate-400 mt-1">{u.accessStatus === 'missing_profile' ? 'Sin perfil · acceso no habilitado' : u.registrationSource === 'self' ? 'Registro público' : u.registrationSource === 'company_admin' ? 'Creado por su empresa' : u.registrationSource === 'platform_admin' ? 'Creado desde tu administración' : 'Cuenta existente'}{u.createdAt ? ` · ${new Date(u.createdAt).toLocaleDateString('es-SV')}` : ''}</div>
                               {isSuper && (
                                 <span className="ml-1.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                                   SUPER ADMIN
@@ -1190,10 +1191,10 @@ Ya hemos habilitado la cuenta de tu empresa *${comp.tradeName || comp.name}*:
                             </span>
                           </td>
                           <td className="px-4 py-3 font-mono text-slate-400">
-                            <AssignPasswordButton user={u} />
+                            {u.accessStatus === 'missing_profile' ? 'Falta asociar un perfil' : <AssignPasswordButton user={u} />}
                           </td>
                           <td className="px-4 py-3 text-right space-x-1">
-                            {!isSuper && (
+                            {!isSuper && u.accessStatus !== 'missing_profile' && (
                               <button
                                 onClick={() => {
                                   if (window.confirm(`¿Eliminar la cuenta del usuario ${u.name}?`)) {
@@ -1287,6 +1288,7 @@ Ya hemos habilitado la cuenta de tu empresa *${comp.tradeName || comp.name}*:
 
             <button
               onClick={() => setCreatedModalData(null)}
+              aria-label="Cerrar confirmación de empresa"
               className="absolute top-4 right-4 text-slate-400 hover:text-white"
             >
               <X className="w-5 h-5" />

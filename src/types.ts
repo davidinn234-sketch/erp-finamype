@@ -42,6 +42,8 @@ export interface UserProfile {
   createdAt?: string;
   enabledServices?: string[];
   storedInCloud?: boolean;
+  registrationSource?: 'self' | 'platform_admin' | 'company_admin';
+  accessStatus?: 'active' | 'missing_profile';
 }
 
 // ----------------------------------------------------

@@ -2,18 +2,30 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
-    function platformAdmin() { return signedIn() && request.auth.token.get('platformAdmin', false) == true; }
+    function platformAdmin() { return signedIn() && request.auth.token.get('platformAdmin', false) == true && request.auth.token.get('email', '') == 'davidinn234@gmail.com'; }
     function profile() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function permissions() {
+      return profile().get('permissions', profile().role == 'contador'
+        ? ['dashboard', 'marketing', 'pos_sales', 'sales_crm', 'purchases_scm', 'payroll_access', 'treasury_access', 'accounting_access', 'forecasting', 'master_database']
+        : profile().role == 'cajero' ? ['pos_sales'] : profile().role == 'vendedor' ? ['pos_sales', 'sales_crm'] : []);
+    }
+    function granted(keys) { return permissions().hasAny(keys); }
+    function salesAccess() { return granted(['pos_sales', 'pos_terminal', 'sales_crm', 'sales', 'customer_view', 'cxc_management']); }
+    function buyingAccess() { return granted(['purchases', 'purchases_scm', 'inventory_edit']); }
+    function ledgerAccess() { return granted(['accounting', 'accounting_access', 'iva_books']); }
+    function treasuryAccess() { return granted(['treasury', 'treasury_access']); }
+    function payrollAccess() { return granted(['payroll', 'payroll_access']); }
     function member(companyId) {
       return signedIn() && companyId is string && exists(/databases/$(database)/documents/companies/$(companyId))
         && (platformAdmin() || profile().get('companyId', '') == companyId);
     }
     function manager(companyId) { return member(companyId) && (platformAdmin() || profile().role == 'gerente'); }
-    function accountant(companyId) { return member(companyId) && (platformAdmin() || profile().role in ['gerente', 'contador']); }
+    function accountant(companyId) { return manager(companyId) || (member(companyId) && ledgerAccess()); }
     function cleanProfile(data, userId) {
       return data.id == userId && data.email is string && data.name is string
         && data.role in ['gerente', 'contador', 'cajero', 'vendedor', 'kiosko_asistencia']
-        && !data.keys().hasAny(['password', 'platformAdmin']);
+        && !data.keys().hasAny(['password', 'platformAdmin'])
+        && (!data.keys().hasAny(['permissions']) || data.permissions is list);
     }
     function publicProfile(data, userId) {
       return signedIn() && request.auth.uid == userId && cleanProfile(data, userId)
@@ -59,15 +71,15 @@ service cloud.firestore {
       allow create, update: if signedIn() && request.auth.uid == userId && request.resource.data.userId == userId;
     }
     match /company_settings/{companyId} {
-      allow read: if accountant(companyId);
+      allow read: if member(companyId) && (accountant(companyId) || granted(['dashboard', 'forecasting']));
       allow create, update: if accountant(companyId) && request.resource.data.companyId == companyId;
       allow delete: if manager(companyId);
     }
     match /attendance_directory/{employeeId} {
       allow read: if member(resource.data.companyId);
-      allow create: if accountant(request.resource.data.companyId) && request.resource.data.id == employeeId
+      allow create: if member(request.resource.data.companyId) && (manager(request.resource.data.companyId) || payrollAccess()) && request.resource.data.id == employeeId
         && request.resource.data.keys().hasOnly(['id', 'companyId', 'firstName', 'lastName', 'position', 'pinCode', 'isActive', 'branchId', 'branchName', 'avatar']);
-      allow update: if accountant(resource.data.companyId) && request.resource.data.companyId == resource.data.companyId && request.resource.data.id == employeeId
+      allow update: if member(resource.data.companyId) && (manager(resource.data.companyId) || payrollAccess()) && request.resource.data.companyId == resource.data.companyId && request.resource.data.id == employeeId
         && request.resource.data.keys().hasOnly(['id', 'companyId', 'firstName', 'lastName', 'position', 'pinCode', 'isActive', 'branchId', 'branchName', 'avatar']);
       allow delete: if manager(resource.data.companyId);
     }
@@ -75,18 +87,32 @@ service cloud.firestore {
       return name in ['branches', 'products', 'customers', 'invoices', 'customer_payments', 'suppliers', 'purchases', 'supplier_payments', 'kardex_movements', 'employees', 'payrolls', 'professional_services', 'candidate_folders', 'candidates', 'attendance', 'leave_requests', 'bank_accounts', 'treasury_movements', 'other_incomes', 'journal_entries', 'dynamic_widgets'];
     }
     function canRead(name, companyId) {
-      return member(companyId) && (accountant(companyId)
-        || (profile().role in ['cajero', 'vendedor'] && name in ['branches', 'products', 'customers', 'invoices', 'customer_payments', 'bank_accounts', 'treasury_movements', 'kardex_movements'])
-        || (profile().role == 'kiosko_asistencia' && name in ['attendance', 'branches']));
+      return member(companyId) && (manager(companyId) || name == 'branches'
+        || (name in ['products', 'kardex_movements'] && (salesAccess() || buyingAccess() || granted(['inventory', 'inventory_view'])))
+        || (name in ['customers', 'invoices', 'customer_payments'] && (salesAccess() || ledgerAccess() || granted(['dashboard', 'marketing', 'forecasting'])))
+        || (name in ['suppliers', 'purchases', 'supplier_payments'] && (buyingAccess() || ledgerAccess() || granted(['dashboard', 'forecasting'])))
+        || (name in ['bank_accounts', 'treasury_movements'] && (salesAccess() || treasuryAccess() || ledgerAccess() || payrollAccess() || granted(['dashboard', 'forecasting'])))
+        || (name == 'journal_entries' && (ledgerAccess() || granted(['dashboard', 'forecasting'])))
+        || (name == 'other_incomes' && (treasuryAccess() || ledgerAccess() || granted(['dashboard'])))
+        || (name in ['employees', 'payrolls', 'professional_services', 'candidate_folders', 'candidates', 'attendance', 'leave_requests'] && payrollAccess())
+        || (name == 'dynamic_widgets' && granted(['dashboard', 'marketing']))
+        || (profile().role == 'kiosko_asistencia' && name == 'attendance'));
     }
     function canWrite(name, companyId) {
-      return member(companyId) && (accountant(companyId)
-        || (profile().role in ['cajero', 'vendedor'] && name in ['customers', 'invoices', 'customer_payments', 'products', 'bank_accounts', 'treasury_movements', 'kardex_movements', 'journal_entries'])
+      return member(companyId) && (manager(companyId)
+        || (granted(['pos_sales', 'pos_terminal', 'sales_crm', 'sales', 'cxc_management']) && name in ['customers', 'invoices', 'customer_payments', 'products', 'bank_accounts', 'treasury_movements', 'kardex_movements', 'journal_entries'])
+        || (buyingAccess() && name in ['products', 'suppliers', 'purchases', 'supplier_payments', 'kardex_movements', 'bank_accounts', 'treasury_movements', 'journal_entries'])
+        || (treasuryAccess() && name in ['bank_accounts', 'treasury_movements', 'other_incomes', 'journal_entries'])
+        || (ledgerAccess() && name == 'journal_entries')
+        || (payrollAccess() && name in ['employees', 'payrolls', 'professional_services', 'candidate_folders', 'candidates', 'attendance', 'leave_requests', 'bank_accounts', 'treasury_movements', 'journal_entries'])
+        || (granted(['inventory_edit']) && name in ['products', 'kardex_movements'])
+        || (granted(['dashboard', 'marketing']) && name == 'dynamic_widgets')
         || (profile().role == 'kiosko_asistencia' && name == 'attendance'));
     }
     function newOwnerBranch(companyId) {
-      return signedIn() && getAfter(/databases/$(database)/documents/companies/$(companyId)).data.primaryAdminUserId == request.auth.uid
-        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == companyId;
+      return signedIn() && existsAfter(/databases/$(database)/documents/companies/$(companyId))
+        && (platformAdmin() || (getAfter(/databases/$(database)/documents/companies/$(companyId)).data.primaryAdminUserId == request.auth.uid
+          && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == companyId));
     }
     match /{name}/{recordId} {
       allow read: if operational(name) && canRead(name, resource.data.companyId);

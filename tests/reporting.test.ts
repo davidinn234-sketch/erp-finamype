@@ -4,6 +4,7 @@ import { buildAccountingReports, csvText, reportHtml } from '../src/lib/accounti
 import { prepareVatExport, haciendaCsv } from '../src/lib/vatExports';
 import { forecastHistory, projectForecast } from '../src/lib/forecastReports';
 import { emptyChart } from '../src/lib/chartDefaults';
+import { marketingChannels, marketingSaleAmount } from '../src/lib/marketingReports';
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../src/utils/catalogData';
 import { generateSaleAccountingEntry, generatePurchaseAccountingEntry, generatePayrollAccountingEntry } from '../src/utils/accountingEngine';
 import { SAMPLE_PAYROLLS } from '../src/utils/sampleData';
@@ -11,6 +12,18 @@ import type { AccountNode, Invoice, JournalEntry, Purchase } from '../src/types'
 const account = (code: string, category: AccountNode['category'], opening = 0): AccountNode => ({ code, name: code, category, level: 3, isMovement: true, debitBalance: opening > 0 ? opening : 0, creditBalance: opening < 0 ? -opening : 0, balance: opening });
 const accounts = [account('1101-01', 'activo', 100), account('1101-02', 'activo'), account('1103-01', 'activo'), account('1201', 'activo'), account('2201', 'pasivo'), account('2102', 'pasivo'), account('2103', 'pasivo'), account('3101', 'patrimonio', -100), account('4101', 'ingresos'), account('5101', 'gastos')];
 const entry = (id: string, date: string, debit: string, credit: string, value: number): JournalEntry => ({ id, companyId: 'test', entryNumber: Number(id) || 1, date, concept: id, lines: [{ accountCode: debit, accountName: debit, debit: value, credit: 0, concept: '' }, { accountCode: credit, accountName: credit, debit: 0, credit: value, concept: '' }], totalDebit: value, totalCredit: value, isBalanced: true, sourceModule: 'manual', status: 'asentada', createdAt: '' });
+test('marketing starts at zero and attributes only recorded sales without inventing advertising costs', () => {
+  const empty = marketingChannels([], []);
+  assert.equal(empty.reduce((sum, channel) => sum + channel.sales + channel.spend + channel.orders, 0), 0);
+  const sale = { id: 'sale', customerId: 'known', status: 'pagada', type: 'factura_consumidor_final', sumasGravadas: 100, totalPagar: 113 } as Invoice;
+  const credit = { ...sale, id: 'credit', type: 'nota_credito', sumasGravadas: 20 } as Invoice;
+  const channels = marketingChannels([sale, credit, { ...sale, id: 'void', status: 'anulada' }, { ...sale, id: 'unknown', customerId: 'unknown' }], [{ id: 'known', acquisitionChannel: 'whatsapp' } as import('../src/types').Customer]);
+  assert.equal(channels.find(channel => channel.id === 'whatsapp')?.sales, 80);
+  assert.equal(channels.find(channel => channel.id === 'sin_canal')?.sales, 100);
+  assert.equal(channels.reduce((sum, channel) => sum + channel.orders, 0), 2);
+  assert.ok(channels.every(channel => channel.spend === 0 && channel.roas === 0 && channel.leads === 0));
+  assert.equal(marketingSaleAmount(credit), -20);
+});
 test('credit sales, collections, unpaid payroll and internal transfers have distinct effects', () => {
   const entries = [entry('1', '2026-09-15', '1103-01', '4101', 100), entry('2', '2026-10-01', '1101-01', '1103-01', 40), entry('3', '2026-10-02', '1101-02', '1101-01', 20), entry('4', '2026-10-03', '5101', '2102', 30), entry('5', '2026-10-04', '1101-02', '2201', 100), entry('6', '2026-10-05', '1201', '1101-02', 50), entry('7', '2026-10-06', '1101-01', '4101', 100), { ...entry('8', '2026-10-07', '1101-01', '4101', 999), status: 'borrador' as const }];
   const report = buildAccountingReports(accounts, entries, [], '2026-10-01', '2026-10-31');
