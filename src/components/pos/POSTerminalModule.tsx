@@ -82,6 +82,7 @@ export const POSTerminalModule: React.FC = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const salePending = useRef(false);
   const [isSavingSale, setIsSavingSale] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [barcodeInput, setBarcodeInput] = useState('');
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('walk_in');
@@ -449,6 +450,7 @@ export const POSTerminalModule: React.FC = () => {
   // Finalize Sale & Emit Official Invoice
   const handleCompleteSale = async () => {
     if (salePending.current || isCompletedSaleModalOpen) return;
+    setCheckoutError(null);
     if (!incomeAccountId) {
       setLastScannedFeedback({ text: 'Crea una cuenta en Tesorería para recibir el pago de esta venta.', type: 'error' });
       return;
@@ -535,7 +537,9 @@ export const POSTerminalModule: React.FC = () => {
     });
     setIsCompletedSaleModalOpen(true);
     } catch (error) {
-      setLastScannedFeedback({ text: error instanceof Error ? error.message : 'No se pudo guardar la venta. El ticket sigue disponible para revisar.', type: 'error' });
+      const message = error instanceof Error ? error.message : 'No se pudo guardar la venta. El ticket sigue disponible para revisar.';
+      setCheckoutError(message);
+      setLastScannedFeedback({ text: message, type: 'error' });
       playAudioCue('error');
     } finally { salePending.current = false; setIsSavingSale(false); }
   };
@@ -568,6 +572,7 @@ export const POSTerminalModule: React.FC = () => {
   }, [cart, paymentMethod, calculations, isCompletedSaleModalOpen, showCustomerPickerModal, showShiftSummaryModal]);
 
   const handleNextSale = () => {
+    setCheckoutError(null);
     setIsCompletedSaleModalOpen(false);
     setCompletedInvoice(null);
     setCart([]);
@@ -1222,6 +1227,8 @@ export const POSTerminalModule: React.FC = () => {
             </div>
 
             {/* BIG ACTION: COBRAR Y EMITIR FACTURA / CCF / TICKET */}
+            {!incomeAccountId && <p role="alert" className="text-xs font-medium text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 rounded-md p-2">Falta una cuenta para recibir el pago. Crea una caja o banco en Tesorería; si no tienes acceso, pide al administrador de tu empresa que la cree.</p>}
+            {checkoutError && <p role="alert" className="text-xs font-medium text-rose-700 dark:text-rose-200 bg-rose-50 dark:bg-rose-950/40 rounded-md p-2">{checkoutError} El ticket sigue abierto.</p>}
             <button
               type="button"
               id="pos-checkout-btn"
@@ -1229,7 +1236,7 @@ export const POSTerminalModule: React.FC = () => {
               aria-busy={isSavingSale}
               onClick={handleCompleteSale}
               className={`w-full py-3 px-4 rounded-[6px] font-bold text-sm tracking-wide shadow-none transition flex items-center justify-center gap-2 cursor-pointer ${
-                cart.length === 0
+                cart.length === 0 || !incomeAccountId
                   ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
                   : paymentMethod === 'efectivo' && !calculations.isSufficientCash
                   ? 'bg-amber-600 hover:bg-amber-700 text-white'
@@ -1238,7 +1245,7 @@ export const POSTerminalModule: React.FC = () => {
             >
               <Check className="w-4 h-4 shrink-0" />
               <span>
-                {isSavingSale ? 'GUARDANDO VENTA…' : cart.length === 0
+                {isSavingSale ? 'GUARDANDO VENTA…' : !incomeAccountId ? 'FALTA CONFIGURAR CAJA O BANCO' : cart.length === 0
                   ? 'AGREGUE PRODUCTOS AL TICKET PARA COBRAR'
                   : paymentMethod === 'efectivo' && !calculations.isSufficientCash
                   ? `FALTAN ${formatCurrencyUSD(calculations.cashShortfall)} — INGRESE MONTO SUFICIENTE`

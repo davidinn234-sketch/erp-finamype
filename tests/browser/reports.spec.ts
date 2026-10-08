@@ -164,3 +164,23 @@ test('POS confirms a saved sale once and preserves a rejected ticket', async ({ 
   await expect(page.getByRole('heading', { name: '¡Venta Registrada Exitosamente!', exact: true })).toHaveCount(0);
   expect((await db.collection('invoices').where('companyId', '==', companyId).get()).size).toBe(invoices.size);
 });
+
+test('POS explains a missing account and enables checkout as soon as a cash account is created', async ({ page }) => {
+  const accountRef = db.doc('bank_accounts/reports-cash');
+  const account = (await accountRef.get()).data()!;
+  await accountRef.delete();
+  try {
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await login(page);
+    await page.getByRole('button', { name: 'Entendido y Aceptar', exact: true }).click();
+    await page.locator('#nav-pos_terminal').click();
+    await page.locator('#pos-quick-prod-pos-test-0').click();
+    await expect(page.locator('#pos-checkout-btn')).toBeDisabled();
+    await expect(page.getByRole('alert').filter({ hasText: 'Falta una cuenta para recibir el pago' })).toBeVisible();
+    await expect(page.locator('#pos-checkout-btn')).toHaveText(/FALTA CONFIGURAR CAJA O BANCO/);
+    await accountRef.set(account);
+    await expect(page.locator('#pos-income-account')).toHaveValue('reports-cash');
+    await expect(page.locator('#pos-checkout-btn')).toBeEnabled();
+    await expect(page.getByRole('alert').filter({ hasText: 'Falta una cuenta para recibir el pago' })).toHaveCount(0);
+  } finally { await accountRef.set(account); }
+});
