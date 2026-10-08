@@ -383,7 +383,8 @@ export const POSTerminalModule: React.FC = () => {
 
     // Auto scroll ticket table
     setTimeout(() => {
-      ticketEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      const list = ticketEndRef.current?.parentElement;
+      list?.scrollTo({ top: list.scrollHeight, behavior: 'smooth' });
     }, 50);
   };
 
@@ -830,12 +831,12 @@ export const POSTerminalModule: React.FC = () => {
         )}
       </section>
 
-      {/* Workspace Grid: Left = Active Ticket/Cart, Right = Touch Catalog */}
+      {/* Keep the ticket, catalog and payment in separate desktop columns. */}
       <div className="pos-panels flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 min-h-0">
-        {/* LEFT 7 COLS: Current Invoice Ticket / Carrito */}
-        <div className="lg:col-span-7 flex flex-col bg-white dark:bg-slate-900 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 shadow-none overflow-hidden">
+        {/* Current Invoice Ticket / Carrito */}
+        <div className="pos-ticket-panel lg:col-span-5 flex flex-col bg-white dark:bg-slate-900 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 shadow-none overflow-hidden">
           {/* Ticket Header & Customer Tag */}
-          <div className="p-3 border-b border-[#E3E8E6] dark:border-slate-800 flex items-center justify-between bg-[#F6F8F7] dark:bg-slate-850">
+          <div className="pos-ticket-heading p-3 border-b border-[#E3E8E6] dark:border-slate-800 flex flex-wrap gap-2 items-center justify-between bg-[#F6F8F7] dark:bg-slate-850">
             <div className="flex items-center gap-2">
               <ShoppingCart className="w-4 h-4 text-[#0F766E] dark:text-teal-400" />
               <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
@@ -871,7 +872,7 @@ export const POSTerminalModule: React.FC = () => {
           </div>
 
           {/* Table of Scanned Products */}
-          <div className="pos-ticket-list flex-1 overflow-y-auto max-h-[360px] p-2 space-y-1.5 divide-y divide-slate-100 dark:divide-slate-800">
+          <div data-testid="pos-ticket-list" role="region" aria-label="Productos del ticket en curso" className="pos-ticket-list flex-1 overflow-y-auto max-h-[420px] min-h-[240px] p-2 space-y-1.5 divide-y divide-slate-100 dark:divide-slate-800">
             {cart.length === 0 ? (
               <div className="pos-empty-ticket h-64 flex flex-col items-center justify-center text-center p-6 text-slate-400">
                 <ScanBarcode className="w-12 h-12 text-slate-300 dark:text-slate-700 mb-2 animate-bounce" />
@@ -886,18 +887,19 @@ export const POSTerminalModule: React.FC = () => {
               cart.map((item, idx) => (
                 <div
                   key={item.product.id}
-                  className="pt-2 flex items-center justify-between gap-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-850 p-2 rounded-xl transition"
+                  data-testid={`pos-ticket-item-${item.product.id}`}
+                  className="pos-ticket-item flex flex-wrap items-center justify-between gap-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-850 p-3 rounded-xl transition"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold">
                         #{idx + 1}
                       </span>
-                      <p className="font-bold text-slate-900 dark:text-white truncate">
+                      <p className="font-bold text-slate-900 dark:text-white break-words">
                         {item.product.name}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
+                    <div className="flex flex-wrap items-center gap-x-2 text-xs text-slate-500 mt-1">
                       <span className="font-mono text-slate-400">
                         {item.product.barcode || item.product.code}
                       </span>
@@ -910,6 +912,7 @@ export const POSTerminalModule: React.FC = () => {
                   <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg border border-slate-200 dark:border-slate-700">
                     <button
                       type="button"
+                      aria-label={`Reducir cantidad de ${item.product.name}`}
                       onClick={() => updateItemQuantity(item.product.id, item.quantity - 1)}
                       className="w-6 h-6 rounded flex items-center justify-center bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200 transition font-bold"
                     >
@@ -920,6 +923,7 @@ export const POSTerminalModule: React.FC = () => {
                     </span>
                     <button
                       type="button"
+                      aria-label={`Aumentar cantidad de ${item.product.name}`}
                       onClick={() => {
                         updateItemQuantity(item.product.id, item.quantity + 1);
                         playAudioCue('scan');
@@ -932,7 +936,7 @@ export const POSTerminalModule: React.FC = () => {
 
                   {/* Line Total & Delete */}
                   <div className="text-right min-w-[70px]">
-                    <p className="font-mono font-bold text-slate-900 dark:text-white text-sm">
+                    <p className="font-mono font-bold text-slate-900 dark:text-white text-base">
                       {formatCurrencyUSD(item.total)}
                     </p>
                     <button
@@ -948,11 +952,13 @@ export const POSTerminalModule: React.FC = () => {
             )}
             <div ref={ticketEndRef} />
           </div>
+        </div>
 
           {/* Financial Calculation & Tender / Payment Section */}
-          <div className="pos-payment p-3.5 bg-[#F6F8F7] dark:bg-slate-850 border-t border-[#E3E8E6] dark:border-slate-800 space-y-3">
+          <div role="region" aria-label="Cobro de la venta" className="pos-payment lg:col-span-3 lg:order-3 p-3.5 bg-[#F6F8F7] dark:bg-slate-850 border border-[#E3E8E6] dark:border-slate-800 rounded-[8px] space-y-3">
+            <div className="pos-payment-details space-y-3">
             {/* Totals Breakdown */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+            <div className="pos-payment-totals grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
               <div className="p-2.5 rounded-[6px] bg-white dark:bg-slate-800 border border-[#E3E8E6] dark:border-slate-700">
                 <span className="text-[10px] uppercase text-[#6B7280] font-semibold block">Subtotal</span>
                 <span className="font-mono font-bold text-slate-800 dark:text-slate-200 text-sm">
@@ -994,7 +1000,7 @@ export const POSTerminalModule: React.FC = () => {
             </div>
 
             {/* Payment Methods Tabs */}
-            <div className="flex items-center gap-1 bg-white dark:bg-slate-800 p-1 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700">
+            <div className="pos-payment-methods flex items-center gap-1 bg-white dark:bg-slate-800 p-1 rounded-[6px] border border-[#E3E8E6] dark:border-slate-700">
               <button
                 type="button"
                 onClick={() => setPaymentMethod('efectivo')}
@@ -1048,7 +1054,7 @@ export const POSTerminalModule: React.FC = () => {
             {/* Cash Tendering & Live Change Calculation */}
             {paymentMethod === 'efectivo' && (
               <div className="p-3 rounded-[6px] bg-white dark:bg-slate-800 border border-[#E3E8E6] dark:border-slate-700 shadow-none space-y-2.5">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap gap-2 items-center justify-between">
                   <span className="text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                     <Banknote className="w-4 h-4 text-[#0F766E]" />
                     Pago en Efectivo & Vuelto
@@ -1065,7 +1071,7 @@ export const POSTerminalModule: React.FC = () => {
                 </div>
 
                 {/* Cash Input & Quick Bill Buttons */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
+                <div className="pos-cash-controls flex flex-col sm:flex-row sm:items-center gap-2.5">
                   <div className="flex-1">
                     <label htmlFor="pos-cash-input" className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
                       Monto recibido: <span className="font-normal opacity-75">(digite o pulse billete)</span>
@@ -1181,6 +1187,7 @@ export const POSTerminalModule: React.FC = () => {
                 )}
               </div>
             )}
+            </div>
 
             {/* BIG ACTION: COBRAR Y EMITIR FACTURA / CCF / TICKET */}
             <button
@@ -1219,13 +1226,12 @@ export const POSTerminalModule: React.FC = () => {
               </span>
             </button>
           </div>
-        </div>
 
-        {/* RIGHT 5 COLS: Quick Touch Catalog / Simulator */}
-        <div className="lg:col-span-5 flex flex-col bg-white dark:bg-slate-900 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 shadow-none overflow-hidden">
+        {/* Quick Touch Catalog */}
+        <div className="pos-catalog-panel lg:col-span-4 lg:order-2 flex flex-col bg-white dark:bg-slate-900 rounded-[8px] border border-[#E3E8E6] dark:border-slate-800 shadow-none overflow-hidden">
           {/* Header with Search and Category Filter */}
           <div className="p-3 border-b border-[#E3E8E6] dark:border-slate-800 bg-[#F6F8F7] dark:bg-slate-850 space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap gap-2 items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                 <Store className="w-4 h-4 text-[#0F766E]" />
                 Catálogo Táctil de Productos

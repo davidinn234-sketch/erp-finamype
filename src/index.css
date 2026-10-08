@@ -22,14 +22,25 @@
   .pos-workspace > header { padding: .5rem .75rem; flex-shrink: 0; }
   .pos-workspace > section { padding: .5rem .75rem; flex-shrink: 0; }
   .pos-panels { overflow: hidden; }
-  .pos-panels > div { min-height: 0; }
+  .pos-panels > div { min-height: 0; min-width: 0; }
   .pos-ticket-list, .pos-catalog { min-height: 0; max-height: none; }
+  .pos-ticket-heading { flex-shrink: 0; }
+  .pos-ticket-list { overscroll-behavior: contain; }
+  .pos-ticket-item > div:first-child { min-width: 130px; }
+  .pos-catalog { align-content: start; grid-auto-rows: minmax(130px, auto); }
   .pos-empty-ticket { height: 100%; min-height: 4rem; padding: .75rem; }
   .pos-empty-ticket > svg { width: 2rem; height: 2rem; animation: none; }
-  .pos-payment { flex-shrink: 0; padding: .5rem .75rem; }
+  .pos-payment { display: flex; flex-direction: column; overflow: hidden; padding: .75rem; }
+  .pos-payment-details { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .pos-payment-totals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pos-payment-methods { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pos-cash-controls { flex-direction: column; align-items: stretch; }
   .pos-payment > * + * { margin-top: .5rem; }
   .pos-payment input { padding-top: .35rem; padding-bottom: .35rem; }
-  #pos-checkout-btn { padding-top: .65rem; padding-bottom: .65rem; font-size: .8rem; }
+  #pos-checkout-btn { flex-shrink: 0; white-space: normal; padding-top: .65rem; padding-bottom: .65rem; font-size: .8rem; }
+  /* Leave room for the global assistant button beside checkout. */
+  .pos-payment #pos-checkout-btn { width: calc(100% - 3.5rem); }
+  #pos-checkout-btn > span:last-child { display: none; }
 }
 @media (min-width: 1024px) and (max-width: 1679px) {
   .header-desktop-brand > span { display: none; }

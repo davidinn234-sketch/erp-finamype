@@ -10,6 +10,7 @@ test.beforeAll(async () => {
   await db.doc(`users/${identity.uid}`).set({ id: identity.uid, email, name: 'Gerente Reportes', role: 'gerente', companyId, isConfigured: true, systemArchetype: 'negocio_transicion' });
   await db.doc(`companies/${companyId}`).set({ id: companyId, name: 'Negocio Reportes', tradeName: 'Negocio Reportes', nit: '06141234561234', nrc: '1234567', regimeType: 'general_tributario', systemArchetype: 'negocio_transicion', currency: 'USD', isConfigured: true, primaryAdminUserId: identity.uid, fiscalYear: now.getFullYear(), phone: '', address: '', email, giro: '', department: '', isGranContribuyente: false });
   await db.doc('bank_accounts/reports-cash').set({ id: 'reports-cash', companyId, accountName: 'Caja', bankName: '', accountNumber: '', accountType: 'efectivo', accountingCode: '1101-01', initialBalance: 0, currentBalance: 113, currency: 'USD' });
+  await Promise.all(Array.from({ length: 8 }, (_, index) => db.doc(`products/pos-test-${index}`).set({ id: `pos-test-${index}`, companyId, code: `POS-${index}`, barcode: `10000${index}`, name: `Producto de prueba ${index + 1}`, category: 'Pruebas POS', unit: 'Unidad', salePrice: 10, currentCost: 5, stock: 100, minStock: 5 })));
   await db.doc('invoices/reports-sale').set({ id: 'reports-sale', companyId, type: 'factura_consumidor_final', correlativeNumber: '123', date, dueDate: date, customerId: 'report-customer', customerName: 'Cliente de prueba', customerNit: '', customerNrc: '', items: [], sumasGravadas: 100, sumasExentas: 0, sumasNoSujetas: 0, iva13: 13, ivaRetenido1: 0, ivaPercibido1: 0, totalPagar: 113, saldoPendiente: 0, status: 'pagada', paymentCondition: 'contado', accountingEntryId: 'reports-journal', createdAt: date, taxReporting: { documentClass: '1', resolution: '123456', series: 'A', operationType: '1', incomeType: '3' } });
   await db.doc('journal_entries/reports-journal').set({ id: 'reports-journal', companyId, entryNumber: 1, date, concept: 'Venta real de prueba', sourceModule: 'ventas', status: 'asentada', totalDebit: 113, totalCredit: 113, isBalanced: true, createdAt: date, lines: [{ accountCode: '1101-01', accountName: 'Caja', debit: 113, credit: 0, concept: '' }, { accountCode: '6101', accountName: 'Ventas', debit: 0, credit: 100, concept: '' }, { accountCode: '2107-01', accountName: 'IVA débito', debit: 0, credit: 13, concept: '' }] });
 });
@@ -80,6 +81,47 @@ test('desktop sidebar collapses persistently and the POS checkout fits a laptop 
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1366);
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('#pos-checkout-btn')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+test('POS keeps populated ticket readable while quantity controls and payment remain available', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await login(page);
+  await page.getByRole('button', { name: 'Entendido y Aceptar', exact: true }).click();
+  await page.locator('#nav-pos_terminal').click();
+  const list = page.getByTestId('pos-ticket-list');
+  for (let index = 0; index < 3; index++) await page.locator(`#pos-quick-prod-pos-test-${index}`).click();
+  await expect(list.getByText('Producto de prueba 1', { exact: true })).toBeInViewport();
+  await expect(list.getByText('Producto de prueba 3', { exact: true })).toBeInViewport();
+  const item = page.getByTestId('pos-ticket-item-pos-test-0');
+  await item.getByRole('button', { name: 'Aumentar cantidad de Producto de prueba 1', exact: true }).click();
+  await expect(item.getByText('$20.00', { exact: true })).toBeVisible();
+  await item.getByRole('button', { name: 'Reducir cantidad de Producto de prueba 1', exact: true }).click();
+  await expect(item.getByText('$10.00', { exact: true })).toBeVisible();
+  for (const collapsed of [false, true]) {
+    if (collapsed) await page.locator('#desktop-sidebar-toggle').click();
+    await expect.poll(async () => (await list.boundingBox())!.height).toBeGreaterThan(250);
+    await expect(list.getByText('Producto de prueba 1', { exact: true })).toBeInViewport();
+    await expect(list.getByText('Producto de prueba 3', { exact: true })).toBeInViewport();
+    const checkout = await page.locator('#pos-checkout-btn').boundingBox();
+    expect(checkout!.y + checkout!.height).toBeLessThanOrEqual(768);
+    const assistant = await page.locator('#floating-erp-assistant-btn').boundingBox();
+    expect(checkout!.x + checkout!.width).toBeLessThanOrEqual(assistant!.x);
+    await page.locator('#pos-checkout-btn').click({ trial: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1366);
+    await page.screenshot({ path: `.tools/previews/pos-ticket-${collapsed ? 'collapsed' : 'expanded'}.png` });
+  }
+  for (let index = 3; index < 8; index++) {
+    await page.locator('#pos-barcode-scanner-input').fill(`POS-${index}`);
+    await page.locator('#pos-barcode-add-btn').click();
+  }
+  await expect(list.getByText('Producto de prueba 8', { exact: true })).toBeInViewport();
+  expect(await list.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+  await list.evaluate(element => { element.scrollTop = 0; });
+  await expect(list.getByText('Producto de prueba 1', { exact: true })).toBeInViewport();
+  await item.getByRole('button', { name: 'Quitar', exact: true }).click();
+  await expect(item).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
 
